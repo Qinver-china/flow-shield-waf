@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-if TYPE_CHECKING:
-    from app.models import Site
+from app.models import Site
 
 _DOMAIN_SPLIT_RE = re.compile(r"[\s,;，；]+")
 _DOMAIN_RE = re.compile(
