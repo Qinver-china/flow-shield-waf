@@ -4,6 +4,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
+ORIGIN_PROTOCOLS = frozenset({"follow", "http", "https"})
 _DOCKER_HOST_ALIASES = frozenset({"host.docker.internal", "localhost"})
 
 _HOST_RE = re.compile(
