@@ -1,0 +1,32 @@
+/* 页面 / Tab 切换：移出向下滑出，进入自下向上滑入 */
+
+.fs-slide-stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.fs-slide-enter-active,
+.fs-slide-leave-active {
+  transition:
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fs-slide-enter-from {
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+.fs-slide-leave-to {
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+.fs-tabs-animated .ant-tabs-content-holder {
+  display: none;
+}
+
+.app-page-stage {
+  min-height: 100%;
+  overflow: hidden;
+}

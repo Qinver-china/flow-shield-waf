@@ -1,0 +1,4 @@
+<clickhouse>
+    <!-- Docker Desktop / 无 IPv6 环境下避免 [::] 监听失败 -->
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>

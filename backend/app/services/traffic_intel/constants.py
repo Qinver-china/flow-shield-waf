@@ -1,0 +1,35 @@
+"""Traffic intelligence constants.
+
+Realtime windows (engine) vs analysis windows (baseline / anomaly detection):
+- Engine keeps 10s–3600s sliding counters for dashboard + burst logging.
+- Intel pipeline focuses on 1m / 5m / 30m for baseline comparison and attack hints.
+"""
+
+# Windows published by engine (traffic_counter.lua) — keep in sync with Lua WINDOWS.
+REALTIME_WINDOWS_SEC = (10, 30, 60, 300, 3600)
+
+# Windows used for baseline + anomaly detection (your 1m / 5m / 30m plan).
+ANALYSIS_WINDOWS_SEC = (60, 300, 1800)
+
+WINDOW_LABELS: dict[int, str] = {
+    10: "10 秒",
+    30: "30 秒",
+    60: "1 分钟",
+    300: "5 分钟",
+    1800: "30 分钟",
+    3600: "60 分钟",
+}
+
+REDIS_SNAPSHOT_KEY = "waf:traffic:snapshot"
+
+# Default anomaly: current > baseline * (1 + SPIKE_RATIO)  →  50% above average.
+DEFAULT_SPIKE_RATIO = 0.5
+DEFAULT_BASELINE_LOOKBACK_DAYS = 7
+DEFAULT_MIN_BASELINE_SAMPLES = 12
+DEFAULT_ALERT_COOLDOWN_SEC = 300
+DEFAULT_INGEST_INTERVAL_SEC = 60
+DEFAULT_BASELINE_RECALC_INTERVAL_SEC = 3600
+
+# ClickHouse
+CH_MINUTE_TABLE = "traffic_minute"
+CH_WINDOW_SNAPSHOT_TABLE = "traffic_window_snapshot"

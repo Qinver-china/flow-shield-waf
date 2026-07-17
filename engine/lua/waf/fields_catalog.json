@@ -1,0 +1,1144 @@
+{
+  "version": 1,
+  "fields": [
+    {
+      "key": "ip.src",
+      "label": "客户端 IP",
+      "category": "客户端与网络",
+      "value_type": "ip",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "in_cidr",
+        "in_list",
+        "in_ip_group",
+        "not_in_ip_group",
+        "geo_in",
+        "exists"
+      ]
+    },
+    {
+      "key": "ip.src.is_private",
+      "label": "IP 是否内网",
+      "category": "客户端与网络",
+      "value_type": "bool",
+      "requires_arg": false,
+      "operators": [
+        "eq"
+      ]
+    },
+    {
+      "key": "net.src_port",
+      "label": "客户端端口",
+      "category": "客户端与网络",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "net.dst_port",
+      "label": "服务端口",
+      "category": "客户端与网络",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "net.scheme",
+      "label": "协议",
+      "category": "客户端与网络",
+      "value_type": "enum",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "in_list"
+      ]
+    },
+    {
+      "key": "http.version",
+      "label": "HTTP 版本",
+      "category": "客户端与网络",
+      "value_type": "enum",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "in_list"
+      ]
+    },
+    {
+      "key": "geo.country",
+      "label": "IP 国家/地区",
+      "category": "地理位置与情报",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "geo.region",
+      "label": "IP 省/州",
+      "category": "地理位置与情报",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "geo.city",
+      "label": "IP 城市",
+      "category": "地理位置与情报",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "geo.asn",
+      "label": "IP ASN",
+      "category": "地理位置与情报",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "geo.isp",
+      "label": "运营商 ISP",
+      "category": "地理位置与情报",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "geo.ip_type",
+      "label": "IP 类型",
+      "category": "地理位置与情报",
+      "value_type": "enum",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "in_list"
+      ]
+    },
+    {
+      "key": "http.method",
+      "label": "请求方法",
+      "category": "请求行",
+      "value_type": "enum",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "in_list"
+      ]
+    },
+    {
+      "key": "http.host",
+      "label": "请求域名",
+      "category": "请求行",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.url",
+      "label": "完整 URL",
+      "category": "请求行",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.request_uri",
+      "label": "原始请求行",
+      "category": "请求行",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.uri.path",
+      "label": "请求路径",
+      "category": "URL 与路径",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.uri.segment",
+      "label": "路径段",
+      "category": "URL 与路径",
+      "value_type": "string",
+      "requires_arg": true,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt",
+        "key_exists",
+        "key_absent"
+      ]
+    },
+    {
+      "key": "http.uri.ext",
+      "label": "文件后缀",
+      "category": "URL 与路径",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.uri.depth",
+      "label": "路径深度",
+      "category": "URL 与路径",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "http.uri.query",
+      "label": "原始查询串",
+      "category": "URL 与路径",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.query",
+      "label": "查询参数",
+      "category": "查询参数",
+      "value_type": "string",
+      "requires_arg": true,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt",
+        "key_exists",
+        "key_absent"
+      ]
+    },
+    {
+      "key": "http.query.count",
+      "label": "查询参数个数",
+      "category": "查询参数",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "http.header",
+      "label": "请求头",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": true,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt",
+        "key_exists",
+        "key_absent"
+      ]
+    },
+    {
+      "key": "http.header.count",
+      "label": "请求头数量",
+      "category": "请求头",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "http.ua",
+      "label": "User-Agent",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.referer",
+      "label": "Referer",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.content_type",
+      "label": "Content-Type",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.content_length",
+      "label": "Content-Length",
+      "category": "请求头",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "http.accept",
+      "label": "Accept",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.accept_language",
+      "label": "Accept-Language",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.accept_encoding",
+      "label": "Accept-Encoding",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.origin",
+      "label": "Origin",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.xff",
+      "label": "X-Forwarded-For",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.range",
+      "label": "Range",
+      "category": "请求头",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.has_auth",
+      "label": "是否带 Authorization",
+      "category": "请求头",
+      "value_type": "bool",
+      "requires_arg": false,
+      "operators": [
+        "eq"
+      ]
+    },
+    {
+      "key": "http.cookie",
+      "label": "Cookie 参数",
+      "category": "Cookie",
+      "value_type": "string",
+      "requires_arg": true,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt",
+        "key_exists",
+        "key_absent"
+      ]
+    },
+    {
+      "key": "http.cookie_raw",
+      "label": "原始 Cookie",
+      "category": "Cookie",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.cookie.count",
+      "label": "Cookie 个数",
+      "category": "Cookie",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "http.body.raw",
+      "label": "原始请求体",
+      "category": "请求体",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.body.size",
+      "label": "请求体大小",
+      "category": "请求体",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "http.body.form",
+      "label": "表单参数",
+      "category": "请求体",
+      "value_type": "string",
+      "requires_arg": true,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt",
+        "key_exists",
+        "key_absent"
+      ]
+    },
+    {
+      "key": "http.body.json",
+      "label": "JSON 字段",
+      "category": "请求体",
+      "value_type": "string",
+      "requires_arg": true,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt",
+        "key_exists",
+        "key_absent"
+      ]
+    },
+    {
+      "key": "http.upload.filename",
+      "label": "上传文件名",
+      "category": "请求体",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "http.upload.ext",
+      "label": "上传文件后缀",
+      "category": "请求体",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "tls.version",
+      "label": "TLS 版本",
+      "category": "TLS 与指纹",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "tls.cipher",
+      "label": "TLS 加密套件",
+      "category": "TLS 与指纹",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "tls.sni",
+      "label": "SNI",
+      "category": "TLS 与指纹",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "tls.ja3",
+      "label": "JA3 指纹",
+      "category": "TLS 与指纹",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "derived.args_count",
+      "label": "参数总数",
+      "category": "派生维度",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "derived.time.hour",
+      "label": "当前小时",
+      "category": "派生维度",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "derived.time.weekday",
+      "label": "星期几",
+      "category": "派生维度",
+      "value_type": "number",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between"
+      ]
+    },
+    {
+      "key": "derived.fingerprint",
+      "label": "请求指纹",
+      "category": "派生维度",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "traffic.global",
+      "label": "全局请求量",
+      "category": "流量与智能",
+      "value_type": "traffic",
+      "requires_arg": false,
+      "operators": [
+        "compare"
+      ],
+      "compare_modes": [
+        {
+          "value": "abs_gt",
+          "label": "请求量高于"
+        },
+        {
+          "value": "abs_lt",
+          "label": "请求量低于"
+        },
+        {
+          "value": "baseline_gt",
+          "label": "高于基线百分比"
+        },
+        {
+          "value": "baseline_lt",
+          "label": "低于基线百分比"
+        }
+      ]
+    }
+  ],
+  "operators": {
+    "equals": "等于",
+    "not_equals": "不等于",
+    "contains": "包含字符",
+    "not_contains": "不包含字符",
+    "starts_with": "以…开头",
+    "ends_with": "以…结尾",
+    "regex": "正则匹配",
+    "in_list": "包含",
+    "not_in": "不包含",
+    "is_empty": "为空",
+    "exists": "存在",
+    "len_gt": "长度大于",
+    "len_lt": "长度小于",
+    "eq": "等于",
+    "neq": "不等于",
+    "gt": "大于",
+    "gte": "大于等于",
+    "lt": "小于",
+    "lte": "小于等于",
+    "between": "介于",
+    "in_cidr": "在网段中",
+    "in_ip_group": "包含 IP 组",
+    "not_in_ip_group": "不包含 IP 组",
+    "geo_in": "属于地区",
+    "key_exists": "键存在",
+    "key_absent": "键不存在",
+    "compare": "流量比较"
+  },
+  "operators_by_type": {
+    "string": [
+      "equals",
+      "not_equals",
+      "contains",
+      "not_contains",
+      "starts_with",
+      "ends_with",
+      "regex",
+      "in_list",
+      "not_in",
+      "is_empty",
+      "exists",
+      "len_gt",
+      "len_lt"
+    ],
+    "number": [
+      "eq",
+      "neq",
+      "gt",
+      "gte",
+      "lt",
+      "lte",
+      "between"
+    ],
+    "ip": [
+      "eq",
+      "in_cidr",
+      "in_list",
+      "in_ip_group",
+      "not_in_ip_group",
+      "geo_in",
+      "exists"
+    ],
+    "enum": [
+      "eq",
+      "neq",
+      "in_list"
+    ],
+    "bool": [
+      "eq"
+    ],
+    "traffic": [
+      "compare"
+    ]
+  }
+}

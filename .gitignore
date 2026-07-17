@@ -1,0 +1,34 @@
+# env / secrets
+.env
+*.local
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# node
+node_modules/
+dist/
+.vite/
+*.log
+
+# data volumes (if bind-mounted locally)
+data/
+engine/conf.d/*.conf
+!engine/conf.d/.gitkeep
+
+# codegraph (local index, per-machine)
+.codegraph/
+
+# editor / local tooling
+.cursor/
+*.tsbuildinfo
+
+# os
+.DS_Store

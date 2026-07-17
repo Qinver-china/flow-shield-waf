@@ -1,0 +1,1 @@
+DEFAULT_DEBUG_MODE = False

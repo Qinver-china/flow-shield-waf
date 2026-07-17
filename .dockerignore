@@ -1,0 +1,12 @@
+.git
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.venv
+frontend/node_modules
+backend/.venv
+*.md
+!deploy/**/*.md
+.luacheck
+.cursor

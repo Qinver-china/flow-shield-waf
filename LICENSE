@@ -1,0 +1,118 @@
+# PolyForm Noncommercial License 1.0.0
+
+<https://polyformproject.org/licenses/noncommercial/1.0.0/>
+
+## Acceptance
+
+In order to get any license under these terms, you must agree
+to them as both strict obligations and conditions to all
+your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software
+to do everything you might do with the software that would
+otherwise infringe the licensor's copyright in it for any
+permitted purpose.  However, you may only distribute the
+software according to [Distribution License](#distribution-license)
+and make changes or new works based on the software according
+to [Changes and New Works License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license to
+distribute copies of the software.  Your license to distribute
+covers distributing the software with changes and new works
+permitted by [Changes and New Works License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of the
+software from you also gets a copy of these terms or the URL for
+them above, as well as copies of any plain-text lines beginning
+with `Required Notice:` that the licensor provided with the
+software.  For example:
+
+> Required Notice: Copyright 流盾 WAF（Flow Shield WAF）项目著作权人
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make
+changes and new works based on the software for any permitted
+purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that
+covers patent claims the licensor can license, or becomes able
+to license, that you would infringe by using the software.
+
+## Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for
+the benefit of public knowledge, personal study, private
+entertainment, hobby projects, amateur pursuits, or religious
+observance, without any anticipated commercial application,
+is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution,
+public research organization, public safety or health organization,
+environmental protection organization, or government institution
+is use for a permitted purpose regardless of the source of funding
+or obligations resulting from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law.
+These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of
+your licenses to anyone else, or prevent the licensor from
+granting licenses to anyone else.  These terms do not attempt
+to change any license terms that apply to the software outside
+the software.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or
+contributes to infringement of any patent, your patent license
+for the software granted under these terms ends immediately. If
+your company makes such a claim, your patent license ends
+immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have
+violated any of these terms, or done anything with the software
+not covered by your licenses, your licenses can recontinue if
+you come into full compliance with these terms, and undo
+anything done with the software outside your licenses, within
+32 days of the notice.  If you do not do so, your licenses
+end permanently.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without
+any warranty or condition, and the licensor will not be liable
+to you for any damages arising out of these terms or the use
+or nature of the software, under any kind of legal claim.***
+
+---
+
+## 中文摘要（非法律文本，仅供参考）
+
+本软件采用 **PolyForm Noncommercial License 1.0.0**，核心约定如下：
+
+- **允许**：个人学习、研究、测试、业余项目、非营利组织内部使用；在遵守本许可的前提下修改、再分发。
+- **禁止**：任何形式的**商业使用**，包括但不限于向客户收费部署、作为商业产品或服务销售、SaaS 运营、为企业客户提供有偿运维或托管等。
+- **商业授权**：如需商业使用，须另行取得著作权人书面授权。
+
+完整法律文本以英文版为准。著作权人：流盾 WAF（Flow Shield WAF）项目。

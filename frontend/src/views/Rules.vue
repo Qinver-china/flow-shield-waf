@@ -1,0 +1,153 @@
+<template>
+  <page-shell title="自定义规则" description="按条件匹配请求并执行观察、拦截或人机验证等防护动作">
+    <template #actions>
+      <a-button type="primary" @click="crudRef?.openCreate()">新增规则</a-button>
+    </template>
+    <resource-crud
+    ref="crudRef"
+    embedded
+    title="自定义规则"
+    api-base="/api/v1/rules"
+    :columns="columns"
+    :filters="filters"
+    :default-sort="defaultSort"
+    :default-record="defaultRecord"
+    :prepare-payload="preparePayload"
+    :batch="batchConfig"
+    name-field="name"
+    detail-actions
+    duplicatable
+  >
+    <template #cell="{ column, record }">
+      <template v-if="column.key === 'mode'">
+        <a-tag :color="modeColor[record.mode]">{{ modeLabel[record.mode] || record.mode }}</a-tag>
+      </template>
+      <site-ids-cell v-else-if="column.key === 'site_ids'" :site-ids="record.site_ids" />
+    </template>
+    <template #form="{ record, readonly, mode, enabledLoading, onEnabledPersist }">
+      <fs-form-section title="规则信息">
+        <template #extra>
+          <form-enabled-switch
+            v-model:checked="record.enabled"
+            :immediate="mode === 'view'"
+            :loading="enabledLoading"
+            @immediate-change="onEnabledPersist"
+          />
+        </template>
+        <a-form-item label="规则名称" required>
+          <a-input v-model:value="record.name" :disabled="readonly" />
+        </a-form-item>
+        <a-row :gutter="16">
+          <a-col :span="8">
+            <a-form-item label="防护模式">
+              <a-select v-model:value="record.mode" style="width: 100%" :disabled="readonly">
+                <a-select-option value="observe">观察模式</a-select-option>
+                <a-select-option value="block">拦截模式</a-select-option>
+                <a-select-option value="captcha">数学计算验证</a-select-option>
+                <a-select-option value="js_challenge">JS 挑战</a-select-option>
+                <a-select-option value="slide_captcha">滑动验证</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="6">
+            <a-form-item label="优先级 (小=先)">
+              <a-input-number v-model:value="record.priority" :min="1" style="width: 100%" :disabled="readonly" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="10">
+            <a-form-item label="生效站点（不选=全局）">
+              <site-select v-model:value="record.site_ids" style="width: 100%" :readonly="readonly" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </fs-form-section>
+
+      <fs-form-section title="匹配条件" description="配置请求匹配逻辑，支持嵌套条件组">
+        <a-form-item label="条件表达式">
+          <condition-editor v-model:value="record.conditions" :readonly="readonly" />
+        </a-form-item>
+      </fs-form-section>
+    </template>
+  </resource-crud>
+  </page-shell>
+</template>
+
+<script setup lang="ts">
+import { ref } from "vue";
+import ConditionEditor from "@/components/ConditionEditor.vue";
+import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
+import FsFormSection from "@/components/FsFormSection.vue";
+import PageShell from "@/components/PageShell.vue";
+import ResourceCrud from "@/components/ResourceCrud.vue";
+import SiteIdsCell from "@/components/SiteIdsCell.vue";
+import SiteSelect from "@/components/SiteSelect.vue";
+import { enabledFilterOptions, modeFilterOptions } from "@/constants/resourceList";
+import { commonBatchEditFields } from "@/constants/batch";
+import { siteIdsColumn } from "@/composables/useSiteOptions";
+import type { BatchConfig } from "@/types/batch";
+import type { ResourceColumn, ResourceDefaultSort, ResourceFilterField } from "@/types/resourceList";
+
+const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
+
+const modeLabel: Record<string, string> = {
+  observe: "观察",
+  block: "拦截",
+  captcha: "数学计算验证",
+  js_challenge: "JS挑战",
+  slide_captcha: "滑动验证",
+};
+const modeColor: Record<string, string> = {
+  observe: "blue",
+  block: "red",
+  captcha: "orange",
+  js_challenge: "purple",
+  slide_captcha: "cyan",
+};
+
+const filters: ResourceFilterField[] = [
+  { key: "q", label: "搜索", type: "search", placeholder: "规则名称" },
+  { key: "mode", label: "动作", type: "select", width: "200px", options: modeFilterOptions },
+  { key: "enabled", label: "状态", type: "select", width: "140px", options: enabledFilterOptions },
+  { key: "site_id", label: "站点", type: "site" },
+];
+
+const defaultSort: ResourceDefaultSort = { field: "priority", order: "asc" };
+
+const batchConfig: BatchConfig = {
+  modeOptions: modeFilterOptions,
+  editFields: [
+    commonBatchEditFields.enabled,
+    commonBatchEditFields.mode,
+    commonBatchEditFields.priority,
+    commonBatchEditFields.siteIds,
+  ],
+};
+
+const columns: ResourceColumn[] = [
+  { title: "名称", dataIndex: "name", sorter: true },
+  { title: "优先级", dataIndex: "priority", width: 90, sorter: true },
+  { title: "模式", key: "mode", dataIndex: "mode", width: 110, slotCell: true, sorter: true },
+  siteIdsColumn(),
+  { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
+];
+
+const defaultRecord = () => ({
+  name: "",
+  mode: "block",
+  priority: 100,
+  site_ids: [],
+  enabled: true,
+  conditions: { logic: "and", conditions: [] },
+});
+
+function hasConditions(record: Record<string, any>) {
+  return Array.isArray(record.conditions?.conditions) && record.conditions.conditions.length > 0;
+}
+
+function preparePayload(row: Record<string, any>) {
+  if (row.mode !== "observe" && !hasConditions(row)) {
+    throw new Error("非观察模式必须配置至少一条匹配条件");
+  }
+  return row;
+}
+</script>

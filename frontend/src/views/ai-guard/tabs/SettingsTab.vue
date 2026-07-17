@@ -1,0 +1,174 @@
+<template>
+  <a-card title="AI 模型配置" :loading="loading">
+    <a-form layout="vertical" style="max-width: 640px">
+      <a-form-item label="启用 AI 防护">
+        <a-switch v-model:checked="form.enabled" />
+      </a-form-item>
+      <a-form-item label="API Base URL">
+        <a-input v-model:value="form.provider_base_url" placeholder="https://api.openai.com/v1" />
+      </a-form-item>
+      <a-form-item label="API Key">
+        <a-input-password
+          v-model:value="form.api_key"
+          :placeholder="form.api_key_set ? '已配置（留空不修改）' : 'sk-...'"
+        />
+      </a-form-item>
+      <a-form-item label="模型">
+        <a-space style="width: 100%">
+          <a-auto-complete
+            v-model:value="form.model"
+            :options="modelOptions"
+            placeholder="gpt-5.4-mini"
+            style="width: 420px"
+            :filter-option="filterModel"
+          />
+          <a-button :loading="loadingModels" @click="loadModels">拉取模型</a-button>
+        </a-space>
+        <div class="hint">
+          若「测试连接」提示 502 / 上游不可用，通常是 mxou 账号余额、分组或上游故障，不是 WAF 问题。
+          可先点「拉取模型」确认 Key 有效，再从中选择模型。
+        </div>
+      </a-form-item>
+      <a-row :gutter="12">
+        <a-col :span="12">
+          <a-form-item label="Temperature">
+            <a-input-number v-model:value="form.temperature" :min="0" :max="2" :step="0.1" style="width: 100%" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item label="Max Tokens">
+            <a-input-number v-model:value="form.max_tokens" :min="256" :max="128000" style="width: 100%" />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item label="启用智能聊天">
+        <a-switch v-model:checked="form.chat_enabled" />
+      </a-form-item>
+      <a-form-item label="启用自动化防护">
+        <a-switch v-model:checked="form.defense_enabled" />
+      </a-form-item>
+      <a-form-item label="默认规则应用模式">
+        <a-select v-model:value="form.default_apply_mode">
+          <a-select-option value="suggest_only">仅生成建议</a-select-option>
+          <a-select-option value="auto_observe">自动创建（观察模式）</a-select-option>
+          <a-select-option value="auto_block">自动创建（拦截，需高置信度）</a-select-option>
+        </a-select>
+      </a-form-item>
+      <a-row :gutter="12">
+        <a-col :span="12">
+          <a-form-item label="单次分析日志上限">
+            <a-input-number v-model:value="form.max_logs_per_analysis" :min="10" :max="2000" style="width: 100%" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item label="分析冷却（秒）">
+            <a-input-number v-model:value="form.analysis_cooldown_sec" :min="30" style="width: 100%" />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item label="自动拦截最低置信度">
+        <a-slider v-model:value="form.auto_block_min_confidence" :min="0.5" :max="1" :step="0.05" />
+      </a-form-item>
+      <a-space>
+        <a-button type="primary" :loading="saving" @click="save">保存配置</a-button>
+        <a-button :loading="testing" @click="testConn">测试连接</a-button>
+      </a-space>
+    </a-form>
+  </a-card>
+</template>
+
+<script setup lang="ts">
+import { message } from "ant-design-vue";
+import { onMounted, reactive, ref } from "vue";
+import { api } from "@/api";
+
+const loading = ref(false);
+const saving = ref(false);
+const testing = ref(false);
+const loadingModels = ref(false);
+const modelOptions = ref<{ label: string; value: string }[]>([]);
+
+const form = reactive({
+  enabled: false,
+  provider_base_url: "https://api.openai.com/v1",
+  api_key: "",
+  api_key_set: false,
+  model: "gpt-4o-mini",
+  temperature: 0.3,
+  max_tokens: 4096,
+  chat_enabled: true,
+  defense_enabled: true,
+  default_apply_mode: "suggest_only",
+  max_logs_per_analysis: 200,
+  analysis_cooldown_sec: 300,
+  auto_block_min_confidence: 0.85,
+});
+
+async function load() {
+  loading.value = true;
+  try {
+    const res = await api.get("/api/v1/ai-guard/settings");
+    Object.assign(form, res.data);
+    form.api_key = "";
+  } finally {
+    loading.value = false;
+  }
+}
+
+function filterModel(input: string, option: { value: string }) {
+  return option.value.toLowerCase().includes(input.toLowerCase());
+}
+
+async function loadModels() {
+  loadingModels.value = true;
+  try {
+    const res = await api.get<{ models: string[] }>("/api/v1/ai-guard/settings/models");
+    modelOptions.value = (res.data.models || []).map((m) => ({ label: m, value: m }));
+    if (modelOptions.value.length) {
+      message.success(`已获取 ${modelOptions.value.length} 个可用模型`);
+      if (!form.model && modelOptions.value[0]) {
+        form.model = modelOptions.value[0].value;
+      }
+    } else {
+      message.warning("未获取到可用模型");
+    }
+  } finally {
+    loadingModels.value = false;
+  }
+}
+
+async function save() {
+  saving.value = true;
+  try {
+    const payload: Record<string, unknown> = { ...form };
+    if (!payload.api_key) delete payload.api_key;
+    delete payload.api_key_set;
+    await api.put("/api/v1/ai-guard/settings", payload);
+    message.success("已保存");
+    await load();
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function testConn() {
+  testing.value = true;
+  try {
+    const res = await api.post("/api/v1/ai-guard/settings/test");
+    message.success(`连接成功：${res.data.reply}`);
+  } finally {
+    testing.value = false;
+  }
+}
+
+onMounted(load);
+</script>
+
+<style scoped>
+.hint {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+</style>

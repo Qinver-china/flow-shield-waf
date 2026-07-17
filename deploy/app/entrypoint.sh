@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p /data/engine/conf.d /data/engine/certs /var/log/supervisor /etc/flowshield
+
+cat >/etc/flowshield/env <<EOF
+export DB_HOST='${DB_HOST:-mysql}'
+export DB_PORT='${DB_PORT:-3306}'
+export DB_NAME='${DB_NAME:-waf}'
+export DB_USER='${DB_USER:-waf}'
+export DB_PASSWORD='${DB_PASSWORD:-waf}'
+export REDIS_HOST='${REDIS_HOST:-redis}'
+export REDIS_PORT='${REDIS_PORT:-6379}'
+export REDIS_SOCKET_PATH='${REDIS_SOCKET_PATH:-}'
+export REDIS_PASSWORD='${REDIS_PASSWORD}'
+export REDIS_POOL_SIZE='${REDIS_POOL_SIZE:-256}'
+export REDIS_KEEPALIVE_MS='${REDIS_KEEPALIVE_MS:-60000}'
+export JWT_SECRET='${JWT_SECRET}'
+export JWT_ACCESS_TTL_MIN='${JWT_ACCESS_TTL_MIN:-120}'
+export JWT_REFRESH_TTL_DAYS='${JWT_REFRESH_TTL_DAYS:-7}'
+export WAF_ADMIN_USER='${WAF_ADMIN_USER:-admin}'
+export WAF_ADMIN_PASSWORD='${WAF_ADMIN_PASSWORD:-admin888}'
+export WAF_CHALLENGE_SECRET='${WAF_CHALLENGE_SECRET}'
+export ENABLE_DOCS='${ENABLE_DOCS:-true}'
+export CLICKHOUSE_HOST='${CLICKHOUSE_HOST:-clickhouse}'
+export CLICKHOUSE_PORT='${CLICKHOUSE_PORT:-8123}'
+export CLICKHOUSE_USER='${CLICKHOUSE_USER:-default}'
+export CLICKHOUSE_PASSWORD='${CLICKHOUSE_PASSWORD:-}'
+export CLICKHOUSE_DATABASE='${CLICKHOUSE_DATABASE:-waf}'
+export ENGINE_CONF_DIR=/data/engine/conf.d
+export ENGINE_CERT_DIR=/data/engine/certs
+export SLIDE_CAPTCHA_ASSETS_DIR='${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}'
+EOF
+
+# 首次启动时，若挂载目录为空则写入内置默认素材
+if [ ! -d "${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}/tiles" ] || \
+   [ -z "$(ls -A "${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}/tiles" 2>/dev/null)" ]; then
+  mkdir -p "${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}"
+  cp -R /opt/flowshield/slide-captcha-defaults/. "${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}/"
+fi
+
+exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf

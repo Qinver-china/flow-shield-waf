@@ -1,0 +1,95 @@
+"""Catalog of alert policy condition types for admin notifications."""
+
+TRAFFIC_WINDOWS = [
+    {"value": 30, "label": "30 秒"},
+    {"value": 300, "label": "5 分钟"},
+    {"value": 1800, "label": "30 分钟"},
+]
+
+BLOCK_WINDOWS_MIN = [
+    {"value": 5, "label": "5 分钟"},
+    {"value": 15, "label": "15 分钟"},
+    {"value": 30, "label": "30 分钟"},
+    {"value": 60, "label": "60 分钟"},
+]
+
+ALERT_CONDITION_TYPES: list[dict] = [
+    {
+        "type": "traffic.baseline_gt",
+        "label": "全局流量高于基线",
+        "category": "流量异常",
+        "description": "检测突发流量、CC 攻击。对比同星期同时段历史基线，需运行 1–2 天后较准确。",
+        "params": [
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "percent", "label": "高于基线 (%)", "kind": "number", "min": 1, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.baseline_lt",
+        "label": "全局流量低于基线",
+        "category": "流量异常",
+        "description": "检测流量异常下跌（源站故障、DNS 问题、线路中断等）。",
+        "params": [
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "percent", "label": "低于基线 (%)", "kind": "number", "min": 1, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.abs_gt",
+        "label": "全局流量高于固定值",
+        "category": "流量异常",
+        "description": "不依赖基线，适合新站或固定容量上限告警。",
+        "params": [
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "请求量上限", "kind": "number", "min": 1, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.abs_lt",
+        "label": "全局流量低于固定值",
+        "category": "流量异常",
+        "description": "长时间几乎无流量时提醒（可能 WAF/站点不可用）。",
+        "params": [
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "请求量下限", "kind": "number", "min": 0, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.burst_logging",
+        "label": "流量自动取证已触发",
+        "category": "流量异常",
+        "description": "日志设置为「按流量自动启停」且已超过阈值进入取证模式时通知。",
+        "params": [],
+    },
+    {
+        "type": "security.block_count",
+        "label": "拦截次数超过阈值",
+        "category": "安全事件",
+        "description": "短时间内大量拦截，可能有扫描、爆破或 Web 攻击。",
+        "params": [
+            {"key": "window_min", "label": "统计窗口", "kind": "block_window", "required": True},
+            {"key": "threshold", "label": "拦截次数", "kind": "number", "min": 1, "required": True},
+            {"key": "site_id", "label": "生效站点", "kind": "site_id", "required": False},
+        ],
+    },
+    {
+        "type": "security.block_rate",
+        "label": "拦截率超过阈值",
+        "category": "安全事件",
+        "description": "拦截占比过高，攻击流量可能已占主导。",
+        "params": [
+            {"key": "window_min", "label": "统计窗口", "kind": "block_window", "required": True},
+            {"key": "percent", "label": "拦截率 (%)", "kind": "number", "min": 1, "max": 100, "required": True},
+            {"key": "site_id", "label": "生效站点", "kind": "site_id", "required": False},
+        ],
+    },
+]
+
+CONDITION_TYPE_MAP = {c["type"]: c for c in ALERT_CONDITION_TYPES}
+
+CHANNEL_TYPES = [
+    {"value": "email", "label": "邮件通知", "implemented": True},
+    {"value": "sms", "label": "短信通知", "implemented": False},
+    {"value": "webhook", "label": "Webhook", "implemented": False},
+    {"value": "dingtalk", "label": "钉钉机器人", "implemented": False},
+]

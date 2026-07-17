@@ -1,0 +1,529 @@
+<template>
+  <div class="log-stats-tab">
+    <a-card size="small" class="time-bar">
+      <div class="time-bar-inner">
+        <a-radio-group v-model:value="preset" button-style="solid" size="small" @change="onPresetChange">
+          <a-radio-button v-for="p in timePresets.slice(0, 3)" :key="p.key" :value="p.key">
+            {{ p.label }}
+          </a-radio-button>
+          <a-radio-button value="custom">自定义</a-radio-button>
+        </a-radio-group>
+        <a-range-picker
+          v-if="preset === 'custom'"
+          v-model:value="customRange"
+          show-time
+          size="small"
+          style="margin-left: 8px"
+          @change="fetchAll"
+        />
+        <span class="time-hint">{{ rangeLabel() }}</span>
+        <a-button type="primary" size="small" style="margin-left: auto" @click="fetchAll">刷新</a-button>
+      </div>
+    </a-card>
+
+    <a-row :gutter="12" class="summary-row">
+      <a-col :span="8">
+        <a-card size="small"><a-statistic title="命中总数" :value="overview.total" /></a-card>
+      </a-col>
+      <a-col :span="8">
+        <a-card size="small">
+          <a-statistic title="已拦截" :value="overview.blocked" :value-style="{ color: '#ef4444' }" />
+        </a-card>
+      </a-col>
+      <a-col :span="8">
+        <a-card size="small">
+          <a-statistic title="已放行" :value="overview.passed" :value-style="{ color: '#22c55e' }" />
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <div class="stats-body">
+      <a-card size="small" class="dimension-panel" title="统计维度">
+        <div class="dimension-scroll">
+          <section
+            v-for="group in statsDimensionGroups"
+            :key="group.label"
+            class="dimension-group"
+          >
+            <div class="dimension-group-title">{{ group.label }}</div>
+            <div class="dimension-grid">
+              <button
+                v-for="item in group.items"
+                :key="item.key"
+                type="button"
+                class="dimension-btn"
+                :class="{ active: dimension === item.key }"
+                :title="item.desc"
+                @click="selectDimension(item.key)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </section>
+        </div>
+      </a-card>
+
+      <a-card size="small" class="result-panel" :loading="groupLoading">
+        <template #title>
+          <span>{{ currentDimension?.label || "统计结果" }}</span>
+          <span v-if="currentDimension?.desc" class="panel-desc">{{ currentDimension.desc }}</span>
+        </template>
+
+        <div class="chart-block">
+          <div class="chart-block-title">命中时间趋势</div>
+          <a-empty
+            v-if="!overview.trend.length"
+            class="chart-empty"
+            description="当前时间范围内暂无命中日志"
+          />
+          <div v-show="overview.trend.length" ref="trendChartEl" class="stats-chart" />
+        </div>
+
+        <a-table
+          :columns="tableColumns"
+          :data-source="groupItems"
+          :pagination="false"
+          size="small"
+          row-key="key"
+          class="stats-table"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'label'">
+              <a
+                class="dimension-link"
+                :title="record.key"
+                @click="emit('drill-down', buildDrillDown(record))"
+              >
+                {{ record.label }}
+              </a>
+            </template>
+            <template v-else-if="column.key === 'percent'">
+              {{ percentOf(record.count) }}
+            </template>
+          </template>
+        </a-table>
+      </a-card>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
+import type { LocationQuery } from "vue-router";
+import * as echarts from "echarts";
+import type { ECharts } from "echarts";
+import { api } from "@/api";
+import { formatDateTime, formatDateTimeShort } from "@/utils/datetime";
+import { localizeStatsItems, statsDimensionGroups, statsDimensions, timePresets, type StatsDimension, type TimePreset } from "./constants";
+import { useLogTimeRange } from "./useLogTimeRange";
+import { useSiteOptions } from "@/composables/useSiteOptions";
+
+export interface LogDrillDownFilter {
+  dimension: StatsDimension;
+  key: string;
+  label: string;
+  start: string;
+  end: string;
+}
+
+const emit = defineEmits<{ "drill-down": [LogDrillDownFilter] }>();
+
+const { preset, customRange, toQueryParams, rangeLabel } = useLogTimeRange("24h");
+const { formatSiteId } = useSiteOptions();
+
+const overview = reactive({ total: 0, blocked: 0, passed: 0, trend: [] as any[] });
+const groupLoading = ref(false);
+const groupItems = ref<any[]>([]);
+const groupTotal = ref(0);
+const dimension = ref<StatsDimension>("rule_id");
+const trendChartEl = ref<HTMLElement>();
+
+let trendChart: ECharts | null = null;
+let trendObserver: ResizeObserver | null = null;
+
+const currentDimension = computed(() => statsDimensions.find((d) => d.key === dimension.value));
+
+const tableColumns = computed(() => [
+  {
+    title: currentDimension.value?.label || "维度值",
+    key: "label",
+    dataIndex: "label",
+    ellipsis: true,
+  },
+  { title: "数量", dataIndex: "count", width: 90 },
+  { title: "占比", key: "percent", width: 80 },
+]);
+
+function percentOf(count: number) {
+  if (!groupTotal.value) return "-";
+  return `${((count / groupTotal.value) * 100).toFixed(1)}%`;
+}
+
+function onPresetChange() {
+  if (preset.value !== "custom") fetchAll();
+}
+
+function selectDimension(key: StatsDimension) {
+  if (dimension.value === key) return;
+  dimension.value = key;
+  fetchGroup();
+}
+
+function buildDrillDown(record: any): LogDrillDownFilter {
+  const time = toQueryParams();
+  return {
+    dimension: dimension.value,
+    key: record.key,
+    label: record.label,
+    start: time.start,
+    end: time.end,
+  };
+}
+
+async function fetchOverview() {
+  const resp = await api.get("/api/v1/logs/stats", toQueryParams());
+  Object.assign(overview, {
+    total: resp.data.total,
+    blocked: resp.data.blocked,
+    passed: resp.data.passed,
+    trend: resp.data.trend || [],
+  });
+}
+
+function formatTrendLabel(value: string) {
+  return formatDateTimeShort(value);
+}
+
+function disposeChart(chart: ECharts | null) {
+  chart?.dispose();
+}
+
+function renderTrendChart() {
+  if (!trendChartEl.value || !overview.trend.length) {
+    disposeChart(trendChart);
+    trendChart = null;
+    return;
+  }
+  disposeChart(trendChart);
+  trendChart = echarts.init(trendChartEl.value);
+  const times = overview.trend.map((item) => formatTrendLabel(item.time));
+  const hasSplit = overview.trend.some((item) => item.blocked !== undefined);
+  const series = hasSplit
+    ? [
+        {
+          name: "已拦截",
+          type: "line",
+          smooth: true,
+          stack: "hits",
+          areaStyle: { opacity: 0.2 },
+          data: overview.trend.map((item) => item.blocked ?? 0),
+        },
+        {
+          name: "已放行",
+          type: "line",
+          smooth: true,
+          stack: "hits",
+          areaStyle: { opacity: 0.16 },
+          data: overview.trend.map((item) => item.passed ?? 0),
+        },
+      ]
+    : [
+        {
+          name: "命中",
+          type: "line",
+          smooth: true,
+          areaStyle: { opacity: 0.2 },
+          itemStyle: { color: "#38bdf8" },
+          data: overview.trend.map((item) => item.count ?? 0),
+        },
+      ];
+  trendChart.setOption({
+    color: hasSplit ? ["#ef4444", "#22c55e"] : ["#38bdf8"],
+    tooltip: {
+      trigger: "axis",
+      formatter(params: unknown) {
+        const items = Array.isArray(params) ? params : [params];
+        const first = items[0] as { dataIndex?: number; marker?: string; seriesName?: string; value?: number };
+        const idx = first?.dataIndex ?? 0;
+        const timeLabel = formatDateTime(overview.trend[idx]?.time);
+        const lines = items.map(
+          (p) => `${(p as { marker?: string }).marker ?? ""}${(p as { seriesName?: string }).seriesName}: ${(p as { value?: number }).value ?? 0}`,
+        );
+        return `${timeLabel}<br/>${lines.join("<br/>")}`;
+      },
+    },
+    legend: { data: series.map((item) => item.name), bottom: 0 },
+    grid: { left: 8, right: 12, top: 16, bottom: 28, containLabel: true },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: times,
+      show: false,
+    },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      splitLine: { show: false },
+    },
+    series,
+  });
+  trendChart.resize();
+}
+
+async function renderCharts() {
+  await nextTick();
+  renderTrendChart();
+}
+
+function setupChartObservers() {
+  trendObserver?.disconnect();
+
+  if (trendChartEl.value) {
+    trendObserver = new ResizeObserver(() => trendChart?.resize());
+    trendObserver.observe(trendChartEl.value);
+  }
+}
+
+async function loadGroup() {
+  const resp = await api.get("/api/v1/logs/stats/group", {
+    dimension: dimension.value,
+    limit: 20,
+    ...toQueryParams(),
+  });
+  groupItems.value = localizeStatsItems(dimension.value, resp.data.items || [], {
+    formatSiteId,
+  });
+  groupTotal.value = resp.data.total || 0;
+}
+
+let statsFetchSeq = 0;
+
+async function fetchGroup() {
+  const seq = ++statsFetchSeq;
+  groupLoading.value = true;
+  try {
+    await loadGroup();
+    if (seq !== statsFetchSeq) return;
+  } finally {
+    if (seq === statsFetchSeq) {
+      groupLoading.value = false;
+      await renderCharts();
+      setupChartObservers();
+    }
+  }
+}
+
+async function fetchAll() {
+  const seq = ++statsFetchSeq;
+  groupLoading.value = true;
+  try {
+    await Promise.all([fetchOverview(), loadGroup()]);
+    if (seq !== statsFetchSeq) return;
+  } finally {
+    if (seq === statsFetchSeq) {
+      groupLoading.value = false;
+      await renderCharts();
+      setupChartObservers();
+    }
+  }
+}
+
+function queryValue(query: LocationQuery, key: string) {
+  const value = query[key];
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+function applyFromQuery(query: LocationQuery) {
+  const nextPreset = queryValue(query, "preset") as TimePreset | undefined;
+  if (nextPreset && timePresets.some((item) => item.key === nextPreset)) {
+    preset.value = nextPreset;
+  }
+
+  const nextDimension = queryValue(query, "dimension") as StatsDimension | undefined;
+  if (nextDimension && statsDimensions.some((item) => item.key === nextDimension)) {
+    dimension.value = nextDimension;
+  }
+
+  fetchAll();
+}
+
+onMounted(fetchAll);
+
+defineExpose({ applyFromQuery });
+
+onUnmounted(() => {
+  trendObserver?.disconnect();
+  disposeChart(trendChart);
+});
+</script>
+
+<style scoped>
+.log-stats-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.time-bar-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.time-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin-left: 4px;
+}
+
+.summary-row {
+  margin: 0;
+}
+
+.stats-body {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.dimension-panel,
+.result-panel {
+  min-height: 0;
+  height: 100%;
+}
+
+.dimension-panel :deep(.ant-card),
+.result-panel :deep(.ant-card) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dimension-panel :deep(.ant-card-body),
+.result-panel :deep(.ant-card-body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dimension-panel :deep(.ant-card-body) {
+  padding: 10px 12px;
+}
+
+.dimension-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+.dimension-group + .dimension-group {
+  margin-top: 12px;
+}
+
+.dimension-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+}
+
+.dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dimension-btn {
+  appearance: none;
+  margin: 0;
+  padding: 7px 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  border: 1px solid #6a6c6e30;
+  border-radius: 6px;
+  background: #c2c2c20d;
+  color: #5d6e85;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+
+.dimension-btn:hover {
+  border-color: #40abde47;
+  color: #0284c7;
+}
+
+.dimension-btn.active {
+  border-color: #38bdf894;
+  background: #29a9ff12;
+  color: #048fdb;
+  font-weight: 600;
+}
+
+.dimension-btn:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 1px;
+}
+
+.result-panel :deep(.ant-card-head-title) {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.panel-desc {
+  font-size: 12px;
+  font-weight: normal;
+  color: #94a3b8;
+}
+
+.stats-chart {
+  height: 220px;
+}
+
+.chart-block + .chart-block {
+  margin-top: 4px;
+}
+
+.chart-block-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.chart-empty {
+  margin: 24px 0;
+}
+
+.stats-table {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.dimension-link {
+  color: #1677ff;
+  cursor: pointer;
+}
+
+.dimension-link:hover {
+  color: #4096ff;
+}
+
+@media (max-width: 900px) {
+  .stats-body {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

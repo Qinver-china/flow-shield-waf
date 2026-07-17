@@ -1,0 +1,105 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--fs-font-ui);
+  background: var(--fs-bg-page);
+  color: var(--fs-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  transition: color var(--fs-transition);
+}
+
+pre,
+code,
+.json-preview {
+  font-family: var(--fs-font-mono);
+}
+
+.fs-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-md);
+}
+
+.fs-card {
+  background: var(--fs-bg-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
+  box-shadow: var(--fs-shadow-sm);
+}
+
+.fs-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-sm);
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fs-text-primary);
+}
+
+.fs-muted {
+  color: var(--fs-text-muted);
+}
+
+.fs-danger {
+  color: var(--fs-color-danger);
+}
+
+/* Ant Design table header: Ant Design cannot derive hover colors from CSS vars */
+.ant-table-wrapper .ant-table-thead > tr > th,
+.ant-table-wrapper .ant-table-thead > tr > td {
+  color: var(--fs-text-primary) !important;
+  background-color: var(--fs-bg-muted) !important;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th:hover,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-column-has-sorters:hover,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-column-sort,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-left:hover,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-right:hover {
+  color: var(--fs-text-primary) !important;
+  background-color: var(--fs-border) !important;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th .ant-table-column-sorter {
+  color: var(--fs-text-muted) !important;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th:hover .ant-table-column-sorter,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-column-sort .ant-table-column-sorter {
+  color: var(--fs-text-secondary) !important;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td {
+  background-color: color-mix(in srgb, var(--fs-color-primary) 6%, var(--fs-bg-surface)) !important;
+}
+
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected > td,
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected:hover > td {
+  background-color: color-mix(in srgb, var(--fs-color-primary) 12%, var(--fs-bg-surface)) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
