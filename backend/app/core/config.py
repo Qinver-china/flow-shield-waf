@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     engine_conf_dir: str = "/data/engine/conf.d"
     engine_cert_dir: str = "/data/engine/certs"
     engine_reload_url: str = "http://engine/.waf/reload"
+    # Docker bridge gateway for host.docker.internal in generated nginx upstream URLs.
+    waf_origin_host_gateway: str = "172.17.0.1"
     # slide captcha static assets (backgrounds + tiles); Docker 默认 /data/slide_captcha
     slide_captcha_assets_dir: str = ""
 

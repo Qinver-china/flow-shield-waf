@@ -4,7 +4,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
-ORIGIN_PROTOCOLS = frozenset({"follow", "http", "https"})
+_DOCKER_HOST_ALIASES = frozenset({"host.docker.internal", "localhost"})
 
 _HOST_RE = re.compile(
     r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*"
@@ -57,5 +57,20 @@ def format_origin_display(
     return f"https://{host}:{https_port}"
 
 
+def resolve_origin_host_for_engine(host: str) -> str:
+    """Resolve Docker host aliases to an IP for OpenResty variable upstream URLs.
+
+    Nginx resolves variable ``proxy_pass`` targets via ``resolver`` (Docker DNS),
+    which does not read ``/etc/hosts`` entries such as ``host.docker.internal``.
+    """
+    host = normalize_origin_host(host)
+    if host in _DOCKER_HOST_ALIASES:
+        from app.core.config import settings
+
+        return settings.waf_origin_host_gateway
+    return host
+
+
 def build_upstream_url(host: str, protocol: str, port: int) -> str:
+    host = resolve_origin_host_for_engine(host)
     return f"{protocol}://{host}:{port}"
