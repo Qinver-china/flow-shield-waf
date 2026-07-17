@@ -18,7 +18,7 @@ fi
 
 if [ -d .git ]; then
   echo "==> 拉取最新代码"
-  git pull --ff-only
+  git pull --ff-only origin main
 fi
 
 echo "==> 检查 .env 与 .env.example 差异（请手动合并新增变量）"

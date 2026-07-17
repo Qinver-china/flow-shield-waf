@@ -44,8 +44,8 @@ docker run --rm \
 ### 2. 拉取新版本代码
 
 ```bash
-git fetch --tags
-git pull   # 或 git checkout <tag/branch>
+git fetch origin
+git pull origin main   # 或切换到指定版本：git checkout <tag/branch> && git pull origin <tag/branch>
 ```
 
 若通过压缩包更新，解压覆盖代码目录，**保留原有 `.env` 文件**，不要直接覆盖。
@@ -163,7 +163,7 @@ docker compose up -d --build app
 
 ```bash
 cd /www/wwwroot/flow-shield-waf   # 按实际路径
-git pull
+git pull origin main
 docker compose up -d --build
 ```
 

@@ -35,7 +35,12 @@ function _M.check()
 
     locks:set("reload_ver", ver)
     ngx.log(ngx.NOTICE, "waf reloader: reloading nginx (version ", ver, ")")
-    os.execute("/usr/local/openresty/bin/openresty -s reload")
+    -- Backend normally reloads as root; this is a fallback for standalone engine setups.
+    os.execute(
+        "/usr/local/openresty/bin/openresty -s reload "
+            .. "-c /usr/local/openresty/nginx/conf/nginx.conf "
+            .. "2>/dev/null"
+    )
     locks:delete("reload_lock")
 end
 

@@ -21,7 +21,7 @@
           <div class="filter-quick-actions">
             <a-button type="primary" @click="search">查询</a-button>
             <a-button @click="resetFilters">重置</a-button>
-            <a-button type="link" class="filter-toggle" @click="filtersExpanded = !filtersExpanded">
+            <a-button class="filter-toggle" @click="toggleFiltersExpanded">
               {{ filtersExpanded ? "收起" : "展开" }}
               <up-outlined v-if="filtersExpanded" />
               <down-outlined v-else />
@@ -113,7 +113,7 @@ const props = defineProps<{ drillDown?: LogDrillDownFilter | null }>();
 
 const quickFilterFields = logDetailQuickFilterFields;
 const advancedFilterGroups = buildAdvancedLogFilterGroups();
-const filtersExpanded = ref(true);
+const filtersExpanded = ref(false);
 
 const columns = [
   { title: "时间", key: "ts", dataIndex: "ts", width: 168 },
@@ -233,9 +233,11 @@ function applyOptionalNumber(key: "rule_id" | "site_id" | "geo_asn", value: stri
 }
 
 function syncExpandedFromFilters() {
-  if (logDetailFiltersUseAdvanced(filters)) {
-    filtersExpanded.value = true;
-  }
+  filtersExpanded.value = logDetailFiltersUseAdvanced(filters);
+}
+
+function toggleFiltersExpanded() {
+  filtersExpanded.value = !filtersExpanded.value;
 }
 
 function applyFromQuery(query: LocationQuery) {
@@ -292,6 +294,7 @@ function search() {
 function resetFilters() {
   Object.assign(filters, createDefaultLogFilters());
   range.value = [nowInAppTz().subtract(24, "hour"), nowInAppTz()];
+  filtersExpanded.value = false;
   page.value = 1;
   fetchList();
 }
@@ -358,7 +361,6 @@ defineExpose({ applyDrillDown, applyFromQuery });
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding-inline: 4px;
 }
 
 @media (max-width: 1200px) {

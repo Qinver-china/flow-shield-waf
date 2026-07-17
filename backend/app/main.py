@@ -14,13 +14,13 @@ from app.api.internal.slide_captcha import router as slide_captcha_router
 from app.api.v1 import api_router
 from app.background import run_config_sync_retry
 from app.core.config import settings
-from app.core.db import SessionLocal, engine
+from app.core.db import SessionLocal
 from app.core.logging import setup_logging
 from app.core.redis import get_redis
 from app.core.security import hash_password
-from app.models import Base, User, WafSetting
+from app.models import User, WafSetting
 from app.services import certificate_store, rule_sync, waf_settings
-from app.services.schema_patches import apply_schema_patches
+from app.services.schema_bootstrap import ensure_database_schema
 
 log = logging.getLogger("waf.main")
 
@@ -28,9 +28,7 @@ log = logging.getLogger("waf.main")
 async def _bootstrap() -> None:
     certificate_store.ensure_cert_dir()
     # Model-driven schema: create missing tables on first boot (no alembic).
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await apply_schema_patches()
+    await ensure_database_schema()
 
     async with SessionLocal() as db:
         existing = (

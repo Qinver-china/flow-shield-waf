@@ -38,6 +38,9 @@ COPY engine/lua /etc/nginx/lua
 COPY engine/snippets /etc/nginx/snippets
 COPY deploy/app/engine.nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
 RUN mkdir -p /etc/nginx/html /data/engine/conf.d /data/engine/certs \
+    /usr/local/openresty/nginx/logs \
+    && touch /usr/local/openresty/nginx/logs/error.log \
+    && chmod 666 /usr/local/openresty/nginx/logs/error.log \
     && rm -rf /etc/nginx/conf.d/*
 
 # 管理面板

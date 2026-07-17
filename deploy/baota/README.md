@@ -19,8 +19,12 @@
 ## 三、首次部署
 
 ```bash
-# 1. 上传/克隆项目到服务器，例如 /www/wwwroot/flow-shield-waf
-cd /www/wwwroot/flow-shield-waf
+# 1. 克隆项目到服务器（私有仓库需先配置 GitHub 访问：HTTPS Token 或 SSH 密钥）
+cd /www/wwwroot
+git clone https://github.com/Qinver-china/flow-shield-waf.git
+cd flow-shield-waf
+
+# 若已上传压缩包解压到该目录，可跳过 clone，直接进入目录后执行后续步骤
 
 # 2. 生成配置并修改密码/密钥
 cp .env.example .env
@@ -60,8 +64,8 @@ bash deploy/baota/upgrade.sh
 # 1. 备份配置
 cp .env .env.bak.$(date +%Y%m%d)
 
-# 2. 拉取代码
-git pull
+# 2. 拉取代码（默认分支 main）
+git pull origin main
 
 # 3. 检查 .env 是否有新增变量（对照 .env.example）
 diff .env.example .env || true

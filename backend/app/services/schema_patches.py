@@ -11,10 +11,17 @@ from app.core.db import engine
 log = logging.getLogger("waf.schema")
 
 
-async def apply_schema_patches() -> None:
-    async with engine.begin() as conn:
-        await _ensure_waf_setting_timezone(conn)
-        await _ensure_waf_setting_ratelimit_fail_open(conn)
+async def apply_schema_patches(conn=None) -> None:
+    if conn is None:
+        async with engine.begin() as connection:
+            await _apply_schema_patches(connection)
+        return
+    await _apply_schema_patches(conn)
+
+
+async def _apply_schema_patches(conn) -> None:
+    await _ensure_waf_setting_timezone(conn)
+    await _ensure_waf_setting_ratelimit_fail_open(conn)
 
 
 async def _ensure_waf_setting_timezone(conn) -> None:

@@ -114,7 +114,8 @@ flow-shield-waf/
 ### 第一步：获取代码并配置环境变量
 
 ```bash
-git clone <your-repo-url> flow-shield-waf
+# 克隆仓库（私有仓库需先在服务器配置 GitHub 访问：HTTPS Token 或 SSH 密钥）
+git clone https://github.com/Qinver-china/flow-shield-waf.git
 cd flow-shield-waf
 
 cp .env.example .env
@@ -278,8 +279,8 @@ cd flow-shield-waf
 # 1. 备份（生产建议）
 cp .env .env.bak.$(date +%Y%m%d)
 
-# 2. 拉取新代码
-git pull
+# 2. 拉取新代码（默认分支 main）
+git pull origin main
 
 # 3. 对比 .env.example，将新增环境变量补入 .env
 diff .env.example .env || true
