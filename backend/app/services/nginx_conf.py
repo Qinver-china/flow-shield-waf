@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.redis import get_redis
 from app.models import Site
 from app.services.origin import build_upstream_url
+from app.services.site_domains import site_domain_list
 
 log = logging.getLogger("waf.nginx_conf")
 
@@ -124,11 +125,12 @@ def render_site(site: Site) -> str:
     upstream_https = build_upstream_url(
         site.origin_host, "https", site.origin_https_port
     )
+    server_names = " ".join(site_domain_list(site))
 
     if site.origin_protocol == "follow":
         return _FOLLOW_TEMPLATE.format(
             site_id=site.id,
-            domain=site.domain,
+            domain=server_names,
             listen_lines=listen_lines,
             ssl_block=ssl_block,
             upstream_http=upstream_http,
@@ -142,7 +144,7 @@ def render_site(site: Site) -> str:
 
     return _FIXED_TEMPLATE.format(
         site_id=site.id,
-        domain=site.domain,
+        domain=server_names,
         listen_lines=listen_lines,
         ssl_block=ssl_block,
         upstream=upstream,

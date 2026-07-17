@@ -17,6 +17,7 @@ from app.core.redis import get_redis
 from app.models import Exception_, IpGroup, IpList, RateLimit, Rule, Site
 from app.services import waf_settings
 from app.services.site_scope import resolved_site_ids
+from app.services.site_domains import site_domain_list
 from app.services.traffic_intel.redis_baselines import publish_baselines_to_redis
 from app.constants.response_pages import (
     DEFAULT_BLOCK_PAGE_HTML,
@@ -46,7 +47,13 @@ def _base(row) -> dict:
 
 
 def _site_item(site) -> dict:
-    item = {"id": site.id, "domain": site.domain, "enabled": site.enabled}
+    domains = site_domain_list(site)
+    item = {
+        "id": site.id,
+        "domain": site.domain,
+        "domains": domains,
+        "enabled": site.enabled,
+    }
     if site.custom_block_page_enabled:
         item["block_page"] = {
             "enabled": True,

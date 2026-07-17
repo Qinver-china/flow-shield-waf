@@ -11,6 +11,7 @@ from app.schemas.ip_list import IpListCreate
 from app.schemas.rate_limit import RateLimitCreate
 from app.schemas.rule import RuleCreate
 from app.schemas.site import SiteCreate
+from app.services.site_domains import site_domain_list
 
 _STATIC_EXTENSIONS = [
     "css", "js", "mjs", "map",
@@ -55,7 +56,13 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
             "preview_rule", "preview_rate_limit",
         ],
         "sites": [
-            {"id": s.id, "name": s.name, "domain": s.domain, "enabled": s.enabled}
+            {
+                "id": s.id,
+                "name": s.name,
+                "domain": s.domain,
+                "domains": site_domain_list(s),
+                "enabled": s.enabled,
+            }
             for s in sites
         ],
         "recent_rules": [

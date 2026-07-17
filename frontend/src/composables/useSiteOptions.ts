@@ -5,7 +5,13 @@ export interface SiteOption {
   id: number;
   name: string;
   domain: string;
+  domains?: string[];
   enabled: boolean;
+}
+
+function siteLabel(site: SiteOption): string {
+  const domains = site.domains?.length ? site.domains.join(", ") : site.domain;
+  return `${site.name} (${domains})`;
 }
 
 let cached: SiteOption[] | null = null;
@@ -20,7 +26,7 @@ export function useSiteOptions() {
   const selectOptions = computed(() =>
     sites.value.map((s) => ({
       value: s.id,
-      label: `${s.name} (${s.domain})`,
+      label: siteLabel(s),
       disabled: !s.enabled,
     })),
   );
@@ -49,7 +55,7 @@ export function useSiteOptions() {
     return ids
       .map((id) => {
         const site = siteMap.value.get(id);
-        return site ? `${site.name} (${site.domain})` : `#${id}`;
+        return site ? siteLabel(site) : `#${id}`;
       })
       .join("、");
   }
@@ -57,7 +63,7 @@ export function useSiteOptions() {
   function formatSiteId(id?: number | null): string {
     if (id == null) return "全站";
     const site = siteMap.value.get(id);
-    return site ? `${site.name} (${site.domain})` : `#${id}`;
+    return site ? siteLabel(site) : `#${id}`;
   }
 
   onMounted(load);

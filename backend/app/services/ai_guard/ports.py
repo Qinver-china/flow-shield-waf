@@ -24,6 +24,7 @@ from app.services.logging.query_clickhouse import query_logs as ch_query_logs
 from app.services.logging.query_clickhouse import stats_overview
 from app.services.notifications.channels import send_via_channel
 from app.services.site_scope import apply_site_scope
+from app.services.site_domains import site_domain_list
 
 log = logging.getLogger("waf.ai_guard.ports")
 _FIELDS = field_map()
@@ -34,7 +35,16 @@ class AiResourceWriter:
 
     async def list_sites(self, db: AsyncSession) -> list[dict]:
         rows = (await db.execute(select(Site).order_by(Site.id.desc()).limit(100))).scalars().all()
-        return [{"id": s.id, "name": s.name, "domain": s.domain, "enabled": s.enabled} for s in rows]
+        return [
+            {
+                "id": s.id,
+                "name": s.name,
+                "domain": s.domain,
+                "domains": site_domain_list(s),
+                "enabled": s.enabled,
+            }
+            for s in rows
+        ]
 
     async def list_rules(
         self, db: AsyncSession, *, site_id: int | None = None, limit: int = 20
@@ -230,11 +240,12 @@ class AiResourceWriter:
         from sqlalchemy import select
 
         body = SiteCreate.model_validate(payload)
-        exists = (
-            await db.execute(select(Site).where(Site.domain == body.domain))
-        ).scalar_one_or_none()
-        if exists:
-            raise ValueError("该域名已存在")
+        try:
+            from app.services.site_domains import ensure_domains_available
+
+            await ensure_domains_available(db, body.domains)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
         if not body.listen_http and not body.listen_https:
             raise ValueError("至少需要开启 HTTP 或 HTTPS 监听")
         if body.listen_https and not body.certificate_id:
@@ -245,13 +256,18 @@ class AiResourceWriter:
             cert = await db.get(Certificate, body.certificate_id)
             if cert is None:
                 raise ValueError("所选证书不存在")
-        site = Site(**body.model_dump())
+        payload_data = body.model_dump()
+        domains = payload_data.pop("domains")
+        from app.services.site_domains import apply_domains_to_site
+
+        site = Site(**payload_data)
+        apply_domains_to_site(site, domains)
         db.add(site)
         await db.commit()
         await db.refresh(site)
         await rule_sync.publish(db)
         await nginx_conf.regenerate(db)
-        return {"id": site.id, "name": site.name, "domain": site.domain}
+        return {"id": site.id, "name": site.name, "domain": site.domain, "domains": domains}
 
     async def create_rule(self, db: AsyncSession, payload: dict) -> dict:
         conditions = validate_condition(payload.get("conditions"))

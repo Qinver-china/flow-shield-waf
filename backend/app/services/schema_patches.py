@@ -22,6 +22,21 @@ async def apply_schema_patches(conn=None) -> None:
 async def _apply_schema_patches(conn) -> None:
     await _ensure_waf_setting_timezone(conn)
     await _ensure_waf_setting_ratelimit_fail_open(conn)
+    await _ensure_site_extra_domains(conn)
+
+
+async def _ensure_site_extra_domains(conn) -> None:
+    result = await conn.execute(
+        text(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() "
+            "AND TABLE_NAME = 'site' AND COLUMN_NAME = 'extra_domains'"
+        )
+    )
+    if int(result.scalar_one()) > 0:
+        return
+    await conn.execute(text("ALTER TABLE site ADD COLUMN extra_domains TEXT NULL"))
+    log.info("schema patch applied: site.extra_domains")
 
 
 async def _ensure_waf_setting_timezone(conn) -> None:

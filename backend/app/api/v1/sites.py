@@ -17,6 +17,7 @@ from app.schemas.common import ok
 from app.schemas.site import SiteCreate, SiteOption, SiteOut, SiteUpdate
 from app.constants.response_pages import DEFAULT_BLOCK_PAGE_HTML, DEFAULT_BLOCK_PAGE_STATUS, DEFAULT_CAPTCHA_FOOTER_HTML
 from app.services import nginx_conf, rule_sync
+from app.services.site_domains import apply_domains_to_site, ensure_domains_available
 
 router = APIRouter()
 
@@ -110,18 +111,19 @@ async def create_site(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    exists = (
-        await db.execute(select(Site).where(Site.domain == body.domain))
-    ).scalar_one_or_none()
-    if exists:
-        raise HTTPException(status_code=400, detail="该域名已存在")
+    try:
+        await ensure_domains_available(db, body.domains)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     _validate_listen(listen_http=body.listen_http, listen_https=body.listen_https)
     _validate_https(listen_https=body.listen_https, certificate_id=body.certificate_id)
     if body.certificate_id:
         await _ensure_certificate(db, body.certificate_id)
     payload = body.model_dump()
+    domains = payload.pop("domains")
     _normalize_response_pages(payload)
     site = Site(**payload)
+    apply_domains_to_site(site, domains)
     db.add(site)
     await db.commit()
     await db.refresh(site)
@@ -141,12 +143,12 @@ async def update_site(
         raise HTTPException(status_code=404, detail="站点不存在")
 
     data = body.model_dump(exclude_unset=True)
-    if "domain" in data and data["domain"] != site.domain:
-        exists = (
-            await db.execute(select(Site).where(Site.domain == data["domain"]))
-        ).scalar_one_or_none()
-        if exists is not None:
-            raise HTTPException(status_code=400, detail="该域名已存在")
+    domains = data.pop("domains", None)
+    if domains is not None:
+        try:
+            await ensure_domains_available(db, domains, exclude_site_id=site.id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     listen_http = data.get("listen_http", site.listen_http)
     listen_https = data.get("listen_https", site.listen_https)
     certificate_id = data.get("certificate_id", site.certificate_id)
@@ -176,6 +178,9 @@ async def update_site(
 
     for k, v in data.items():
         setattr(site, k, v)
+
+    if domains is not None:
+        apply_domains_to_site(site, domains)
 
     if not site.listen_https:
         site.certificate_id = None

@@ -17,6 +17,7 @@ class Site(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128))
     domain: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    extra_domains: Mapped[str | None] = mapped_column(Text, nullable=True)
     origin_host: Mapped[str] = mapped_column(String(255))
     origin_protocol: Mapped[str] = mapped_column(String(16), default="follow")
     origin_http_port: Mapped[int] = mapped_column(Integer, default=80)

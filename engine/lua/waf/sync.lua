@@ -60,8 +60,14 @@ local _config = empty_config()
 local function index_by_domain(sites)
     local map = {}
     for _, s in ipairs(sites or {}) do
-        if s.domain then
-            map[s.domain] = s
+        local domains = s.domains
+        if type(domains) ~= "table" or #domains == 0 then
+            domains = s.domain and { s.domain } or {}
+        end
+        for _, d in ipairs(domains) do
+            if d and d ~= "" then
+                map[d] = s
+            end
         end
     end
     return map

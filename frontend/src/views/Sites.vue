@@ -41,9 +41,17 @@
                 <a-input v-model:value="record.name" placeholder="例如：官网" :disabled="readonly" />
               </a-form-item>
             </a-col>
-            <a-col :span="12">
-              <a-form-item label="域名" required>
-                <a-input v-model:value="record.domain" placeholder="example.com" :disabled="readonly" />
+            <a-col :span="24">
+              <a-form-item label="域名" required extra="可输入多个域名，回车或逗号分隔，例如 www.example.com 与 example.com">
+                <a-select
+                  v-model:value="record.domains"
+                  mode="tags"
+                  :token-separators="[',', ' ', ';']"
+                  placeholder="输入域名后回车"
+                  style="width: 100%"
+                  :disabled="readonly"
+                  :options="[]"
+                />
               </a-form-item>
             </a-col>
           </a-row>
@@ -221,7 +229,7 @@ const batchConfig: BatchConfig = {
 
 const columns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
-  { title: "域名", dataIndex: "domain", sorter: true },
+  { title: "域名", dataIndex: "domains_display", sorter: true },
   { title: "源站", dataIndex: "origin_display" },
   { title: "证书", dataIndex: "certificate_name", width: 140 },
   { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
@@ -236,7 +244,7 @@ const certSelectOptions = computed(() =>
 
 const defaultRecord = () => ({
   name: "",
-  domain: "",
+  domains: [] as string[],
   origin_host: "",
   origin_protocol: "follow",
   origin_http_port: 80,
@@ -253,6 +261,13 @@ const defaultRecord = () => ({
 });
 
 function preparePayload(row: Record<string, any>) {
+  const domains = Array.isArray(row.domains)
+    ? row.domains.map((item: string) => String(item).trim().toLowerCase()).filter(Boolean)
+    : [];
+  if (!domains.length) {
+    throw new Error("至少输入一个域名");
+  }
+  row.domains = [...new Set(domains)];
   if (!row.listen_http && !row.listen_https) {
     throw new Error("至少需要开启 HTTP 或 HTTPS 监听");
   }

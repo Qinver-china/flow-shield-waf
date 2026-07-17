@@ -101,7 +101,15 @@ TOOL_DEFINITIONS: list[dict] = [
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "domain": {"type": "string"},
+                    "domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 1,
+                    },
+                    "domain": {
+                        "type": "string",
+                        "description": "兼容旧参数，等价于 domains 仅含一个域名",
+                    },
                     "origin_host": {"type": "string"},
                     "origin_protocol": {
                         "type": "string",
@@ -112,7 +120,7 @@ TOOL_DEFINITIONS: list[dict] = [
                     "certificate_id": {"type": "integer"},
                     "enabled": {"type": "boolean"},
                 },
-                "required": ["name", "domain", "origin_host"],
+                "required": ["name", "origin_host"],
             },
         },
     },

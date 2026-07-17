@@ -11,11 +11,24 @@ from app.services.origin import (
     format_origin_display,
     validate_origin_host,
 )
+from app.services.site_domains import (
+    format_domains_display,
+    normalize_domain_list,
+    site_domain_list,
+)
+
+
+def _coerce_domains_input(data: object) -> object:
+    if not isinstance(data, dict):
+        return data
+    if data.get("domains") is None and data.get("domain"):
+        data = {**data, "domains": [data["domain"]]}
+    return data
 
 
 class SiteBase(BaseModel):
     name: str
-    domain: str
+    domains: list[str] = Field(min_length=1)
     origin_host: str
     origin_protocol: str = "follow"
     origin_http_port: int = Field(default=80, ge=1, le=65535)
@@ -29,6 +42,22 @@ class SiteBase(BaseModel):
     block_page_html: str | None = None
     custom_captcha_footer_enabled: bool = False
     captcha_footer_html: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_domain(cls, data: object) -> object:
+        return _coerce_domains_input(data)
+
+    @field_validator("domains", mode="before")
+    @classmethod
+    def _normalize_domains(cls, value: object) -> list[str]:
+        if value is None:
+            raise ValueError("至少输入一个域名")
+        if isinstance(value, str):
+            return normalize_domain_list(value)
+        if isinstance(value, list):
+            return normalize_domain_list(value)
+        raise ValueError("域名格式无效")
 
     @field_validator("block_page_status_code")
     @classmethod
@@ -78,7 +107,7 @@ class SiteCreate(SiteBase):
 
 class SiteUpdate(BaseModel):
     name: str | None = None
-    domain: str | None = None
+    domains: list[str] | None = Field(default=None, min_length=1)
     origin_host: str | None = None
     origin_protocol: str | None = None
     origin_http_port: int | None = Field(default=None, ge=1, le=65535)
@@ -92,6 +121,22 @@ class SiteUpdate(BaseModel):
     block_page_html: str | None = None
     custom_captcha_footer_enabled: bool | None = None
     captcha_footer_html: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_domain(cls, data: object) -> object:
+        return _coerce_domains_input(data)
+
+    @field_validator("domains", mode="before")
+    @classmethod
+    def _normalize_domains(cls, value: object) -> list[str] | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return normalize_domain_list(value)
+        if isinstance(value, list):
+            return normalize_domain_list(value)
+        raise ValueError("域名格式无效")
 
     @field_validator("block_page_status_code")
     @classmethod
@@ -121,8 +166,38 @@ class SiteUpdate(BaseModel):
 class SiteOut(SiteBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    domain: str
+    domains_display: str | None = None
     certificate_name: str | None = None
     origin_display: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_orm_site(cls, data: object) -> object:
+        if hasattr(data, "domain"):
+            domains = site_domain_list(data)
+            return {
+                "id": data.id,
+                "name": data.name,
+                "domain": data.domain,
+                "domains": domains,
+                "domains_display": format_domains_display(domains),
+                "origin_host": data.origin_host,
+                "origin_protocol": data.origin_protocol,
+                "origin_http_port": data.origin_http_port,
+                "origin_https_port": data.origin_https_port,
+                "listen_http": data.listen_http,
+                "listen_https": data.listen_https,
+                "certificate_id": data.certificate_id,
+                "enabled": data.enabled,
+                "custom_block_page_enabled": data.custom_block_page_enabled,
+                "block_page_status_code": data.block_page_status_code,
+                "block_page_html": data.block_page_html,
+                "custom_captcha_footer_enabled": data.custom_captcha_footer_enabled,
+                "captcha_footer_html": data.captcha_footer_html,
+                "certificate": getattr(data, "certificate", None),
+            }
+        return data
 
     @classmethod
     def from_site(cls, site) -> "SiteOut":
@@ -144,4 +219,19 @@ class SiteOption(BaseModel):
     id: int
     name: str
     domain: str
+    domains: list[str]
     enabled: bool
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_orm_site(cls, data: object) -> object:
+        if hasattr(data, "domain"):
+            domains = site_domain_list(data)
+            return {
+                "id": data.id,
+                "name": data.name,
+                "domain": data.domain,
+                "domains": domains,
+                "enabled": data.enabled,
+            }
+        return data
