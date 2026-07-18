@@ -38,6 +38,16 @@
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
         <a-row :gutter="16">
+          <a-col :span="6">
+            <a-form-item label="优先级 (小=先)">
+              <a-input-number v-model:value="record.priority" :min="1" style="width: 100%" :disabled="readonly" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="10">
+            <a-form-item label="生效站点（不选=全局）">
+              <site-select v-model:value="record.site_ids" style="width: 100%" :readonly="readonly" />
+            </a-form-item>
+          </a-col>
           <a-col :span="8">
             <a-form-item label="防护方式">
               <a-select v-model:value="record.mode" style="width: 100%" :disabled="readonly">
@@ -47,16 +57,6 @@
                 <a-select-option value="js_challenge">JS 挑战</a-select-option>
                 <a-select-option value="slide_captcha">滑动验证</a-select-option>
               </a-select>
-            </a-form-item>
-          </a-col>
-          <a-col :span="6">
-            <a-form-item label="优先级 (小=先)">
-              <a-input-number v-model:value="record.priority" :min="1" style="width: 100%" :disabled="readonly" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="10">
-            <a-form-item label="生效站点（不选=全局）">
-              <site-select v-model:value="record.site_ids" style="width: 100%" :readonly="readonly" />
             </a-form-item>
           </a-col>
         </a-row>
