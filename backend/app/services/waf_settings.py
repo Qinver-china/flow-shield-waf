@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants.debug_settings import DEFAULT_DEBUG_MODE
 from app.constants.challenge_settings import DEFAULT_CAPTCHA_TTL, DEFAULT_JS_CHALLENGE_TTL
 from app.constants.clearance_fingerprint import DEFAULT_CLEARANCE_FINGERPRINT_DIMS
+from app.constants.traffic_windows import TRAFFIC_WINDOWS_SEC
 from app.constants.logging_settings import (
     DEFAULT_AUTO_THRESHOLDS,
     DEFAULT_LOGGING_AUTO_COOLDOWN_SEC,
@@ -98,7 +99,7 @@ def normalize_auto_thresholds(raw: str | None) -> list[dict]:
         }
     for sec, default in defaults_by_sec.items():
         by_sec.setdefault(sec, dict(default))
-    return [by_sec[sec] for sec in sorted(by_sec)]
+    return [by_sec[sec] for sec in TRAFFIC_WINDOWS_SEC if sec in by_sec]
 
 
 async def get_challenge_settings(db: AsyncSession) -> dict:

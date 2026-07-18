@@ -19,6 +19,17 @@ from app.services.logging.labels import (
 )
 from app.services.bot_catalog import category_label_map
 
+TREND_GRANULARITIES = {
+    "1m": "toStartOfMinute(ts)",
+    "5m": "toStartOfFiveMinute(ts)",
+    "10m": "toStartOfTenMinutes(ts)",
+    "30m": "toStartOfInterval(ts, INTERVAL 30 minute)",
+    "1h": "toStartOfHour(ts)",
+    "1d": "toStartOfDay(ts)",
+    "1w": "toStartOfWeek(ts)",
+    "1mo": "toStartOfMonth(ts)",
+}
+
 STATS_DIMENSIONS = frozenset({
     "rule_id", "client_ip", "source", "mode", "site_id", "domain", "geo_country",
     "method", "blocked", "log_type", "ip_is_private", "xff_first", "geo_region",
@@ -71,6 +82,34 @@ def _window(start: datetime | None, end: datetime | None, hours: int) -> tuple[d
     if end_ts - start_ts > timedelta(days=30):
         raise ValueError("查询时间范围不能超过 30 天")
     return start_ts, end_ts
+
+
+def _auto_trend_granularity(window: timedelta) -> str:
+    minutes = window.total_seconds() / 60
+    if minutes <= 30:
+        return "5m"
+    if minutes <= 360:
+        return "10m"
+    if minutes <= 1440:
+        return "1h"
+    if minutes <= 10080:
+        return "1d"
+    if minutes <= 43200:
+        return "1w"
+    return "1mo"
+
+
+def _trend_bucket_expr(window: timedelta, granularity: str | None = None) -> str:
+    if granularity:
+        bucket = TREND_GRANULARITIES.get(granularity)
+        if bucket is None:
+            raise ValueError(
+                f"不支持的统计颗粒度，可选: {', '.join(sorted(TREND_GRANULARITIES))}"
+            )
+        return bucket
+    if window <= timedelta(days=2):
+        return TREND_GRANULARITIES["1h"]
+    return TREND_GRANULARITIES["1d"]
 
 
 async def _site_label_map(site_ids: list[int]) -> dict[int, tuple[str, str]]:
@@ -541,6 +580,7 @@ async def stats_overview(
     start: datetime | None = None,
     end: datetime | None = None,
     q: LogQuery | None = None,
+    trend_granularity: str | None = None,
 ) -> dict:
     start_ts, end_ts = _window(start, end, hours)
 
@@ -564,7 +604,8 @@ async def stats_overview(
             parameters=params,
         ).result_rows[0][0]
         window = end_ts - start_ts
-        bucket = "toStartOfHour(ts)" if window <= timedelta(days=2) else "toDate(ts)"
+        effective_granularity = trend_granularity or _auto_trend_granularity(window)
+        bucket = _trend_bucket_expr(window, effective_granularity)
         trend_rows = client.query(
             f"SELECT {bucket} AS t, count() AS total, countIf({_col('blocked')} = 1) AS blocked_cnt "
             f"FROM waf_logs WHERE {where} GROUP BY t ORDER BY t",

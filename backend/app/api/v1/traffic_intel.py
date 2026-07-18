@@ -1,10 +1,13 @@
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC, TRAFFIC_WINDOWS_SEC
 from app.core.db import get_db
+from app.core.redis import get_redis
 from app.models import User
 from app.schemas.common import ok
 from app.schemas.traffic_intel import (
@@ -15,9 +18,9 @@ from app.schemas.traffic_intel import (
     WindowComparison,
 )
 from app.services.traffic_intel.constants import (
-    ANALYSIS_WINDOWS_SEC,
     DEFAULT_BASELINE_LOOKBACK_DAYS,
     DEFAULT_SPIKE_RATIO,
+    REDIS_SNAPSHOT_KEY,
 )
 from app.services.traffic_intel.store.alerts_mysql import AlertStore
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
@@ -34,6 +37,31 @@ def _config() -> TrafficIntelConfig:
         spike_ratio=DEFAULT_SPIKE_RATIO,
         baseline_lookback_days=DEFAULT_BASELINE_LOOKBACK_DAYS,
     )
+
+
+def _snapshot_window_requests(raw: str | bytes | None, window_sec: int, site_id: int | None) -> int | None:
+    if not raw:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    if site_id is None:
+        windows = data.get("global", {}).get("windows") or []
+    else:
+        site_data = (data.get("sites") or {}).get(str(site_id), {})
+        windows = site_data.get("windows") or []
+
+    for w in windows:
+        try:
+            if int(w.get("sec", 0)) == window_sec:
+                return int(w.get("requests") or 0)
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 @router.get("/baselines")
@@ -91,17 +119,26 @@ async def intel_status(
     ch = ClickHouseTrafficStore()
     baselines = BaselineStore()
     timezone_name = await get_traffic_timezone(db)
+    snapshot_raw = await get_redis().get(REDIS_SNAPSHOT_KEY)
 
     windows: list[WindowComparison] = []
-    for window_sec in ANALYSIS_WINDOWS_SEC:
-        baseline = await baselines.get(
-            db,
-            site_id=site_id,
-            window_sec=window_sec,
-            as_of=datetime.utcnow(),
-            timezone_name=timezone_name,
-        )
-        current = ch.current_window_requests(window_sec, site_id=site_id)
+    for window_sec in TRAFFIC_WINDOWS_SEC:
+        baseline = None
+        if window_sec in TRAFFIC_BASELINE_WINDOWS_SEC:
+            baseline = await baselines.get(
+                db,
+                site_id=site_id,
+                window_sec=window_sec,
+                as_of=datetime.utcnow(),
+                timezone_name=timezone_name,
+            )
+
+        current = _snapshot_window_requests(snapshot_raw, window_sec, site_id)
+        if current is None and window_sec in TRAFFIC_BASELINE_WINDOWS_SEC:
+            current = ch.current_window_requests(window_sec, site_id=site_id)
+        if current is None:
+            current = 0
+
         baseline_avg = baseline.avg_requests if baseline else None
         ratio = (current / baseline_avg) if baseline_avg and baseline_avg > 0 else None
         threshold = (

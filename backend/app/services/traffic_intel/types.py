@@ -26,7 +26,7 @@ class TrafficIntelConfig:
     baseline_lookback_days: int = 28
     min_baseline_samples: int = 12
     alert_cooldown_sec: int = 300
-    analysis_windows_sec: tuple[int, ...] = (60, 300, 1800)
+    analysis_windows_sec: tuple[int, ...] = (60, 300, 1800, 3600)
 
 
 @dataclass(frozen=True)

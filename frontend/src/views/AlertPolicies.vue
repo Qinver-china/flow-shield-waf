@@ -244,8 +244,6 @@ const channels = ref<any[]>([]);
 const conditions = ref<any[]>([]);
 const channelTypes = ref<any[]>([]);
 const trafficWindows = ref([
-  { value: 10, label: "10 秒" },
-  { value: 30, label: "30 秒" },
   { value: 60, label: "1 分钟" },
   { value: 300, label: "5 分钟" },
   { value: 1800, label: "30 分钟" },

@@ -103,7 +103,7 @@ def test_traffic_global_absolute_ok():
     validate_condition({
         "field": "traffic.global",
         "op": "compare",
-        "value": {"window_sec": 30, "compare": "abs_gt", "threshold": 1000},
+        "value": {"window_sec": 60, "compare": "abs_gt", "threshold": 1000},
     })
 
 
@@ -120,7 +120,7 @@ def test_traffic_global_qps_ok():
     validate_condition({
         "field": "traffic.global",
         "op": "compare",
-        "value": {"window_sec": 10, "compare": "qps_lt", "threshold": 1},
+        "value": {"window_sec": 60, "compare": "qps_lt", "threshold": 1},
     })
 
 

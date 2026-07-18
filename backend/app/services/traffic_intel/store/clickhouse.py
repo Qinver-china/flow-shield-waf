@@ -19,6 +19,8 @@ def _bucket_expr(window_sec: int) -> str:
         return "toStartOfFiveMinute(minute)"
     if window_sec == 1800:
         return "toStartOfInterval(minute, INTERVAL 30 MINUTE)"
+    if window_sec == 3600:
+        return "toStartOfHour(minute)"
     raise ValueError(f"unsupported analysis window: {window_sec}")
 
 

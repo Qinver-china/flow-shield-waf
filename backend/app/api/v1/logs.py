@@ -62,9 +62,20 @@ async def list_logs(
 @router.get("/stats")
 async def logs_stats(
     q: LogQuery = Depends(),
+    trend_granularity: str | None = Query(None, alias="trend_granularity"),
     _user: User = Depends(get_current_user),
 ):
-    return ok(await stats_overview(hours=24, start=q.start, end=q.end, q=q))
+    try:
+        data = await stats_overview(
+            hours=24,
+            start=q.start,
+            end=q.end,
+            q=q,
+            trend_granularity=trend_granularity,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ok(data)
 
 
 @router.get("/stats/group")

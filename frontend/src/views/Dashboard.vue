@@ -64,10 +64,9 @@
         />
       </a-col>
     </a-row>
-
     <a-row :gutter="[12, 12]">
-      <a-col :xs="24" :xl="16">
-        <a-card class="panel-card" :bordered="false">
+      <a-col :xs="24" :md="14">
+        <a-card class="panel-card traffic-metrics-panel" :bordered="false">
           <template #title>
             <span class="panel-title"><thunderbolt-outlined /> {{ trafficCardTitle }}</span>
             <a-tag v-if="traffic.burst_active" color="orange" style="margin-left: 8px">自动取证中</a-tag>
@@ -75,42 +74,51 @@
           <template #extra>
             <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
           </template>
-          <a-row :gutter="[12, 12]">
-            <a-col v-for="w in traffic.windows" :key="w.sec" :xs="12" :sm="8" :md="6" :xl="4">
-              <div class="traffic-window">
-                <div class="traffic-window-title">{{ windowLabel(w.sec) }}</div>
-                <div class="traffic-window-value">
+          <a-row class="traffic-metrics-grid" :gutter="[8, 8]">
+            <a-col v-for="w in traffic.windows" :key="w.sec" :xs="12" :sm="6" :md="6" :lg="6" :xl="6">
+              <div class="metric-window-card traffic-window">
+                <div class="metric-window-label">{{ windowLabel(w.sec) }}</div>
+                <div class="metric-window-value">
                   {{ w.requests }}
-                  <span class="traffic-qps">{{ Number(w.qps || 0).toFixed(1) }} QPS</span>
+                  <span class="metric-window-meta">{{ Number(w.qps || 0).toFixed(1) }} QPS</span>
                 </div>
                 <a-progress v-if="w.threshold" :percent="Math.min(100, Math.round((w.requests / w.threshold) * 100))"
-                  size="small" :stroke-color="progressColor(w.requests, w.threshold)" :show-info="false" />
+                  size="small" :stroke-color="progressColor(w.requests, w.threshold)" :show-info="false"
+                  class="metric-window-progress" />
               </div>
             </a-col>
           </a-row>
         </a-card>
       </a-col>
-      <a-col :xs="24" :xl="8">
-        <a-card class="panel-card intel-card" :bordered="false" title="流量异常检测">
+      <a-col :xs="24" :md="10">
+        <a-card class="panel-card intel-card traffic-metrics-panel" :bordered="false" title="流量异常检测">
           <template #title>
             <span class="panel-title"><alert-outlined /> 流量异常检测</span>
           </template>
           <template #extra>
             <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
           </template>
-          <a-empty v-if="!intel.windows?.length" description="暂无基线数据" />
-          <div v-else class="intel-list">
-            <div v-for="w in intel.windows" :key="w.window_sec" class="intel-item" :class="{ anomaly: w.is_anomaly }">
-              <div class="intel-label">{{ w.label }}</div>
-              <div class="intel-value">{{ w.current_requests }} 请求</div>
-              <div class="intel-sub">
-                基线 {{ formatIntelBaseline(w.baseline_avg) }}
-                <span v-if="w.deviation_ratio != null" class="intel-deviation">
-                  · {{ formatIntelDeviation(w.deviation_ratio) }}
-                </span>
+          <a-empty v-if="!intel.windows?.length" description="暂无数据" />
+          <a-row v-else class="traffic-metrics-grid" :gutter="[8, 8]">
+            <a-col v-for="w in intel.windows" :key="w.window_sec" :xs="12" :sm="6" :md="6" :lg="6" :xl="6">
+              <div class="metric-window-card intel-item" :class="{ anomaly: w.is_anomaly }">
+                <div class="metric-window-label">{{ w.label }}</div>
+                <div class="metric-window-value">
+                  {{ w.current_requests }}
+                  <span class="metric-window-meta">请求</span>
+                </div>
+                <div class="metric-window-sub">
+                  <template v-if="w.baseline_avg != null">
+                    基线 {{ formatIntelBaseline(w.baseline_avg) }}
+                    <span v-if="w.deviation_ratio != null" class="intel-deviation">
+                      · {{ formatIntelDeviation(w.deviation_ratio) }}
+                    </span>
+                  </template>
+                  <template v-else>暂无基线</template>
+                </div>
               </div>
-            </div>
-          </div>
+            </a-col>
+          </a-row>
         </a-card>
       </a-col>
     </a-row>
@@ -973,43 +981,54 @@ onUnmounted(() => {
   width: min(240px, 42vw);
 }
 
-.traffic-window {
-  padding: 12px;
+.traffic-metrics-panel :deep(.ant-card-body) {
+  padding: 12px 14px 14px;
+}
+
+.metric-window-card {
+  height: 100%;
+  min-width: 0;
+  padding: 8px 10px;
   border-radius: var(--fs-radius-sm);
   background: var(--fs-bg-muted);
   border: 1px solid var(--fs-border);
 }
 
-.traffic-window-title {
-  font-size: 12px;
+.metric-window-label {
+  font-size: 11px;
+  line-height: 1.3;
   color: var(--fs-text-secondary);
 }
 
-.traffic-window-value {
-  margin-top: 4px;
+.metric-window-value {
+  margin-top: 2px;
   font-size: 22px;
+  line-height: 1.25;
   font-weight: 700;
   color: var(--fs-text-primary);
 }
 
-.traffic-qps {
-  margin-left: 6px;
-  font-size: 12px;
+.metric-window-meta {
+  margin-left: 4px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--fs-text-muted);
 }
 
-.intel-list {
-  display: flex;
-  gap: 8px;
+.metric-window-sub {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--fs-text-muted);
 }
 
-.intel-item {
-  flex: auto;
-  padding: 10px 12px;
-  border-radius: var(--fs-radius-sm);
-  border: 1px solid var(--fs-border);
-  background: var(--fs-bg-muted);
+.metric-window-progress {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.metric-window-progress :deep(.ant-progress-inner) {
+  height: 3px !important;
 }
 
 .intel-item.anomaly {
@@ -1017,21 +1036,8 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--fs-color-warning) 10%, var(--fs-bg-muted));
 }
 
-.intel-label {
-  font-size: 12px;
-  color: var(--fs-text-secondary);
-}
-
-.intel-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--fs-text-primary);
-}
-
-.intel-sub {
-  font-size: 12px;
-  color: var(--fs-text-muted);
-  margin-top: 2px;
+.intel-deviation {
+  white-space: nowrap;
 }
 
 .chart-box {

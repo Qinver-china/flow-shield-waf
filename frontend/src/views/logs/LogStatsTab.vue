@@ -50,7 +50,26 @@
         </template>
 
         <div class="chart-block">
-          <div class="chart-block-title">命中时间趋势</div>
+          <div class="chart-block-header">
+            <div class="chart-block-title">命中时间趋势</div>
+            <a-dropdown :trigger="['click']" placement="bottomRight">
+              <button type="button" class="granularity-trigger" @click.prevent>
+                {{ trendGranularityLabel }}
+                <down-outlined />
+              </button>
+              <template #overlay>
+                <a-menu
+                  class="granularity-menu"
+                  :selected-keys="[trendGranularity]"
+                  @click="onGranularitySelect"
+                >
+                  <a-menu-item v-for="item in trendGranularityOptions" :key="item.key">
+                    {{ item.label }}
+                  </a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </div>
           <a-empty
             v-if="!overview.trend.length"
             class="chart-empty"
@@ -92,11 +111,20 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, type LocationQuery } from "vue-router";
+import { DownOutlined } from "@ant-design/icons-vue";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
 import { api } from "@/api";
-import { formatDateTime, formatDateTimeShort } from "@/utils/datetime";
-import { localizeStatsItems, statsDimensionGroups, statsDimensions, type StatsDimension } from "./constants";
+import { formatDateTime } from "@/utils/datetime";
+import {
+  localizeStatsItems,
+  resolveAutoTrendGranularity,
+  statsDimensionGroups,
+  statsDimensions,
+  trendGranularityOptions,
+  type StatsDimension,
+  type TrendGranularity,
+} from "./constants";
 import LogDimensionActionCell from "./LogDimensionActionCell.vue";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import type { LogFilterState } from "./useLogFilterState";
@@ -143,11 +171,15 @@ const groupPageSize = ref(20);
 const dimension = ref<StatsDimension>(resolveDimension(route.query));
 const trendChartEl = ref<HTMLElement>();
 const initialized = ref(false);
+const trendGranularity = ref<TrendGranularity>("10m");
 
 let trendChart: ECharts | null = null;
 let trendObserver: ResizeObserver | null = null;
 
 const currentDimension = computed(() => statsDimensions.find((d) => d.key === dimension.value));
+const trendGranularityLabel = computed(
+  () => trendGranularityOptions.find((item) => item.key === trendGranularity.value)?.label || "颗粒度",
+);
 
 const tableColumns = computed(() => [
   {
@@ -186,7 +218,16 @@ function buildDrillDown(record: any): LogDrillDownFilter {
 }
 
 function buildStatsParams(extra?: Record<string, unknown>) {
-  return props.filterState.buildSharedQueryParams(extra);
+  return props.filterState.buildSharedQueryParams({
+    trend_granularity: trendGranularity.value,
+    ...extra,
+  });
+}
+
+function applyAutoGranularity() {
+  const { start, end } = props.filterState.range.value;
+  const rangeMinutes = end.diff(start, "minute", true);
+  trendGranularity.value = resolveAutoTrendGranularity(props.filterState.preset.value, rangeMinutes);
 }
 
 async function fetchOverview() {
@@ -200,7 +241,35 @@ async function fetchOverview() {
 }
 
 function formatTrendLabel(value: string) {
-  return formatDateTimeShort(value);
+  const formats: Record<TrendGranularity, string> = {
+    "1m": "HH:mm",
+    "5m": "HH:mm",
+    "10m": "HH:mm",
+    "30m": "HH:mm",
+    "1h": "MM-DD HH:mm",
+    "1d": "MM-DD",
+    "1w": "MM-DD",
+    "1mo": "YYYY-MM",
+  };
+  return formatDateTime(value, formats[trendGranularity.value]);
+}
+
+function onGranularitySelect({ key }: { key: string }) {
+  const next = key as TrendGranularity;
+  if (next === trendGranularity.value) return;
+  trendGranularity.value = next;
+  fetchOverviewOnly();
+}
+
+async function fetchOverviewOnly() {
+  groupLoading.value = true;
+  try {
+    await fetchOverview();
+  } finally {
+    groupLoading.value = false;
+    await renderCharts();
+    setupChartObservers();
+  }
 }
 
 function disposeChart(chart: ECharts | null) {
@@ -362,15 +431,17 @@ function applyDimensionFromQuery(query: LocationQuery) {
   return true;
 }
 
-function applyFromQuery(query: LocationQuery) {
-  applyDimensionFromQuery(query);
-  initialized.value = true;
-  fetchAll();
-}
-
 function ensureLoaded() {
   if (initialized.value) return;
   initialized.value = true;
+  applyAutoGranularity();
+  fetchAll();
+}
+
+function applyFromQuery(query: LocationQuery) {
+  applyDimensionFromQuery(query);
+  initialized.value = true;
+  applyAutoGranularity();
   fetchAll();
 }
 
@@ -389,6 +460,14 @@ watch(
     if (applyDimensionFromQuery(route.query)) {
       fetchGroup();
     }
+  },
+);
+
+watch(
+  () => [props.filterState.preset.value, props.filterState.customRange.value] as const,
+  () => {
+    if (!initialized.value) return;
+    applyAutoGranularity();
   },
 );
 
@@ -551,11 +630,49 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
-.chart-block-title {
+.chart-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.chart-block-title {
   font-size: 13px;
   font-weight: 600;
   color: #475569;
+  margin-bottom: 0;
+}
+
+.granularity-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+
+.granularity-trigger:hover {
+  color: #0284c7;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.granularity-trigger:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 1px;
 }
 
 .chart-empty {

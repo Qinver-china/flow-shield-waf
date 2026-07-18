@@ -222,6 +222,45 @@ export const timePresets: TimePresetDef[] = [
   { key: "custom", label: "自定义", kind: "custom" },
 ];
 
+export type TrendGranularity = "1m" | "5m" | "10m" | "30m" | "1h" | "1d" | "1w" | "1mo";
+
+export interface TrendGranularityOption {
+  key: TrendGranularity;
+  label: string;
+}
+
+export const trendGranularityOptions: TrendGranularityOption[] = [
+  { key: "1m", label: "1 分钟" },
+  { key: "5m", label: "5 分钟" },
+  { key: "10m", label: "10 分钟" },
+  { key: "30m", label: "30 分钟" },
+  { key: "1h", label: "1 小时" },
+  { key: "1d", label: "1 天" },
+  { key: "1w", label: "1 周" },
+  { key: "1mo", label: "1 个月" },
+];
+
+const presetTrendGranularity: Partial<Record<TimePreset, TrendGranularity>> = {
+  "30m": "5m",
+  "6h": "10m",
+  "24h": "1h",
+};
+
+export function resolveAutoTrendGranularity(
+  preset: TimePreset,
+  rangeMinutes: number,
+): TrendGranularity {
+  if (presetTrendGranularity[preset]) {
+    return presetTrendGranularity[preset]!;
+  }
+  if (rangeMinutes <= 30) return "5m";
+  if (rangeMinutes <= 360) return "10m";
+  if (rangeMinutes <= 1440) return "1h";
+  if (rangeMinutes <= 10080) return "1d";
+  if (rangeMinutes <= 43200) return "1w";
+  return "1mo";
+}
+
 export type LogFilterOperator = "eq" | "ne" | "contains" | "not_contains" | "like";
 
 export const logFilterOperators: { value: LogFilterOperator; label: string }[] = [
@@ -443,8 +482,6 @@ export function logDetailFiltersToConditions(filters: LogDetailFilters): LogFilt
 }
 
 export const trafficWindowLabels: Record<number, string> = {
-  10: "10 秒",
-  30: "30 秒",
   60: "1 分钟",
   300: "5 分钟",
   1800: "30 分钟",

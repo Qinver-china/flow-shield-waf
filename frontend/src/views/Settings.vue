@@ -471,8 +471,6 @@ const logForm = reactive({
   observe_sample_rate_active: 1.0,
   logging_detail_on_block: true,
   logging_auto_thresholds: [
-    { window_sec: 10, max_requests: 500 },
-    { window_sec: 30, max_requests: 1200 },
     { window_sec: 60, max_requests: 2000 },
     { window_sec: 300, max_requests: 8000 },
     { window_sec: 1800, max_requests: 40000 },

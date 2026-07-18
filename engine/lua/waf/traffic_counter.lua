@@ -6,7 +6,7 @@ local rc = require "waf.redis_client"
 local _M = {}
 
 local dict = ngx.shared.waf_traffic
-local WINDOWS = { 10, 30, 60, 300, 1800, 3600 }
+local WINDOWS = { 60, 300, 1800, 3600 }
 local BUCKET_TTL = 3700
 local SNAPSHOT_KEY = "waf:traffic:snapshot"
 local VIEWER_KEY = "waf:logs:viewer_active"
@@ -86,8 +86,6 @@ local function thresholds_from_settings(cfg)
     local th = logging.logging_auto_thresholds
     if type(th) ~= "table" or #th == 0 then
         th = {
-            { window_sec = 10, max_requests = 500 },
-            { window_sec = 30, max_requests = 1200 },
             { window_sec = 60, max_requests = 2000 },
             { window_sec = 300, max_requests = 8000 },
             { window_sec = 1800, max_requests = 40000 },
