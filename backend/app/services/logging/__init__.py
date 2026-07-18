@@ -1,9 +1,5 @@
-from app.services.logging.clickhouse_store import ClickHouseLogStore
-from app.services.logging.types import COMMON_FIELDS, LogType, register_log_type
+"""Logging services (ClickHouse ingest, query, enrichment).
 
-__all__ = [
-    "ClickHouseLogStore",
-    "LogType",
-    "COMMON_FIELDS",
-    "register_log_type",
-]
+Submodules are imported directly (e.g. ``app.services.logging.enrich``) to avoid
+eager import cycles during bot / crawler detection startup.
+"""
