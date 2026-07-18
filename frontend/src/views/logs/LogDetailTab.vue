@@ -61,24 +61,25 @@
         :scroll="{ x: 1100 }"
         @change="onTableChange"
       >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'ts'">{{ formatTs(record.ts) }}</template>
-          <template v-else-if="column.key === 'source'">
+        <template #bodyCell="{ column, record, text }">
+          <template v-if="columnKey(column) === 'ts'">{{ formatTs(record.ts) }}</template>
+          <template v-else-if="columnKey(column) === 'source'">
             <a-tag>{{ sourceLabel[record.source] || record.source || "-" }}</a-tag>
           </template>
-          <template v-else-if="column.key === 'mode'">
+          <template v-else-if="columnKey(column) === 'mode'">
             <a-tag :color="modeColor[record.mode] || 'default'">
               {{ modeLabel[record.mode] || record.mode || "-" }}
             </a-tag>
           </template>
-          <template v-else-if="column.key === 'blocked'">
+          <template v-else-if="columnKey(column) === 'blocked'">
             <a-tag :color="record.blocked ? 'red' : 'green'">
               {{ record.blocked ? "拦截" : "放行" }}
             </a-tag>
           </template>
-          <template v-else-if="column.key === 'action'">
+          <template v-else-if="columnKey(column) === '__action'">
             <a-button type="link" size="small" @click="openDetail(record.id)">查看详情</a-button>
           </template>
+          <template v-else>{{ text }}</template>
         </template>
       </a-table>
     </a-card>
@@ -104,6 +105,9 @@ import {
   hydrateBotCategoryFilterOptions,
   logDetailFiltersUseAdvanced,
   logDetailQuickFilterFields,
+  modeColor,
+  modeLabel,
+  sourceLabel,
   type StatsDimension,
 } from "./constants";
 import { formatTs } from "./useLogTimeRange";
@@ -120,16 +124,22 @@ const filtersExpanded = ref(false);
 
 const columns = [
   { title: "时间", key: "ts", dataIndex: "ts", width: 168 },
-  { title: "域名", dataIndex: "domain", width: 140, ellipsis: true },
-  { title: "IP", dataIndex: "client_ip", width: 130 },
-  { title: "方法", dataIndex: "method", width: 72 },
-  { title: "URL", dataIndex: "uri", ellipsis: true },
-  { title: "命中规则", dataIndex: "rule_name", width: 140, ellipsis: true },
-  { title: "模式", key: "mode", dataIndex: "mode", width: 100 },
+  { title: "域名", key: "domain", dataIndex: "domain", width: 140, ellipsis: true },
+  { title: "IP", key: "client_ip", dataIndex: "client_ip", width: 130 },
+  { title: "方法", key: "method", dataIndex: "method", width: 72 },
+  { title: "URL", key: "uri", dataIndex: "uri", ellipsis: true },
+  { title: "命中规则", key: "rule_name", dataIndex: "rule_name", width: 140, ellipsis: true },
+  { title: "防护方式", key: "mode", dataIndex: "mode", width: 100 },
   { title: "来源", key: "source", dataIndex: "source", width: 110 },
   { title: "结果", key: "blocked", dataIndex: "blocked", width: 80 },
-  { title: "操作", key: "action", width: 90, fixed: "right" as const },
+  { title: "操作", key: "__action", width: 90, fixed: "right" as const },
 ];
+
+function columnKey(column: { key?: string; dataIndex?: string | string[] }) {
+  if (column.key) return column.key;
+  if (Array.isArray(column.dataIndex)) return column.dataIndex.join(".");
+  return column.dataIndex;
+}
 
 const TEXT_FILTER_KEYS = [
   "rule_name",

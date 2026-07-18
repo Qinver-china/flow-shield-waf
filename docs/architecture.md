@@ -55,7 +55,7 @@ client ──> OpenResty access 阶段 (waf/access.lua)
 
 修改字段时：更新 `catalog.py` → 同步 `extractor.lua` 的取值分支 → 重新执行 `python -m app.fields.export` 生成 JSON。
 
-## 防护模式说明
+## 防护方式说明
 
 系统支持观察、拦截、算术 captcha、JS 挑战、滑动验证等模式。其中 **算术 captcha 模式本次未做专项加固**，生产环境建议优先使用滑动验证或 JS 挑战。
 

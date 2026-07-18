@@ -39,7 +39,7 @@
         </a-form-item>
         <a-row :gutter="16">
           <a-col :span="8">
-            <a-form-item label="防护模式">
+            <a-form-item label="防护方式">
               <a-select v-model:value="record.mode" style="width: 100%" :disabled="readonly">
                 <a-select-option value="observe">观察模式</a-select-option>
                 <a-select-option value="block">拦截模式</a-select-option>

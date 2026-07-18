@@ -37,7 +37,6 @@ code,
 
 .fs-card {
   background: var(--fs-bg-surface);
-  border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-md);
   box-shadow: var(--fs-shadow-sm);
 }

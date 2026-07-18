@@ -29,7 +29,7 @@ _FIELDS = field_map()
 async def _check(db: AsyncSession, mode, keys, conditions):
     resolved_mode = mode if mode is not None else "block"
     if mode is not None and mode not in MODES:
-        raise HTTPException(status_code=400, detail=f"无效的防护模式: {mode}")
+        raise HTTPException(status_code=400, detail=f"无效的防护方式: {mode}")
     if keys is not None and len(keys) < 1:
         raise HTTPException(status_code=400, detail="至少需要配置一个限速维度")
     if keys is not None:

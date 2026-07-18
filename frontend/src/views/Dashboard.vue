@@ -129,7 +129,7 @@
       <a-col :xs="24" :xl="10">
         <a-card class="panel-card" :bordered="false">
           <template #title>
-            <span class="panel-title"><pie-chart-outlined /> 防护模式分布</span>
+            <span class="panel-title"><pie-chart-outlined /> 防护方式分布</span>
           </template>
           <div ref="modeEl" class="chart-box chart-box-lg" />
         </a-card>

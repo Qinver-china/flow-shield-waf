@@ -16,7 +16,7 @@ export const commonBatchEditFields = {
   } satisfies BatchEditField,
   mode: {
     key: "mode",
-    label: "防护模式",
+    label: "防护方式",
     type: "select",
     options: modeFilterOptions,
   } satisfies BatchEditField,

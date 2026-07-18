@@ -30,7 +30,7 @@ def get_list_query(
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     enabled: bool | None = Query(None, description="启用状态"),
     site_id: list[int] | None = Query(None, description="生效站点，可多选"),
-    mode: str | None = Query(None, description="防护模式"),
+    mode: str | None = Query(None, description="防护方式"),
     scope: str | None = Query(None, description="例外范围"),
     expiry: str | None = Query(
         None,

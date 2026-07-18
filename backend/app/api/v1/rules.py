@@ -33,7 +33,7 @@ async def _check(
     effective_mode: str | None = None,
 ) -> dict | None:
     if mode is not None and mode not in MODES:
-        raise HTTPException(status_code=400, detail=f"无效的防护模式: {mode}")
+        raise HTTPException(status_code=400, detail=f"无效的防护方式: {mode}")
     resolved_mode = mode if mode is not None else effective_mode
     allow_empty = resolved_mode == "observe"
     if conditions is not None:

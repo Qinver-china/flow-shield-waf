@@ -394,7 +394,7 @@
                   <li><code>X-WAF-Rule-Id</code>：命中规则 ID</li>
                   <li><code>X-WAF-Rule-Name</code>：命中规则名称（含中文时为 <code>UTF-8''</code> 百分号编码，可用 <code>decodeURIComponent(value.slice(7))</code> 解码）</li>
                   <li><code>X-WAF-Rule-Source</code>：来源（rule / ratelimit / blacklist）</li>
-                  <li><code>X-WAF-Mode</code>：防护模式（observe / block / captcha / js_challenge / slide_captcha）</li>
+                  <li><code>X-WAF-Mode</code>：防护方式（observe / block / captcha / js_challenge / slide_captcha）</li>
                 </ul>
               </div>
             </a-form-item>

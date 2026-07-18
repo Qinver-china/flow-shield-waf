@@ -30,7 +30,6 @@ export const sourceLabel: Record<string, string> = {
   rule: "自定义规则",
   blacklist: "黑名单",
   whitelist: "白名单",
-  bot: "Bot 库",
 };
 
 export const logTypeLabel: Record<string, string> = {
@@ -125,7 +124,7 @@ export const statsDimensionGroups = [
     items: [
       { key: "rule_id", label: "命中规则", desc: "按规则 ID 聚合" },
       { key: "source", label: "防护来源", desc: "规则 / 黑名单 / 限速等" },
-      { key: "mode", label: "防护模式", desc: "观察 / 拦截 / 人机等" },
+      { key: "mode", label: "防护方式", desc: "观察 / 拦截 / 人机等" },
       { key: "blocked", label: "拦截结果", desc: "已拦截 vs 已放行" },
       { key: "log_type", label: "日志类型", desc: "防护 / 访问 / 审计" },
       { key: "site_id", label: "站点", desc: "按站点 ID 聚合（名称实时解析）" },
@@ -251,7 +250,7 @@ export const logDetailFilterGroups: { label: string; fields: LogFilterFieldDef[]
     label: "核心",
     fields: [
       { key: "source", label: "防护来源", type: "select", options: selectFromRecord(sourceLabel) },
-      { key: "mode", label: "防护模式", type: "select", options: selectFromRecord(modeLabel) },
+      { key: "mode", label: "防护方式", type: "select", options: selectFromRecord(modeLabel) },
       { key: "log_type", label: "日志类型", type: "select", options: selectFromRecord(logTypeLabel) },
       { key: "blocked", label: "拦截结果", type: "bool" },
       { key: "site_id", label: "站点", type: "site" },

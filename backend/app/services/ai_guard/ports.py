@@ -113,7 +113,7 @@ class AiResourceWriter:
     async def preview_rate_limit(self, payload: dict) -> dict:
         mode = payload.get("mode", "block")
         if mode not in MODES:
-            raise ValueError(f"无效的防护模式: {mode}")
+            raise ValueError(f"无效的防护方式: {mode}")
         window = int(payload.get("window") or 0)
         threshold = int(payload.get("threshold") or 0)
         if window <= 0:
@@ -233,7 +233,7 @@ class AiResourceWriter:
         conditions = validate_condition(payload.get("conditions"))
         mode = payload.get("mode", "observe")
         if mode not in MODES:
-            raise ValueError(f"无效的防护模式: {mode}")
+            raise ValueError(f"无效的防护方式: {mode}")
         return {"valid": True, "conditions": conditions, "mode": mode}
 
     async def create_site(self, db: AsyncSession, payload: dict) -> dict:
@@ -273,7 +273,7 @@ class AiResourceWriter:
         conditions = validate_condition(payload.get("conditions"))
         mode = payload.get("mode", "observe")
         if mode not in MODES:
-            raise ValueError(f"无效的防护模式: {mode}")
+            raise ValueError(f"无效的防护方式: {mode}")
         data = apply_site_scope(
             {
                 "name": payload["name"],

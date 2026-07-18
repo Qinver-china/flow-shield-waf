@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 流盾WAF (Flow Shield WAF) 引擎 4 种防护模式 + 黑白名单 集成回归脚本。
+# 流盾WAF (Flow Shield WAF) 引擎 4 种防护方式 + 黑白名单 集成回归脚本。
 # 前置：docker compose 已启动 (docker compose up -d)。
 # 用法：bash deploy/smoke_test.sh [PANEL_URL] [ENGINE_URL] [ADMIN_USER] [ADMIN_PASS]
 set -euo pipefail
@@ -41,7 +41,7 @@ check_mode() {
   sleep 3
 }
 
-echo "==> 测试 4 种防护模式"
+echo "==> 测试 4 种防护方式"
 check_mode "block"        "403" "smoke-block-bot"
 check_mode "js_challenge" "503" "smoke-js-bot"
 check_mode "captcha"      "200" "smoke-captcha-bot"
