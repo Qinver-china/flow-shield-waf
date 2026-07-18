@@ -2,7 +2,7 @@ import { useRouter } from "vue-router";
 
 export interface LogNavQuery {
   tab?: "stats" | "detail";
-  preset?: "24h" | "7d" | "30d";
+  preset?: "30m" | "1h" | "6h" | "24h" | "today" | "yesterday" | "3d" | "7d" | "14d" | "30d" | "custom";
   dimension?: string;
   blocked?: boolean;
   mode?: string;
@@ -45,7 +45,7 @@ export function useLogNavigation() {
   function goToLogs(filters: LogNavQuery = {}) {
     router.push({
       path: "/logs",
-      query: toQueryString({ preset: "24h", ...filters }),
+      query: toQueryString({ preset: "6h", ...filters }),
     });
   }
 

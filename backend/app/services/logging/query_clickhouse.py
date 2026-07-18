@@ -68,8 +68,8 @@ _DIM_COLUMN = {
 def _window(start: datetime | None, end: datetime | None, hours: int) -> tuple[datetime, datetime]:
     end_ts = end or datetime.utcnow()
     start_ts = start or (end_ts - timedelta(hours=hours))
-    if end_ts - start_ts > timedelta(days=7):
-        raise ValueError("查询时间范围不能超过 7 天")
+    if end_ts - start_ts > timedelta(days=30):
+        raise ValueError("查询时间范围不能超过 30 天")
     return start_ts, end_ts
 
 
@@ -212,112 +212,266 @@ def _count_dimension_groups(client, dimension: str, where: str, params: dict) ->
     return int(total)
 
 
+_FILTER_FIELDS = frozenset({
+    "log_type", "source", "site_id", "client_ip", "rule_id", "rule_name", "action", "mode",
+    "blocked", "domain", "geo_country", "geo_region", "geo_city", "geo_isp", "geo_ip_type",
+    "geo_asn", "method", "scheme", "http_version", "uri_path", "uri_ext", "referer_host",
+    "ip_is_private", "xff_first", "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
+    "bot_category", "tls_version", "keyword",
+})
+
+_INT_FILTER_FIELDS = frozenset({"site_id", "rule_id", "geo_asn"})
+_BOOL_FILTER_FIELDS = frozenset({"blocked", "ip_is_private"})
+_FUZZY_FILTER_FIELDS = frozenset({"rule_name", "ua", "keyword"})
+_LOG_TABLE = "waf_logs"
+
+
+def _col(name: str) -> str:
+    return f"{_LOG_TABLE}.{name}"
+
+
+def _parse_filter_conditions(raw: str | None) -> list[dict]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    conditions: list[dict] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        field = item.get("field")
+        op = item.get("op")
+        value = item.get("value")
+        if field not in _FILTER_FIELDS or op not in {"eq", "ne", "contains", "not_contains", "like"}:
+            continue
+        if value is None:
+            continue
+        if isinstance(value, list):
+            values = [str(v).strip() for v in value if str(v).strip()]
+            if not values:
+                continue
+            conditions.append({"field": field, "op": op, "value": values})
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        conditions.append({"field": field, "op": op, "value": text})
+    return conditions
+
+
+def _param_name(base: str, idx: int) -> str:
+    safe = "".join(ch if ch.isalnum() else "_" for ch in base)
+    return f"f_{safe}_{idx}"
+
+
+def _append_condition_sql(
+    parts: list[str],
+    params: dict,
+    *,
+    field: str,
+    op: str,
+    value: str | list[str],
+    idx: int,
+) -> None:
+    values = value if isinstance(value, list) else [value]
+    if field == "keyword":
+        subparts: list[str] = []
+        for vidx, raw in enumerate(values):
+            pname = _param_name("kw", idx * 10 + vidx)
+            expr = (
+                f"(positionCaseInsensitive({_col('uri')}, {{{pname}:String}}) > 0 "
+                f"OR positionCaseInsensitive({_col('ua')}, {{{pname}:String}}) > 0 "
+                f"OR positionCaseInsensitive({_col('domain')}, {{{pname}:String}}) > 0 "
+                f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('uri')}), {{{pname}:String}}) > 0)"
+            )
+            if op in {"ne", "not_contains"}:
+                expr = f"NOT {expr}"
+            elif op == "like":
+                expr = (
+                    f"(positionCaseInsensitive({_col('uri')}, {{{pname}:String}}) > 0 "
+                    f"OR positionCaseInsensitive({_col('ua')}, {{{pname}:String}}) > 0 "
+                    f"OR positionCaseInsensitive({_col('domain')}, {{{pname}:String}}) > 0 "
+                    f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('uri')}), {{{pname}:String}}) > 0)"
+                )
+            subparts.append(expr)
+            params[pname] = raw
+        if subparts:
+            joiner = " OR " if op in {"eq", "contains", "like"} else " AND "
+            parts.append(f"({joiner.join(subparts)})")
+        return
+
+    subparts = []
+    for vidx, raw in enumerate(values):
+        pname = _param_name(field, idx * 10 + vidx)
+        if field in _BOOL_FILTER_FIELDS:
+            bool_val = raw.lower() in {"1", "true", "yes"}
+            col = _col(field)
+            if op == "ne":
+                subparts.append(f"{col} != {{{pname}:UInt8}}")
+            else:
+                subparts.append(f"{col} = {{{pname}:UInt8}}")
+            params[pname] = 1 if bool_val else 0
+            continue
+        if field in _INT_FILTER_FIELDS:
+            try:
+                int_val = int(raw)
+            except ValueError:
+                continue
+            col = _col(field)
+            if op == "ne":
+                subparts.append(f"{col} != {{{pname}:UInt32}}")
+            else:
+                subparts.append(f"{col} = {{{pname}:UInt32}}")
+            params[pname] = int_val
+            continue
+
+        col = _col(field)
+        if op == "eq":
+            subparts.append(f"{col} = {{{pname}:String}}")
+            params[pname] = raw
+        elif op == "ne":
+            subparts.append(f"{col} != {{{pname}:String}}")
+            params[pname] = raw
+        elif op == "contains":
+            subparts.append(f"positionCaseInsensitive({col}, {{{pname}:String}}) > 0")
+            params[pname] = raw
+        elif op == "not_contains":
+            subparts.append(f"positionCaseInsensitive({col}, {{{pname}:String}}) = 0")
+            params[pname] = raw
+        else:  # like
+            subparts.append(f"positionCaseInsensitive({col}, {{{pname}:String}}) > 0")
+            params[pname] = raw
+    if subparts:
+        joiner = " OR " if op in {"eq", "contains", "like"} and len(subparts) > 1 else " AND "
+        if len(subparts) == 1:
+            parts.append(subparts[0])
+        else:
+            parts.append(f"({joiner.join(subparts)})")
+
+
+def _append_json_filters(parts: list[str], params: dict, raw: str | None) -> None:
+    for idx, condition in enumerate(_parse_filter_conditions(raw)):
+        _append_condition_sql(
+            parts,
+            params,
+            field=condition["field"],
+            op=condition["op"],
+            value=condition["value"],
+            idx=idx,
+        )
+
+
 def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> tuple[str, dict]:
-    parts = ["ts >= {start:DateTime}", "ts <= {end:DateTime}"]
+    parts = [f"{_col('ts')} >= {{start:DateTime}}", f"{_col('ts')} <= {{end:DateTime}}"]
     params: dict = {"start": start_ts, "end": end_ts}
     if q is None:
         return " AND ".join(parts), params
     if q.log_type:
-        parts.append("log_type = {log_type:String}")
+        parts.append(f"{_col('log_type')} = {{log_type:String}}")
         params["log_type"] = q.log_type
     if q.source:
-        parts.append("source = {source:String}")
+        parts.append(f"{_col('source')} = {{source:String}}")
         params["source"] = q.source
     if q.site_id is not None:
-        parts.append("site_id = {site_id:UInt32}")
+        parts.append(f"{_col('site_id')} = {{site_id:UInt32}}")
         params["site_id"] = q.site_id
     if q.client_ip:
-        parts.append("client_ip = {client_ip:String}")
+        parts.append(f"{_col('client_ip')} = {{client_ip:String}}")
         params["client_ip"] = q.client_ip
     if q.rule_id is not None:
-        parts.append("rule_id = {rule_id:UInt32}")
+        parts.append(f"{_col('rule_id')} = {{rule_id:UInt32}}")
         params["rule_id"] = q.rule_id
     if q.rule_name:
-        parts.append("positionCaseInsensitive(rule_name, {rule_name:String}) > 0")
+        parts.append(f"positionCaseInsensitive({_col('rule_name')}, {{rule_name:String}}) > 0")
         params["rule_name"] = q.rule_name
     if q.action:
-        parts.append("action = {action:String}")
+        parts.append(f"{_col('action')} = {{action:String}}")
         params["action"] = q.action
     if q.mode:
-        parts.append("mode = {mode:String}")
+        parts.append(f"{_col('mode')} = {{mode:String}}")
         params["mode"] = q.mode
     if q.blocked is not None:
-        parts.append("blocked = {blocked:UInt8}")
+        parts.append(f"{_col('blocked')} = {{blocked:UInt8}}")
         params["blocked"] = 1 if q.blocked else 0
     if q.domain:
-        parts.append("domain = {domain:String}")
+        parts.append(f"{_col('domain')} = {{domain:String}}")
         params["domain"] = q.domain
     if q.geo_country:
-        parts.append("geo_country = {geo_country:String}")
+        parts.append(f"{_col('geo_country')} = {{geo_country:String}}")
         params["geo_country"] = q.geo_country
     if q.geo_region:
-        parts.append("geo_region = {geo_region:String}")
+        parts.append(f"{_col('geo_region')} = {{geo_region:String}}")
         params["geo_region"] = q.geo_region
     if q.geo_city:
-        parts.append("geo_city = {geo_city:String}")
+        parts.append(f"{_col('geo_city')} = {{geo_city:String}}")
         params["geo_city"] = q.geo_city
     if q.geo_isp:
-        parts.append("geo_isp = {geo_isp:String}")
+        parts.append(f"{_col('geo_isp')} = {{geo_isp:String}}")
         params["geo_isp"] = q.geo_isp
     if q.geo_ip_type:
-        parts.append("geo_ip_type = {geo_ip_type:String}")
+        parts.append(f"{_col('geo_ip_type')} = {{geo_ip_type:String}}")
         params["geo_ip_type"] = q.geo_ip_type
     if q.geo_asn is not None:
-        parts.append("geo_asn = {geo_asn:UInt32}")
+        parts.append(f"{_col('geo_asn')} = {{geo_asn:UInt32}}")
         params["geo_asn"] = q.geo_asn
     if q.method:
-        parts.append("method = {method:String}")
+        parts.append(f"{_col('method')} = {{method:String}}")
         params["method"] = q.method
     if q.scheme:
-        parts.append("scheme = {scheme:String}")
+        parts.append(f"{_col('scheme')} = {{scheme:String}}")
         params["scheme"] = q.scheme
     if q.http_version:
-        parts.append("http_version = {http_version:String}")
+        parts.append(f"{_col('http_version')} = {{http_version:String}}")
         params["http_version"] = q.http_version
     if q.uri_path:
-        parts.append("uri_path = {uri_path:String}")
+        parts.append(f"{_col('uri_path')} = {{uri_path:String}}")
         params["uri_path"] = q.uri_path
     if q.uri_ext:
-        parts.append("uri_ext = {uri_ext:String}")
+        parts.append(f"{_col('uri_ext')} = {{uri_ext:String}}")
         params["uri_ext"] = q.uri_ext
     if q.referer_host:
-        parts.append("referer_host = {referer_host:String}")
+        parts.append(f"{_col('referer_host')} = {{referer_host:String}}")
         params["referer_host"] = q.referer_host
     if q.ip_is_private is not None:
-        parts.append("ip_is_private = {ip_is_private:UInt8}")
+        parts.append(f"{_col('ip_is_private')} = {{ip_is_private:UInt8}}")
         params["ip_is_private"] = 1 if q.ip_is_private else 0
     if q.xff_first:
-        parts.append("xff_first = {xff_first:String}")
+        parts.append(f"{_col('xff_first')} = {{xff_first:String}}")
         params["xff_first"] = q.xff_first
     if q.ua:
-        parts.append("positionCaseInsensitive(ua, {ua:String}) > 0")
+        parts.append(f"positionCaseInsensitive({_col('ua')}, {{ua:String}}) > 0")
         params["ua"] = q.ua
     if q.ua_family:
-        parts.append("ua_family = {ua_family:String}")
+        parts.append(f"{_col('ua_family')} = {{ua_family:String}}")
         params["ua_family"] = q.ua_family
     if q.ua_os:
-        parts.append("ua_os = {ua_os:String}")
+        parts.append(f"{_col('ua_os')} = {{ua_os:String}}")
         params["ua_os"] = q.ua_os
     if q.ua_browser:
-        parts.append("ua_browser = {ua_browser:String}")
+        parts.append(f"{_col('ua_browser')} = {{ua_browser:String}}")
         params["ua_browser"] = q.ua_browser
     if q.bot_name:
-        parts.append("bot_name = {bot_name:String}")
+        parts.append(f"{_col('bot_name')} = {{bot_name:String}}")
         params["bot_name"] = q.bot_name
     if q.bot_category:
-        parts.append("bot_category = {bot_category:String}")
+        parts.append(f"{_col('bot_category')} = {{bot_category:String}}")
         params["bot_category"] = q.bot_category
     if q.tls_version:
-        parts.append("tls_version = {tls_version:String}")
+        parts.append(f"{_col('tls_version')} = {{tls_version:String}}")
         params["tls_version"] = q.tls_version
     if q.keyword:
         parts.append(
-            "(positionCaseInsensitive(uri, {kw:String}) > 0 "
-            "OR positionCaseInsensitive(ua, {kw:String}) > 0 "
-            "OR positionCaseInsensitive(domain, {kw:String}) > 0 "
-            "OR positionCaseInsensitive(concat(scheme, '://', domain, uri), {kw:String}) > 0)"
+            f"(positionCaseInsensitive({_col('uri')}, {{kw:String}}) > 0 "
+            f"OR positionCaseInsensitive({_col('ua')}, {{kw:String}}) > 0 "
+            f"OR positionCaseInsensitive({_col('domain')}, {{kw:String}}) > 0 "
+            f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('uri')}), {{kw:String}}) > 0)"
         )
         params["kw"] = q.keyword
+    _append_json_filters(parts, params, q.filters)
     return " AND ".join(parts), params
 
 
@@ -386,17 +540,18 @@ async def stats_overview(
     hours: int = 24,
     start: datetime | None = None,
     end: datetime | None = None,
+    q: LogQuery | None = None,
 ) -> dict:
     start_ts, end_ts = _window(start, end, hours)
 
     def _fetch():
-        where, params = _where_clause(None, start_ts, end_ts)
+        where, params = _where_clause(q, start_ts, end_ts)
         client = get_clickhouse()
         total = client.query(
             f"SELECT count() FROM waf_logs WHERE {where}", parameters=params
         ).result_rows[0][0]
         blocked = client.query(
-            f"SELECT count() FROM waf_logs WHERE {where} AND blocked = 1",
+            f"SELECT count() FROM waf_logs WHERE {where} AND {_col('blocked')} = 1",
             parameters=params,
         ).result_rows[0][0]
         passed = int(total) - int(blocked)
@@ -411,7 +566,7 @@ async def stats_overview(
         window = end_ts - start_ts
         bucket = "toStartOfHour(ts)" if window <= timedelta(days=2) else "toDate(ts)"
         trend_rows = client.query(
-            f"SELECT {bucket} AS t, count() AS total, countIf(blocked = 1) AS blocked "
+            f"SELECT {bucket} AS t, count() AS total, countIf({_col('blocked')} = 1) AS blocked_cnt "
             f"FROM waf_logs WHERE {where} GROUP BY t ORDER BY t",
             parameters=params,
         ).result_rows
@@ -543,12 +698,13 @@ async def stats_by_dimension(
     page: int = 1,
     page_size: int = 20,
     limit: int | None = None,
+    q: LogQuery | None = None,
 ) -> LogStatsGroupOut:
     if dimension not in STATS_DIMENSIONS:
         raise ValueError(f"不支持的统计维度: {dimension}")
 
     start_ts, end_ts = _window(start, end, hours)
-    where, params = _where_clause(None, start_ts, end_ts)
+    where, params = _where_clause(q, start_ts, end_ts)
     if limit is not None:
         page_size = limit
     page, page_size, page_clause = _paginate(page, page_size)

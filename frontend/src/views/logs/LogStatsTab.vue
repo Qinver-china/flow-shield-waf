@@ -1,42 +1,5 @@
 <template>
   <div class="log-stats-tab">
-    <a-card size="small" class="time-bar">
-      <div class="time-bar-inner">
-        <a-radio-group v-model:value="preset" button-style="solid" size="small" @change="onPresetChange">
-          <a-radio-button v-for="p in timePresets.slice(0, 3)" :key="p.key" :value="p.key">
-            {{ p.label }}
-          </a-radio-button>
-          <a-radio-button value="custom">自定义</a-radio-button>
-        </a-radio-group>
-        <a-range-picker
-          v-if="preset === 'custom'"
-          v-model:value="customRange"
-          show-time
-          size="small"
-          style="margin-left: 8px"
-          @change="fetchAll"
-        />
-        <span class="time-hint">{{ rangeLabel() }}</span>
-        <a-button type="primary" size="small" style="margin-left: auto" @click="fetchAll">刷新</a-button>
-      </div>
-    </a-card>
-
-    <a-row :gutter="12" class="summary-row">
-      <a-col :span="8">
-        <a-card size="small"><a-statistic title="命中总数" :value="overview.total" /></a-card>
-      </a-col>
-      <a-col :span="8">
-        <a-card size="small">
-          <a-statistic title="已拦截" :value="overview.blocked" :value-style="{ color: '#ef4444' }" />
-        </a-card>
-      </a-col>
-      <a-col :span="8">
-        <a-card size="small">
-          <a-statistic title="已放行" :value="overview.passed" :value-style="{ color: '#22c55e' }" />
-        </a-card>
-      </a-col>
-    </a-row>
-
     <div class="stats-body">
       <a-card size="small" class="dimension-panel" title="统计维度">
         <div class="dimension-scroll">
@@ -63,7 +26,24 @@
         </div>
       </a-card>
 
-      <a-card size="small" class="result-panel" :loading="groupLoading">
+      <div class="result-column">
+        <a-row :gutter="12" class="summary-row">
+          <a-col :span="8">
+            <a-card size="small"><a-statistic title="命中总数" :value="overview.total" /></a-card>
+          </a-col>
+          <a-col :span="8">
+            <a-card size="small">
+              <a-statistic title="已拦截" :value="overview.blocked" :value-style="{ color: '#ef4444' }" />
+            </a-card>
+          </a-col>
+          <a-col :span="8">
+            <a-card size="small">
+              <a-statistic title="已放行" :value="overview.passed" :value-style="{ color: '#22c55e' }" />
+            </a-card>
+          </a-col>
+        </a-row>
+
+        <a-card size="small" class="result-panel" :loading="groupLoading">
         <template #title>
           <span>{{ currentDimension?.label || "统计结果" }}</span>
           <span v-if="currentDimension?.desc" class="panel-desc">{{ currentDimension.desc }}</span>
@@ -90,34 +70,36 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'label'">
-              <a
-                class="dimension-link"
-                :title="record.label"
-                @click="emit('drill-down', buildDrillDown(record))"
-              >
-                {{ record.label }}
-              </a>
+              <log-dimension-action-cell
+                :label="record.label"
+                :dimension="dimension"
+                :item-key="record.key"
+                :filter-state="filterState"
+                @drill-down="emit('drill-down', buildDrillDown(record))"
+              />
             </template>
             <template v-else-if="column.key === 'percent'">
               {{ percentOf(record.count) }}
             </template>
           </template>
         </a-table>
-      </a-card>
+        </a-card>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
-import type { LocationQuery } from "vue-router";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { useRoute, type LocationQuery } from "vue-router";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
 import { api } from "@/api";
 import { formatDateTime, formatDateTimeShort } from "@/utils/datetime";
-import { localizeStatsItems, statsDimensionGroups, statsDimensions, timePresets, type StatsDimension, type TimePreset } from "./constants";
-import { useLogTimeRange } from "./useLogTimeRange";
+import { localizeStatsItems, statsDimensionGroups, statsDimensions, type StatsDimension } from "./constants";
+import LogDimensionActionCell from "./LogDimensionActionCell.vue";
 import { useSiteOptions } from "@/composables/useSiteOptions";
+import type { LogFilterState } from "./useLogFilterState";
 
 export interface LogDrillDownFilter {
   dimension: StatsDimension;
@@ -127,10 +109,28 @@ export interface LogDrillDownFilter {
   end: string;
 }
 
+const props = defineProps<{
+  filterState: LogFilterState;
+}>();
+
 const emit = defineEmits<{ "drill-down": [LogDrillDownFilter] }>();
 
-const { preset, customRange, toQueryParams, rangeLabel } = useLogTimeRange("24h");
 const { formatSiteId } = useSiteOptions();
+const route = useRoute();
+
+function queryValue(query: LocationQuery, key: string) {
+  const value = query[key];
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+function resolveDimension(query: LocationQuery): StatsDimension {
+  const next = queryValue(query, "dimension") as StatsDimension | undefined;
+  if (next && statsDimensions.some((item) => item.key === next)) {
+    return next;
+  }
+  return "rule_id";
+}
 
 const overview = reactive({ total: 0, blocked: 0, passed: 0, trend: [] as any[] });
 const groupLoading = ref(false);
@@ -139,7 +139,7 @@ const groupTotal = ref(0);
 const groupItemTotal = ref(0);
 const groupPage = ref(1);
 const groupPageSize = ref(20);
-const dimension = ref<StatsDimension>("rule_id");
+const dimension = ref<StatsDimension>(resolveDimension(route.query));
 const trendChartEl = ref<HTMLElement>();
 
 let trendChart: ECharts | null = null;
@@ -172,25 +172,8 @@ function percentOf(count: number) {
   return `${((count / groupTotal.value) * 100).toFixed(1)}%`;
 }
 
-function onPresetChange() {
-  if (preset.value !== "custom") fetchAll();
-}
-
-function selectDimension(key: StatsDimension) {
-  if (dimension.value === key) return;
-  dimension.value = key;
-  groupPage.value = 1;
-  fetchGroup();
-}
-
-function onTableChange(pagination: { current?: number; pageSize?: number }) {
-  groupPage.value = pagination.current || 1;
-  groupPageSize.value = pagination.pageSize || groupPageSize.value;
-  fetchGroup();
-}
-
 function buildDrillDown(record: any): LogDrillDownFilter {
-  const time = toQueryParams();
+  const time = props.filterState.toQueryParams();
   return {
     dimension: dimension.value,
     key: record.key,
@@ -200,8 +183,12 @@ function buildDrillDown(record: any): LogDrillDownFilter {
   };
 }
 
+function buildStatsParams(extra?: Record<string, unknown>) {
+  return props.filterState.buildSharedQueryParams(extra);
+}
+
 async function fetchOverview() {
-  const resp = await api.get("/api/v1/logs/stats", toQueryParams());
+  const resp = await api.get("/api/v1/logs/stats", buildStatsParams());
   Object.assign(overview, {
     total: resp.data.total,
     blocked: resp.data.blocked,
@@ -305,12 +292,11 @@ function setupChartObservers() {
 }
 
 async function loadGroup() {
-  const resp = await api.get("/api/v1/logs/stats/group", {
+  const resp = await api.get("/api/v1/logs/stats/group", buildStatsParams({
     dimension: dimension.value,
     page: groupPage.value,
     page_size: groupPageSize.value,
-    ...toQueryParams(),
-  });
+  }));
   groupItems.value = localizeStatsItems(dimension.value, resp.data.items || [], {
     formatSiteId,
   });
@@ -353,29 +339,51 @@ async function fetchAll() {
   }
 }
 
-function queryValue(query: LocationQuery, key: string) {
-  const value = query[key];
-  if (Array.isArray(value)) return value[0];
-  return value;
+function selectDimension(key: StatsDimension) {
+  if (dimension.value === key) return;
+  dimension.value = key;
+  groupPage.value = 1;
+  fetchGroup();
+}
+
+function onTableChange(pagination: { current?: number; pageSize?: number }) {
+  groupPage.value = pagination.current || 1;
+  groupPageSize.value = pagination.pageSize || groupPageSize.value;
+  fetchGroup();
+}
+
+function applyDimensionFromQuery(query: LocationQuery) {
+  const next = resolveDimension(query);
+  if (dimension.value === next) return false;
+  dimension.value = next;
+  groupPage.value = 1;
+  return true;
 }
 
 function applyFromQuery(query: LocationQuery) {
-  const nextPreset = queryValue(query, "preset") as TimePreset | undefined;
-  if (nextPreset && timePresets.some((item) => item.key === nextPreset)) {
-    preset.value = nextPreset;
-  }
-
-  const nextDimension = queryValue(query, "dimension") as StatsDimension | undefined;
-  if (nextDimension && statsDimensions.some((item) => item.key === nextDimension)) {
-    dimension.value = nextDimension;
-  }
-
+  applyDimensionFromQuery(query);
   fetchAll();
 }
 
+watch(
+  () => route.query.dimension,
+  () => {
+    if (applyDimensionFromQuery(route.query)) {
+      fetchGroup();
+    }
+  },
+);
+
+watch(
+  () => props.filterState.refreshToken.value,
+  () => {
+    fetchAll();
+  },
+);
+
 onMounted(fetchAll);
 
-defineExpose({ applyFromQuery });
+defineExpose({ applyFromQuery, refresh: fetchAll });
 
 onUnmounted(() => {
   trendObserver?.disconnect();
@@ -390,21 +398,14 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.time-bar-inner {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.time-hint {
-  font-size: 12px;
-  color: #64748b;
-  margin-left: 4px;
-}
-
 .summary-row {
   margin: 0;
+}
+
+.result-panel {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 
 .stats-body {
@@ -414,8 +415,16 @@ onUnmounted(() => {
   align-items: stretch;
 }
 
-.dimension-panel,
-.result-panel {
+.dimension-panel {
+  min-height: 0;
+  height: 100%;
+}
+
+.result-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
   min-height: 0;
   height: 100%;
 }
@@ -537,18 +546,14 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-.dimension-link {
-  color: #1677ff;
-  cursor: pointer;
-}
-
-.dimension-link:hover {
-  color: #4096ff;
-}
-
 @media (max-width: 900px) {
   .stats-body {
     grid-template-columns: 1fr;
+  }
+
+  .summary-row :deep(.ant-col) {
+    flex: 0 0 33.333333%;
+    max-width: 33.333333%;
   }
 }
 </style>

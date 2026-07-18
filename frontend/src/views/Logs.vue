@@ -1,15 +1,22 @@
 <template>
   <page-shell title="防护日志" description="多维统计分析与日志明细查询">
+    <log-filter-bar :filter-state="filterState" />
+
     <a-tabs v-model:active-key="activeTab" size="large" class="logs-tabs fs-tabs-animated">
       <a-tab-pane key="stats" tab="统计筛选" />
       <a-tab-pane key="detail" tab="日志明细" />
     </a-tabs>
     <fs-slide-transition :transition-key="activeTab">
-      <log-stats-tab v-if="activeTab === 'stats'" ref="statsTabRef" @drill-down="onDrillDown" />
+      <log-stats-tab
+        v-if="activeTab === 'stats'"
+        ref="statsTabRef"
+        :filter-state="filterState"
+        @drill-down="onDrillDown"
+      />
       <log-detail-tab
         v-else-if="activeTab === 'detail'"
         ref="detailTabRef"
-        :drill-down="drillDown"
+        :filter-state="filterState"
       />
     </fs-slide-transition>
   </page-shell>
@@ -22,15 +29,30 @@ import { api } from "@/api";
 import PageShell from "@/components/PageShell.vue";
 import FsSlideTransition from "@/components/FsSlideTransition.vue";
 import LogDetailTab from "./logs/LogDetailTab.vue";
+import LogFilterBar from "./logs/LogFilterBar.vue";
 import LogStatsTab, { type LogDrillDownFilter } from "./logs/LogStatsTab.vue";
+import { useLogFilterState } from "./logs/useLogFilterState";
 
 const route = useRoute();
 const activeTab = ref("stats");
-const drillDown = ref<LogDrillDownFilter | null>(null);
+const filterState = useLogFilterState("6h");
 const detailTabRef = ref<InstanceType<typeof LogDetailTab> | null>(null);
 const statsTabRef = ref<InstanceType<typeof LogStatsTab> | null>(null);
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+function applyRouteQuery() {
+  const query = route.query;
+  const tab = (query.tab as string) || (hasDetailFilters(query) ? "detail" : "stats");
+  activeTab.value = tab;
+  filterState.applyFromRouteQuery(query);
+
+  if (tab === "stats") {
+    nextTick(() => {
+      statsTabRef.value?.applyFromQuery(query);
+    });
+  }
+}
 
 const detailQueryKeys = [
   "blocked",
@@ -51,29 +73,13 @@ function hasDetailFilters(query: Record<string, unknown>) {
   return detailQueryKeys.some((key) => query[key] !== undefined && query[key] !== "");
 }
 
-function applyRouteQuery() {
-  const query = route.query;
-  const tab = (query.tab as string) || (hasDetailFilters(query) ? "detail" : "stats");
-  activeTab.value = tab;
-  if (tab !== "detail") {
-    nextTick(() => {
-      statsTabRef.value?.applyFromQuery(query);
-    });
-    return;
-  }
-  // Detail tab mounts after slide transition; LogDetailTab reads route on mount/watch.
-  nextTick(() => {
-    detailTabRef.value?.applyFromQuery(query);
-  });
+function onDrillDown(payload: LogDrillDownFilter) {
+  filterState.applyDrillDown(payload);
+  activeTab.value = "detail";
 }
 
 function sendHeartbeat(active: boolean) {
   api.post("/api/v1/logs/viewer-heartbeat", { active }).catch(() => {});
-}
-
-function onDrillDown(payload: LogDrillDownFilter) {
-  drillDown.value = { ...payload };
-  activeTab.value = "detail";
 }
 
 onMounted(() => {
@@ -95,6 +101,6 @@ onUnmounted(() => {
 
 <style scoped>
 .logs-tabs :deep(.ant-tabs-nav) {
-  margin-bottom: 12px;
+  margin-bottom: -4px;
 }
 </style>

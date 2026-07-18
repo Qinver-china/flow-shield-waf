@@ -186,14 +186,261 @@ export const statsDimensions = statsDimensionGroups.flatMap((g) => g.items);
 
 export type StatsDimension = (typeof statsDimensions)[number]["key"];
 
-export type TimePreset = "24h" | "7d" | "30d" | "custom";
+export type TimePreset =
+  | "30m"
+  | "1h"
+  | "6h"
+  | "24h"
+  | "today"
+  | "yesterday"
+  | "3d"
+  | "7d"
+  | "14d"
+  | "30d"
+  | "custom";
 
-export const timePresets: { key: TimePreset; label: string; hours: number }[] = [
-  { key: "24h", label: "近 24 小时", hours: 24 },
-  { key: "7d", label: "近 7 天", hours: 168 },
-  { key: "30d", label: "近 30 天", hours: 720 },
-  { key: "custom", label: "自定义", hours: 0 },
+export type TimePresetKind = "hours" | "today" | "yesterday" | "custom";
+
+export interface TimePresetDef {
+  key: TimePreset;
+  label: string;
+  kind: TimePresetKind;
+  hours?: number;
+}
+
+export const timePresets: TimePresetDef[] = [
+  { key: "30m", label: "近 30 分钟", kind: "hours", hours: 0.5 },
+  { key: "1h", label: "近 1 小时", kind: "hours", hours: 1 },
+  { key: "6h", label: "近 6 小时", kind: "hours", hours: 6 },
+  { key: "24h", label: "近 24 小时", kind: "hours", hours: 24 },
+  { key: "today", label: "今日", kind: "today" },
+  { key: "yesterday", label: "昨日", kind: "yesterday" },
+  { key: "3d", label: "近 3 日", kind: "hours", hours: 72 },
+  { key: "7d", label: "近 7 日", kind: "hours", hours: 168 },
+  { key: "14d", label: "近 14 日", kind: "hours", hours: 336 },
+  { key: "30d", label: "近 30 日", kind: "hours", hours: 720 },
+  { key: "custom", label: "自定义", kind: "custom" },
 ];
+
+export type LogFilterOperator = "eq" | "ne" | "contains" | "not_contains" | "like";
+
+export const logFilterOperators: { value: LogFilterOperator; label: string }[] = [
+  { value: "eq", label: "等于" },
+  { value: "contains", label: "包含" },
+  { value: "ne", label: "不等于" },
+  { value: "not_contains", label: "不包含" },
+  { value: "like", label: "模糊匹配" },
+];
+
+export interface LogFilterCondition {
+  id: string;
+  field: string;
+  operator: LogFilterOperator;
+  value: string | string[];
+}
+
+const BOOL_FILTER_KEYS = new Set(["blocked", "ip_is_private"]);
+const MULTI_VALUE_SELECT_KEYS = new Set([
+  "source",
+  "mode",
+  "log_type",
+  "geo_country",
+  "method",
+  "scheme",
+  "http_version",
+  "bot_category",
+]);
+
+export function getOperatorsForField(field: LogFilterFieldDef): LogFilterOperator[] {
+  if (field.type === "bool") return ["eq", "ne"];
+  if (field.type === "select") return ["eq", "ne"];
+  if (field.type === "number" || field.type === "rule_id" || field.type === "site") return ["eq", "ne"];
+  if (field.key === "keyword") return ["contains", "not_contains", "like"];
+  return ["eq", "contains", "ne", "not_contains", "like"];
+}
+
+export function defaultOperatorForField(field: LogFilterFieldDef): LogFilterOperator {
+  return getOperatorsForField(field)[0];
+}
+
+export function supportsMultiValue(field: LogFilterFieldDef): boolean {
+  return field.type === "select" && MULTI_VALUE_SELECT_KEYS.has(field.key);
+}
+
+export function allLogFilterFieldDefs(): LogFilterFieldDef[] {
+  return logDetailFilterGroups.flatMap((group) => group.fields);
+}
+
+export function findLogFilterField(key: string): LogFilterFieldDef | undefined {
+  return allLogFilterFieldDefs().find((field) => field.key === key);
+}
+
+export function createFilterCondition(fieldKey?: string): LogFilterCondition {
+  const field = findLogFilterField(fieldKey || "source") || allLogFilterFieldDefs()[0];
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    field: field.key,
+    operator: defaultOperatorForField(field),
+    value: supportsMultiValue(field) ? [] : "",
+  };
+}
+
+function normalizeConditionValue(field: LogFilterFieldDef, value: string | string[]): string | string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => item.trim()).filter(Boolean);
+  }
+  if (field.type === "bool") {
+    if (value === "true" || value === "false") return value;
+    return value.trim();
+  }
+  return value.trim();
+}
+
+export function isConditionComplete(condition: LogFilterCondition): boolean {
+  const field = findLogFilterField(condition.field);
+  if (!field) return false;
+  const value = normalizeConditionValue(field, condition.value);
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== "";
+}
+
+export function formatConditionLabel(condition: LogFilterCondition): string {
+  const field = findLogFilterField(condition.field);
+  if (!field) return condition.field;
+  const op = logFilterOperators.find((item) => item.value === condition.operator)?.label || condition.operator;
+  const value = normalizeConditionValue(field, condition.value);
+  const formatValue = (raw: string) => {
+    if (field.type === "select" && field.options) {
+      return field.options.find((item) => item.value === raw)?.label || raw;
+    }
+    if (field.type === "bool") {
+      if (raw === "true") return field.key === "blocked" ? "已拦截" : "是";
+      if (raw === "false") return field.key === "blocked" ? "已放行" : "否";
+    }
+    return raw;
+  };
+  const valueLabel = Array.isArray(value)
+    ? value.map(formatValue).join("、")
+    : formatValue(String(value));
+  return `${field.label} ${op} ${valueLabel}`;
+}
+
+export function conditionsToFiltersJson(conditions: LogFilterCondition[]): string | undefined {
+  const items = conditions
+    .filter(isConditionComplete)
+    .map((condition) => {
+      const field = findLogFilterField(condition.field);
+      if (!field) return null;
+      const value = normalizeConditionValue(field, condition.value);
+      return {
+        field: condition.field,
+        op: condition.operator,
+        value,
+      };
+    })
+    .filter((item): item is { field: string; op: LogFilterOperator; value: string | string[] } => !!item);
+  return items.length ? JSON.stringify(items) : undefined;
+}
+
+export function conditionsToLogDetailFilters(conditions: LogFilterCondition[]): LogDetailFilters {
+  const filters = createDefaultLogFilters();
+  for (const condition of conditions) {
+    if (!isConditionComplete(condition)) continue;
+    const field = findLogFilterField(condition.field);
+    if (!field) continue;
+    const value = normalizeConditionValue(field, condition.value);
+    const primary = Array.isArray(value) ? value[0] : value;
+    if (field.type === "bool") {
+      filters[field.key as "blocked" | "ip_is_private"] = primary === "true";
+      continue;
+    }
+    if (field.type === "number") {
+      filters.geo_asn = Number(primary);
+      continue;
+    }
+    if (field.type === "rule_id") {
+      filters.rule_id = Number(primary);
+      continue;
+    }
+    if (field.type === "site") {
+      filters.site_id = Number(primary);
+      continue;
+    }
+    if (field.type === "select") {
+      (filters as Record<string, string | undefined>)[field.key] = primary;
+      continue;
+    }
+    (filters as Record<string, string>)[field.key] = primary;
+  }
+  return filters;
+}
+
+export function logDetailFiltersToConditions(filters: LogDetailFilters): LogFilterCondition[] {
+  const conditions: LogFilterCondition[] = [];
+  for (const field of allLogFilterFieldDefs()) {
+    if (field.type === "bool") {
+      const value = filters[field.key as "blocked" | "ip_is_private"];
+      if (value === undefined) continue;
+      conditions.push({
+        id: createFilterCondition(field.key).id,
+        field: field.key,
+        operator: "eq",
+        value: value ? "true" : "false",
+      });
+      continue;
+    }
+    if (field.type === "number") {
+      if (filters.geo_asn === undefined) continue;
+      conditions.push({
+        id: createFilterCondition(field.key).id,
+        field: field.key,
+        operator: "eq",
+        value: String(filters.geo_asn),
+      });
+      continue;
+    }
+    if (field.type === "rule_id") {
+      if (filters.rule_id === undefined) continue;
+      conditions.push({
+        id: createFilterCondition(field.key).id,
+        field: field.key,
+        operator: "eq",
+        value: String(filters.rule_id),
+      });
+      continue;
+    }
+    if (field.type === "site") {
+      if (filters.site_id === undefined) continue;
+      conditions.push({
+        id: createFilterCondition(field.key).id,
+        field: field.key,
+        operator: "eq",
+        value: String(filters.site_id),
+      });
+      continue;
+    }
+    if (field.type === "select") {
+      const value = (filters as Record<string, string | undefined>)[field.key];
+      if (!value) continue;
+      conditions.push({
+        id: createFilterCondition(field.key).id,
+        field: field.key,
+        operator: "eq",
+        value,
+      });
+      continue;
+    }
+    const textValue = (filters as Record<string, string>)[field.key];
+    if (!textValue) continue;
+    conditions.push({
+      id: createFilterCondition(field.key).id,
+      field: field.key,
+      operator: field.key === "keyword" || field.key === "rule_name" || field.key === "ua" ? "contains" : "eq",
+      value: textValue,
+    });
+  }
+  return conditions;
+}
 
 export const trafficWindowLabels: Record<number, string> = {
   10: "10 秒",
@@ -437,7 +684,20 @@ export function buildLogQueryParams(
   filters: LogDetailFilters,
   paging: { page: number; page_size: number },
   range?: { start?: string; end?: string },
+  conditions?: LogFilterCondition[],
 ): Record<string, unknown> {
+  const filtersJson = conditions ? conditionsToFiltersJson(conditions) : undefined;
+  if (filtersJson) {
+    const params: Record<string, unknown> = {
+      page: paging.page,
+      page_size: paging.page_size,
+      filters: filtersJson,
+    };
+    if (range?.start) params.start = range.start;
+    if (range?.end) params.end = range.end;
+    return params;
+  }
+
   const params: Record<string, unknown> = {
     page: paging.page,
     page_size: paging.page_size,
@@ -477,6 +737,200 @@ export function buildLogQueryParams(
   if (range?.start) params.start = range.start;
   if (range?.end) params.end = range.end;
   return params;
+}
+
+export const LOG_SOURCE_API: Record<string, string> = {
+  rule: "/api/v1/rules",
+  blacklist: "/api/v1/blacklist",
+  whitelist: "/api/v1/whitelist",
+  ratelimit: "/api/v1/ratelimit",
+  bot: "/api/v1/bots",
+};
+
+export const LOG_SOURCE_PAGE: Record<string, string> = {
+  rule: "/rules",
+  blacklist: "/blacklist",
+  whitelist: "/whitelist",
+  ratelimit: "/ratelimit",
+  bot: "/bots",
+};
+
+export function parseRuleStatsKey(key: string): { source?: string; ruleId?: number } {
+  const sep = key.indexOf(":");
+  if (sep > 0) {
+    const ruleId = Number(key.slice(sep + 1));
+    return {
+      source: key.slice(0, sep),
+      ruleId: Number.isFinite(ruleId) ? ruleId : undefined,
+    };
+  }
+  const ruleId = Number(key);
+  return Number.isFinite(ruleId) ? { ruleId } : {};
+}
+
+export type LogResourceViewTarget =
+  | { kind: "api"; apiBase: string; id: number; title: string }
+  | { kind: "bot_by_name"; name: string; title: string }
+  | { kind: "route"; path: string; title: string };
+
+const STATS_DIM_FILTER: Partial<Record<StatsDimension, { field: string; operator?: LogFilterOperator }>> = {
+  source: { field: "source" },
+  mode: { field: "mode" },
+  blocked: { field: "blocked" },
+  log_type: { field: "log_type" },
+  site_id: { field: "site_id" },
+  client_ip: { field: "client_ip" },
+  ip_is_private: { field: "ip_is_private" },
+  xff_first: { field: "xff_first" },
+  geo_country: { field: "geo_country" },
+  geo_region: { field: "geo_region" },
+  geo_city: { field: "geo_city" },
+  geo_isp: { field: "geo_isp" },
+  geo_ip_type: { field: "geo_ip_type" },
+  geo_asn: { field: "geo_asn" },
+  method: { field: "method" },
+  scheme: { field: "scheme" },
+  http_version: { field: "http_version" },
+  domain: { field: "domain" },
+  uri_path: { field: "uri_path" },
+  uri_ext: { field: "uri_ext" },
+  referer_host: { field: "referer_host" },
+  ua: { field: "ua", operator: "contains" },
+  ua_family: { field: "ua_family" },
+  bot_name: { field: "bot_name" },
+  bot_category: { field: "bot_category" },
+  ua_os: { field: "ua_os" },
+  ua_browser: { field: "ua_browser" },
+  tls_version: { field: "tls_version" },
+  full_url: { field: "keyword", operator: "contains" },
+};
+
+export function buildConditionsFromStatsDimension(
+  dimension: StatsDimension,
+  key: string,
+): LogFilterCondition[] {
+  if (!key || key === "none") return [];
+
+  if (dimension === "rule_id") {
+    const parsed = parseRuleStatsKey(key);
+    const conditions: LogFilterCondition[] = [];
+    if (parsed.source) {
+      conditions.push({
+        ...createFilterCondition("source"),
+        field: "source",
+        operator: "eq",
+        value: parsed.source,
+      });
+    }
+    if (parsed.ruleId !== undefined) {
+      conditions.push({
+        ...createFilterCondition("rule_id"),
+        field: "rule_id",
+        operator: "eq",
+        value: String(parsed.ruleId),
+      });
+    }
+    return conditions;
+  }
+
+  const mapping = STATS_DIM_FILTER[dimension];
+  if (!mapping) return [];
+
+  const field = findLogFilterField(mapping.field);
+  if (!field) return [];
+
+  return [
+    {
+      ...createFilterCondition(mapping.field),
+      field: mapping.field,
+      operator: mapping.operator || defaultOperatorForField(field),
+      value: key,
+    },
+  ];
+}
+
+export function buildConditionsFromLogRule(record: {
+  source?: string | null;
+  rule_id?: number | null;
+}): LogFilterCondition[] {
+  if (!record.rule_id) return [];
+  const key = record.source ? `${record.source}:${record.rule_id}` : String(record.rule_id);
+  return buildConditionsFromStatsDimension("rule_id", key);
+}
+
+export function getResourceViewTarget(
+  dimension: StatsDimension,
+  key: string,
+  label: string,
+): LogResourceViewTarget | null {
+  if (!key || key === "none") return null;
+
+  if (dimension === "rule_id") {
+    const parsed = parseRuleStatsKey(key);
+    if (!parsed.ruleId) return null;
+    const source = parsed.source || "rule";
+    const apiBase = LOG_SOURCE_API[source];
+    if (!apiBase) return null;
+    return {
+      kind: "api",
+      apiBase,
+      id: parsed.ruleId,
+      title: label || `规则 #${parsed.ruleId}`,
+    };
+  }
+
+  if (dimension === "site_id") {
+    const siteId = Number(key);
+    if (!Number.isFinite(siteId)) return null;
+    return {
+      kind: "api",
+      apiBase: "/api/v1/sites",
+      id: siteId,
+      title: label || `站点 #${siteId}`,
+    };
+  }
+
+  if (dimension === "bot_name") {
+    return {
+      kind: "bot_by_name",
+      name: key,
+      title: label || key,
+    };
+  }
+
+  if (dimension === "source") {
+    const path = LOG_SOURCE_PAGE[key];
+    if (!path) return null;
+    const sourceTitle = sourceLabel[key] || key;
+    return {
+      kind: "route",
+      path,
+      title: sourceTitle,
+    };
+  }
+
+  return null;
+}
+
+export function getResourceViewLabel(dimension: StatsDimension, key: string): string {
+  if (dimension === "rule_id") return "查看当前规则";
+  if (dimension === "site_id") return "查看站点";
+  if (dimension === "bot_name") return "查看 Bot";
+  if (dimension === "source") {
+    const sourceTitle = sourceLabel[key] || key;
+    return `查看${sourceTitle}`;
+  }
+  return "查看详情";
+}
+
+export function getResourceViewTargetFromLogRule(record: {
+  source?: string | null;
+  rule_id?: number | null;
+  rule_name?: string | null;
+}): LogResourceViewTarget | null {
+  if (!record.rule_id) return null;
+  const key = record.source ? `${record.source}:${record.rule_id}` : String(record.rule_id);
+  return getResourceViewTarget("rule_id", key, record.rule_name || `规则 #${record.rule_id}`);
 }
 
 export function applyStatsDrillDownToFilters(

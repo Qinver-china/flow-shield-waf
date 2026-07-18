@@ -60,6 +60,7 @@ class LogQuery(BaseModel):
     bot_category: str | None = None
     tls_version: str | None = None
     keyword: str | None = None
+    filters: str | None = None
     page: int = 1
     page_size: int = 20
 

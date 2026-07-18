@@ -61,20 +61,16 @@ async def list_logs(
 
 @router.get("/stats")
 async def logs_stats(
-    hours: int = 24,
-    start: datetime | None = None,
-    end: datetime | None = None,
+    q: LogQuery = Depends(),
     _user: User = Depends(get_current_user),
 ):
-    return ok(await stats_overview(hours=hours, start=start, end=end))
+    return ok(await stats_overview(hours=24, start=q.start, end=q.end, q=q))
 
 
 @router.get("/stats/group")
 async def logs_stats_group(
     dimension: str = Query("rule_id"),
-    hours: int = 24,
-    start: datetime | None = None,
-    end: datetime | None = None,
+    q: LogQuery = Depends(),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     limit: int | None = Query(None, ge=1, le=100),
@@ -89,11 +85,13 @@ async def logs_stats_group(
     try:
         data = await stats_by_dimension(
             dimension=dimension,
-            hours=hours,
-            start=start,
-            end=end,
+            hours=24,
+            start=q.start,
+            end=q.end,
             page=page,
             page_size=effective_page_size,
+            limit=limit,
+            q=q,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
