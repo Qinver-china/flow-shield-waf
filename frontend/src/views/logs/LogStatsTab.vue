@@ -90,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onActivated, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, type LocationQuery } from "vue-router";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
@@ -111,6 +111,7 @@ export interface LogDrillDownFilter {
 
 const props = defineProps<{
   filterState: LogFilterState;
+  active: boolean;
 }>();
 
 const emit = defineEmits<{ "drill-down": [LogDrillDownFilter] }>();
@@ -141,6 +142,7 @@ const groupPage = ref(1);
 const groupPageSize = ref(20);
 const dimension = ref<StatsDimension>(resolveDimension(route.query));
 const trendChartEl = ref<HTMLElement>();
+const initialized = ref(false);
 
 let trendChart: ECharts | null = null;
 let trendObserver: ResizeObserver | null = null;
@@ -362,12 +364,28 @@ function applyDimensionFromQuery(query: LocationQuery) {
 
 function applyFromQuery(query: LocationQuery) {
   applyDimensionFromQuery(query);
+  initialized.value = true;
+  fetchAll();
+}
+
+function ensureLoaded() {
+  if (initialized.value) return;
+  initialized.value = true;
   fetchAll();
 }
 
 watch(
+  () => props.active,
+  (isActive) => {
+    if (isActive) ensureLoaded();
+  },
+  { immediate: true },
+);
+
+watch(
   () => route.query.dimension,
   () => {
+    if (!initialized.value) return;
     if (applyDimensionFromQuery(route.query)) {
       fetchGroup();
     }
@@ -377,13 +395,16 @@ watch(
 watch(
   () => props.filterState.refreshToken.value,
   () => {
+    if (!initialized.value) return;
     fetchAll();
   },
 );
 
-onMounted(fetchAll);
-
 defineExpose({ applyFromQuery, refresh: fetchAll });
+
+onActivated(() => {
+  trendChart?.resize();
+});
 
 onUnmounted(() => {
   trendObserver?.disconnect();

@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { api } from "@/api";
 import LogDetailDrawer from "./LogDetailDrawer.vue";
 import LogDimensionActionCell from "./LogDimensionActionCell.vue";
@@ -118,6 +118,7 @@ import type { LogFilterState } from "./useLogFilterState";
 
 const props = defineProps<{
   filterState: LogFilterState;
+  active: boolean;
 }>();
 
 const columns = [
@@ -147,6 +148,7 @@ const total = ref(0);
 
 const detailOpen = ref(false);
 const detailId = ref<string | null>(null);
+const initialized = ref(false);
 
 const pagination = ref({
   current: 1,
@@ -199,18 +201,29 @@ function openDetail(id: string) {
   detailOpen.value = true;
 }
 
+function ensureLoaded() {
+  if (initialized.value) return;
+  initialized.value = true;
+  void hydrateBotCategoryFilterOptions();
+  fetchList();
+}
+
+watch(
+  () => props.active,
+  (isActive) => {
+    if (isActive) ensureLoaded();
+  },
+  { immediate: true },
+);
+
 watch(
   () => props.filterState.refreshToken.value,
   () => {
+    if (!initialized.value) return;
     page.value = 1;
     fetchList();
   },
 );
-
-onMounted(() => {
-  void hydrateBotCategoryFilterOptions();
-  fetchList();
-});
 
 defineExpose({ refresh });
 </script>

@@ -20,7 +20,9 @@ import { useLogTimeRange } from "./useLogTimeRange";
 import { toAppTz } from "@/utils/datetime";
 import type { LogDrillDownFilter } from "./LogStatsTab.vue";
 
-export function useLogFilterState(defaultPreset: TimePreset = "6h") {
+let sharedFilterState: LogFilterState | null = null;
+
+function createLogFilterState(defaultPreset: TimePreset) {
   const { preset, customRange, range, toQueryParams, rangeLabel } = useLogTimeRange(defaultPreset);
   const appliedConditions = ref<LogFilterCondition[]>([]);
   const draftConditions = ref<LogFilterCondition[]>([]);
@@ -115,9 +117,12 @@ export function useLogFilterState(defaultPreset: TimePreset = "6h") {
   }
 
   function applyFromRouteQuery(query: LocationQuery) {
+    let changed = false;
+
     const nextPreset = queryValue(query, "preset") as TimePreset | undefined;
-    if (nextPreset) {
+    if (nextPreset && nextPreset !== preset.value) {
       setPreset(nextPreset, { silent: true });
+      changed = true;
     }
 
     const filters = createDefaultLogFilters();
@@ -158,9 +163,18 @@ export function useLogFilterState(defaultPreset: TimePreset = "6h") {
     }
 
     if (hasFilter) {
-      appliedConditions.value = logDetailFiltersToConditions(filters);
+      const nextConditions = logDetailFiltersToConditions(filters);
+      const nextKey = JSON.stringify(nextConditions);
+      const currentKey = JSON.stringify(appliedConditions.value);
+      if (nextKey !== currentKey) {
+        appliedConditions.value = nextConditions;
+        changed = true;
+      }
     }
-    refreshToken.value += 1;
+
+    if (changed) {
+      refreshToken.value += 1;
+    }
   }
 
   function setCustomRange(next?: [Dayjs, Dayjs]) {
@@ -225,4 +239,11 @@ export function useLogFilterState(defaultPreset: TimePreset = "6h") {
   };
 }
 
-export type LogFilterState = ReturnType<typeof useLogFilterState>;
+export function useLogFilterState(defaultPreset: TimePreset = "6h") {
+  if (!sharedFilterState) {
+    sharedFilterState = createLogFilterState(defaultPreset);
+  }
+  return sharedFilterState;
+}
+
+export type LogFilterState = ReturnType<typeof createLogFilterState>;

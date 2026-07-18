@@ -103,7 +103,9 @@
         <div class="app-page-stage">
           <router-view v-slot="{ Component, route: activeRoute }">
             <transition name="fs-slide" mode="out-in">
-              <component :is="Component" :key="activeRoute.path" class="app-page-view" />
+              <keep-alive include="Logs">
+                <component :is="Component" :key="activeRoute.path" class="app-page-view" />
+              </keep-alive>
             </transition>
           </router-view>
         </div>
