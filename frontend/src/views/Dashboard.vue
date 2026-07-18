@@ -1021,7 +1021,7 @@ onUnmounted(() => {
 }
 
 .metric-window-sub {
-  margin-top: 2px;
+  margin-top: 8px;
   font-size: 10px;
   line-height: 1.35;
   color: var(--fs-text-muted);
