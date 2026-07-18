@@ -4,9 +4,11 @@ const STORAGE_KEY = "fs-dashboard-live-refresh";
 
 function readStored(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "1";
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === null) return true;
+    return raw === "1";
   } catch {
-    return false;
+    return true;
   }
 }
 

@@ -1,6 +1,6 @@
 [project]
 name = "flowshield-waf-backend"
-version = "0.2.3"
+version = "0.2.4"
 description = "流盾WAF (Flow Shield WAF) - 管理后端"
 license = "PolyForm-Noncommercial-1.0.0"
 requires-python = ">=3.11"

@@ -21,7 +21,8 @@ export function getAppTimezone() {
 export function parseUtc(value: string): Dayjs {
   const trimmed = value.trim();
   const hasOffset = /[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed);
-  return hasOffset ? dayjs.utc(trimmed) : dayjs.utc(`${trimmed}Z`);
+  const normalized = trimmed.replace(" ", "T");
+  return hasOffset ? dayjs.utc(normalized) : dayjs.utc(`${normalized}Z`);
 }
 
 export function nowInAppTz(): Dayjs {
@@ -49,6 +50,14 @@ export function formatDateTime(
 
 export function formatDateTimeShort(value?: string | null): string {
   return formatDateTime(value, "MM-DD HH:mm");
+}
+
+/** Rolling window label in app timezone, e.g. `2026-07-17 15:00 ~ 2026-07-18 15:00`. */
+export function formatWindowRange(hours: number, end?: Dayjs): string {
+  const endTz = end ?? nowInAppTz();
+  const startTz = endTz.subtract(hours, "hour");
+  const fmt = "YYYY-MM-DD HH:mm";
+  return `${startTz.format(fmt)} ~ ${endTz.format(fmt)}`;
 }
 
 export function toUtcIso(value: Dayjs): string {

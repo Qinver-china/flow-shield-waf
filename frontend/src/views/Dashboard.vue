@@ -247,6 +247,7 @@ import {
 } from "@ant-design/icons-vue";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
+import type { Dayjs } from "dayjs";
 import { storeToRefs } from "pinia";
 import { api } from "@/api";
 import StatCard from "@/components/StatCard.vue";
@@ -255,8 +256,9 @@ import { useLogNavigation } from "@/composables/useLogNavigation";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import { useDashboardLiveRefresh } from "@/composables/useDashboardLiveRefresh";
 import { echartsThemeName } from "@/composables/useEchartsTheme";
+import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
-import { formatDateTimeShort } from "@/utils/datetime";
+import { formatDateTimeShort, formatWindowRange, nowInAppTz } from "@/utils/datetime";
 import { trafficWindowLabels } from "@/views/logs/constants";
 
 interface CountPair {
@@ -283,6 +285,7 @@ interface SummaryData {
 
 const themeStore = useThemeStore();
 const { isDark } = storeToRefs(themeStore);
+const appSettings = useAppSettingsStore();
 const router = useRouter();
 const { goToLogs } = useLogNavigation();
 const { formatSiteId } = useSiteOptions();
@@ -368,7 +371,11 @@ const countryEl = ref<HTMLElement>();
 const logTypeEl = ref<HTMLElement>();
 
 const charts: ECharts[] = [];
-let refreshTimer: ReturnType<typeof setInterval> | null = null;
+const LIVE_REFRESH_DELAY_MS = 5000;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let liveRefreshRunning = false;
+const dashboardWindowEnd = ref<Dayjs>(nowInAppTz());
+const timezoneTick = ref(0);
 
 function enabledSub(item: CountPair) {
   if (item.enabled === undefined) return "";
@@ -401,10 +408,8 @@ const securityCards = computed(() => [
 ]);
 
 const statsWindowLabel = computed(() => {
-  if (!stats.start || !stats.end) return "近 24 小时";
-  const start = stats.start.replace("T", " ").slice(0, 16);
-  const end = stats.end.replace("T", " ").slice(0, 16);
-  return `${start} ~ ${end}`;
+  void timezoneTick.value;
+  return formatWindowRange(24, dashboardWindowEnd.value);
 });
 
 const ruleCols = [
@@ -451,6 +456,7 @@ function progressColor(requests: number, threshold: number) {
 }
 
 function formatTrendTime(value: string) {
+  void timezoneTick.value;
   return formatDateTimeShort(value);
 }
 
@@ -467,6 +473,7 @@ function feedTypeLabel(type: string) {
 }
 
 function formatFeedTime(value: string) {
+  void timezoneTick.value;
   return formatDateTimeShort(value);
 }
 
@@ -735,7 +742,13 @@ watch(trafficSiteId, () => {
   onTrafficSiteChange();
 });
 
+async function syncDashboardWindow() {
+  dashboardWindowEnd.value = nowInAppTz();
+  await nextTick();
+}
+
 async function refreshAll(silent = false) {
+  await syncDashboardWindow();
   await Promise.allSettled([
     loadOverview(silent),
     loadSummary(),
@@ -746,22 +759,39 @@ async function refreshAll(silent = false) {
   ]);
 }
 
+function scheduleLiveRefresh() {
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null;
+    if (!liveRefreshRunning) return;
+    await refreshAll(true);
+    if (!liveRefreshRunning) return;
+    scheduleLiveRefresh();
+  }, LIVE_REFRESH_DELAY_MS);
+}
+
 function startLiveRefresh() {
   stopLiveRefresh();
-  refreshTimer = setInterval(() => {
-    void refreshAll(true);
-  }, 5000);
+  liveRefreshRunning = true;
+  scheduleLiveRefresh();
 }
 
 function stopLiveRefresh() {
+  liveRefreshRunning = false;
   if (!refreshTimer) return;
-  clearInterval(refreshTimer);
+  clearTimeout(refreshTimer);
   refreshTimer = null;
 }
 
 watch(liveRefreshEnabled, (enabled) => {
   if (enabled) startLiveRefresh();
   else stopLiveRefresh();
+});
+
+watch(() => appSettings.timezone, async () => {
+  timezoneTick.value += 1;
+  dashboardWindowEnd.value = nowInAppTz();
+  await nextTick();
+  if (stats.trend.length) updateCharts(true);
 });
 
 async function loadOverview(silent = false) {
@@ -794,6 +824,10 @@ async function loadFeed(silent = false) {
 }
 
 onMounted(async () => {
+  if (!appSettings.loaded) {
+    await appSettings.fetch();
+  }
+  timezoneTick.value += 1;
   await refreshAll();
   if (liveRefreshEnabled.value) startLiveRefresh();
   window.addEventListener("resize", resizeCharts);

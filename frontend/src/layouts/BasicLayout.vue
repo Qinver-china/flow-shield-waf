@@ -231,6 +231,10 @@ onMounted(() => {
   flex-direction: column;
 }
 
+.app-sider :deep(.ant-layout-sider-trigger) {
+  background: transparent;
+}
+
 .app-sider :deep(.ant-menu-dark),
 .nav-drawer :deep(.ant-menu-dark) {
   background: transparent;
@@ -269,7 +273,7 @@ onMounted(() => {
   margin: 12px;
   padding: 8px 10px;
   border-radius: var(--fs-radius-md);
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
 }
 
 .logo.collapsed {
