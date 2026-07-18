@@ -81,7 +81,9 @@ def test_enum_fields_expose_options():
         {"value": "false", "label": "否"},
     ]
     assert fields["traffic.global"]["compare_modes"]
-    assert fields["traffic.global"]["options"]
+    assert len(fields["traffic.global"]["options"]) == 6
+    assert fields["traffic.site"]["compare_modes"]
+    assert len(fields["traffic.site"]["options"]) == 6
 
 
 def test_traffic_global_condition_ok():
@@ -105,10 +107,36 @@ def test_traffic_global_absolute_ok():
     })
 
 
-def test_traffic_global_invalid_window():
+def test_traffic_site_condition_ok():
+    cond = validate_condition({
+        "field": "traffic.site",
+        "op": "compare",
+        "value": {"window_sec": 60, "compare": "qps_gt", "threshold": 50},
+    })
+    assert cond["conditions"][0]["field"] == "traffic.site"
+
+
+def test_traffic_global_qps_ok():
+    validate_condition({
+        "field": "traffic.global",
+        "op": "compare",
+        "value": {"window_sec": 10, "compare": "qps_lt", "threshold": 1},
+    })
+
+
+def test_traffic_baseline_short_window_rejected():
     with pytest.raises(ValueError):
         validate_condition({
             "field": "traffic.global",
             "op": "compare",
-            "value": {"window_sec": 10, "compare": "abs_gt", "threshold": 1},
+            "value": {"window_sec": 60, "compare": "baseline_gt", "percent": 50},
+        })
+
+
+def test_traffic_invalid_window_rejected():
+    with pytest.raises(ValueError):
+        validate_condition({
+            "field": "traffic.global",
+            "op": "compare",
+            "value": {"window_sec": 120, "compare": "abs_gt", "threshold": 1},
         })

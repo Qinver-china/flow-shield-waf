@@ -140,7 +140,7 @@ import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
 import SiteIdsCell from "@/components/SiteIdsCell.vue";
 import SiteSelect from "@/components/SiteSelect.vue";
-import { enabledFilterOptions, modeFilterOptions } from "@/constants/resourceList";
+import { enabledFilterOptions, modeFilterOptions, siteScopeFilterField } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
 import { siteIdsColumn } from "@/composables/useSiteOptions";
 import type { BatchConfig } from "@/types/batch";
@@ -192,7 +192,7 @@ const listFilters: ResourceFilterField[] = [
   { key: "q", label: "搜索", type: "search", placeholder: "策略名称" },
   { key: "mode", label: "动作", type: "select", width: "200px", options: modeFilterOptions },
   { key: "enabled", label: "状态", type: "select", width: "140px", options: enabledFilterOptions },
-  { key: "site_id", label: "站点", type: "site" },
+  siteScopeFilterField,
 ];
 
 const columns: ResourceColumn[] = [

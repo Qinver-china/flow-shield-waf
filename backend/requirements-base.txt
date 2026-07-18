@@ -18,4 +18,4 @@ pi-captcha>=0.0.1
 pillow>=10.0
 ua-parser[regex]>=1.0.2
 crawlerdetect>=0.3.2
-
+tzdata>=2024.1

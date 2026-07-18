@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.constants.traffic_windows import TRAFFIC_BASELINE_MIN_WINDOW_SEC
 from app.fields.catalog import TRAFFIC, TRAFFIC_COMPARE_MODES, TRAFFIC_RULE_WINDOWS, field_map
 
 _MAP = field_map()
@@ -18,38 +19,44 @@ _NO_VALUE_OPS = {"is_empty", "exists", "key_exists", "key_absent"}
 _IP_GROUP_OPS = {"in_ip_group", "not_in_ip_group"}
 _TRAFFIC_COMPARES = {m["value"] for m in TRAFFIC_COMPARE_MODES}
 _BASELINE_COMPARES = {"baseline_gt", "baseline_lt"}
-_MIN_BASELINE_WINDOW_SEC = 300
+_QPS_COMPARES = {"qps_gt", "qps_lt"}
+_TRAFFIC_FIELDS = {"traffic.global", "traffic.site"}
 
 
-def _validate_traffic_value(value: Any) -> None:
+def _validate_traffic_value(value: Any, field: str) -> None:
     if not isinstance(value, dict):
-        raise ValueError("全局请求量条件的 value 必须是对象")
+        raise ValueError("请求量条件的 value 必须是对象")
     try:
         window_sec = int(value.get("window_sec"))
     except (TypeError, ValueError):
-        raise ValueError("全局请求量必须选择时间窗口 window_sec") from None
+        raise ValueError("请求量必须选择时间窗口 window_sec") from None
     if window_sec not in TRAFFIC_RULE_WINDOWS:
         allowed = ", ".join(str(w) for w in TRAFFIC_RULE_WINDOWS)
         raise ValueError(f"不支持的时间窗口 {window_sec}，可选: {allowed}")
 
     compare = value.get("compare")
     if compare not in _TRAFFIC_COMPARES:
-        raise ValueError("全局请求量必须选择比较方式 compare")
+        raise ValueError("请求量必须选择比较方式 compare")
 
-    if compare in _BASELINE_COMPARES and window_sec < _MIN_BASELINE_WINDOW_SEC:
+    if compare in _BASELINE_COMPARES and window_sec < TRAFFIC_BASELINE_MIN_WINDOW_SEC:
         raise ValueError(
             f"基线比较不支持 {window_sec} 秒窗口，请使用 5 分钟或 30 分钟，"
-            "或改用绝对值比较"
+            "或改用绝对值 / QPS 比较"
         )
 
-    if compare in ("abs_gt", "abs_lt"):
+    if compare in ("abs_gt", "abs_lt", *_QPS_COMPARES):
         threshold = value.get("threshold")
         if threshold is None or not isinstance(threshold, (int, float)) or threshold < 0:
-            raise ValueError("绝对值比较需要提供非负 threshold")
+            label = "QPS" if compare in _QPS_COMPARES else "请求量"
+            raise ValueError(f"{label}比较需要提供非负 threshold")
     else:
         percent = value.get("percent")
         if percent is None or not isinstance(percent, (int, float)) or percent < 0:
             raise ValueError("基线比较需要提供非负 percent（百分比）")
+
+    if field == "traffic.site" and compare in _BASELINE_COMPARES:
+        # site baseline is supported; no extra validation needed
+        pass
 
 
 def _validate_leaf(node: dict[str, Any]) -> None:
@@ -77,7 +84,9 @@ def _validate_leaf(node: dict[str, Any]) -> None:
     if meta["value_type"] == TRAFFIC:
         if op != "compare":
             raise ValueError(f"字段 {field} 仅支持 compare 操作符")
-        _validate_traffic_value(node.get("value"))
+        if field not in _TRAFFIC_FIELDS:
+            raise ValueError(f"未知请求量字段: {field}")
+        _validate_traffic_value(node.get("value"), field)
         return
 
     if op == "between":

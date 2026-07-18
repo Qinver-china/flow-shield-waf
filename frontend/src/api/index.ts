@@ -4,6 +4,9 @@ import { message } from "ant-design-vue";
 const http: AxiosInstance = axios.create({
   baseURL: "/",
   timeout: 15000,
+  paramsSerializer: {
+    indexes: null,
+  },
 });
 
 type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };

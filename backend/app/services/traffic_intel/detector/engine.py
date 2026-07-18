@@ -38,6 +38,7 @@ class AnomalyDetector:
         *,
         site_id: int | None = None,
         as_of: datetime | None = None,
+        timezone_name: str | None = None,
     ) -> list[AnomalyResult]:
         if not config.enabled:
             return []
@@ -46,7 +47,11 @@ class AnomalyDetector:
         anomalies: list[AnomalyResult] = []
         for window_sec in config.analysis_windows_sec:
             baseline = await self._baselines.get(
-                db, site_id=site_id, window_sec=window_sec, as_of=as_of
+                db,
+                site_id=site_id,
+                window_sec=window_sec,
+                as_of=as_of,
+                timezone_name=timezone_name,
             )
             if baseline is None or baseline.avg_requests <= 0:
                 continue

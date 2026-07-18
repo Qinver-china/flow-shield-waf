@@ -26,12 +26,15 @@
           v-model:value="model[field.key]"
           :options="siteSelectOptions"
           :loading="sitesLoading"
-          :placeholder="field.placeholder || '生效站点'"
+          :placeholder="field.placeholder || field.label || '生效站点'"
+          :mode="field.multiple ? 'multiple' : undefined"
+          :max-tag-count="field.multiple ? 'responsive' : undefined"
           allow-clear
           show-search
           option-filter-prop="label"
           class="filter-control filter-control--site"
-          :style="controlStyle(field, 'site')"
+          :class="{ 'filter-control--site-multi': field.multiple }"
+          :style="controlStyle(field, field.multiple ? 'site-multi' : 'site')"
           @change="emit('change')"
         />
       </template>
@@ -56,14 +59,15 @@ const emit = defineEmits<{
 
 const { selectOptions: siteSelectOptions, loading: sitesLoading } = useSiteOptions();
 
-const defaultWidths: Record<ResourceFilterField["type"], string> = {
+const defaultWidths: Record<string, string> = {
   search: "260px",
   select: "200px",
   site: "240px",
+  "site-multi": "320px",
 };
 
-function controlStyle(field: ResourceFilterField, type: ResourceFilterField["type"]) {
-  const width = field.width ? String(field.width) : defaultWidths[type];
+function controlStyle(field: ResourceFilterField, type: string) {
+  const width = field.width ? String(field.width) : defaultWidths[type] ?? defaultWidths.site;
   return { width, minWidth: width };
 }
 </script>

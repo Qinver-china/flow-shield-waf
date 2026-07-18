@@ -3,7 +3,7 @@
     v-if="!readonly"
     v-model:value="model"
     allow-clear
-    placeholder="不选表示全站"
+    placeholder="全部站点"
     :options="selectOptions"
     :loading="loading"
     :disabled="disabled"

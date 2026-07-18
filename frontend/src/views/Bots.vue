@@ -186,7 +186,6 @@ const botFilters: ResourceFilterField[] = [
   { key: "q", label: "搜索", type: "search", placeholder: "名称 / UA 模式" },
   { key: "category", label: "分类", type: "select", options: [] },
   { key: "enabled", label: "状态", type: "select", options: enabledFilterOptions },
-  { key: "site_id", label: "站点", type: "site" },
 ];
 
 const botColumns: ResourceColumn[] = [

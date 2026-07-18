@@ -66,8 +66,9 @@
       v-model:value="row.trafficThreshold"
       class="value-input"
       :min="0"
-      :precision="0"
-      placeholder="请求量"
+      :precision="isTrafficQpsCompare(row.trafficCompare) ? 2 : 0"
+      :addon-after="isTrafficQpsCompare(row.trafficCompare) ? 'QPS' : undefined"
+      :placeholder="isTrafficQpsCompare(row.trafficCompare) ? 'QPS' : '请求量'"
     />
 
     <a-button danger size="small" type="text" @click="$emit('remove')">删除</a-button>
@@ -201,6 +202,7 @@ import {
   isNumberOp,
   isTrafficBaselineCompare,
   isTrafficField,
+  isTrafficQpsCompare,
   onFieldChange,
   onOpChange,
   opsFor,
@@ -236,7 +238,8 @@ const ipGroupSelectOptions = computed(() =>
   flex-wrap: wrap;
 }
 .cond-traffic-row .traffic-window-select {
-  width: 108px;
+  width: 128px;
+  min-width: 128px;
 }
 .cond-traffic-row .traffic-compare-select {
   width: 148px;

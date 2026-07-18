@@ -34,10 +34,34 @@ def parse_snapshot(raw: str | bytes) -> TrafficSnapshot | None:
             )
         except (KeyError, TypeError, ValueError):
             continue
+
+    site_windows: dict[int, list[WindowSample]] = {}
+    for site_key, site_data in (data.get("sites") or {}).items():
+        try:
+            site_id = int(site_key)
+        except (TypeError, ValueError):
+            continue
+        samples: list[WindowSample] = []
+        for w in site_data.get("windows") or []:
+            try:
+                samples.append(
+                    WindowSample(
+                        window_sec=int(w["sec"]),
+                        requests=int(w.get("requests") or 0),
+                        qps=float(w.get("qps") or 0),
+                        site_id=site_id,
+                    )
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+        if samples:
+            site_windows[site_id] = samples
+
     return TrafficSnapshot(
         updated_at=int(data.get("updated_at") or 0),
         global_windows=windows,
         burst_active=bool(data.get("global", {}).get("burst_active")),
+        site_windows=site_windows,
     )
 
 
@@ -81,14 +105,27 @@ class SnapshotIngestor:
             await asyncio.to_thread(
                 self._store.insert_minute, now, minute_requests, site_id=None
             )
+
+        for site_id, site_samples in snapshot.site_windows.items():
+            site_minute = 0
+            for w in site_samples:
+                if w.window_sec == 60:
+                    site_minute = w.requests
+                    break
+            if site_minute > 0:
+                await asyncio.to_thread(
+                    self._store.insert_minute, now, site_minute, site_id=site_id
+                )
+
         if analysis_samples:
             await asyncio.to_thread(
                 self._store.insert_window_snapshots, now, analysis_samples
             )
             log.debug(
-                "ingested traffic minute=%s requests=%d windows=%d",
+                "ingested traffic minute=%s requests=%d windows=%d sites=%d",
                 now.isoformat(),
                 minute_requests,
                 len(analysis_samples),
+                len(snapshot.site_windows),
             )
         return snapshot

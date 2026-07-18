@@ -71,13 +71,6 @@ def _lookup(mapping: dict[str, str], value: str | None) -> str | None:
     return mapping.get(str(value).strip()) or mapping.get(str(value).strip().lower())
 
 
-def _truncate_text(value: str, max_len: int = 96) -> str:
-    text = value.strip()
-    if len(text) <= max_len:
-        return text
-    return f"{text[: max_len - 1]}…"
-
-
 def format_rule_stats_label(
     *,
     rule_id: int | str,
@@ -118,9 +111,9 @@ def format_dimension_label(
         code = (key or raw_label or "").upper()
         return GEO_COUNTRY_LABELS.get(code, raw_label or code)
     if dimension == "ua":
-        return _truncate_text(raw_label or key)
+        return raw_label or key
     if dimension == "full_url":
-        return _truncate_text(raw_label or key, max_len=120)
+        return raw_label or key
     if dimension == "bot_category":
         return _BOT_CATEGORY_LABELS.get(key, raw_label or key)
     if dimension == "site_id":

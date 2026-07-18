@@ -54,7 +54,7 @@ import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
 import SiteIdsCell from "@/components/SiteIdsCell.vue";
 import SiteSelect from "@/components/SiteSelect.vue";
-import { enabledFilterOptions } from "@/constants/resourceList";
+import { enabledFilterOptions, siteScopeFilterField } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
 import { siteIdsColumn } from "@/composables/useSiteOptions";
 import type { BatchConfig } from "@/types/batch";
@@ -65,7 +65,7 @@ const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const listFilters: ResourceFilterField[] = [
   { key: "q", label: "搜索", type: "search", placeholder: "名称" },
   { key: "enabled", label: "状态", type: "select", options: enabledFilterOptions },
-  { key: "site_id", label: "站点", type: "site" },
+  siteScopeFilterField,
 ];
 
 const batchConfig: BatchConfig = {

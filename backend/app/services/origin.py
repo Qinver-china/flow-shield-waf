@@ -5,7 +5,8 @@ import ipaddress
 import re
 
 ORIGIN_PROTOCOLS = frozenset({"follow", "http", "https"})
-_DOCKER_HOST_ALIASES = frozenset({"host.docker.internal", "localhost"})
+# localhost inside the app container is not the Docker host; rewrite for engine upstreams.
+_LOCALHOST_ALIASES = frozenset({"localhost"})
 
 _HOST_RE = re.compile(
     r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*"
@@ -59,13 +60,15 @@ def format_origin_display(
 
 
 def resolve_origin_host_for_engine(host: str) -> str:
-    """Resolve Docker host aliases to an IP for OpenResty variable upstream URLs.
+    """Normalize origin hostnames for OpenResty variable upstream URLs.
 
-    Nginx resolves variable ``proxy_pass`` targets via ``resolver`` (Docker DNS),
-    which does not read ``/etc/hosts`` entries such as ``host.docker.internal``.
+    ``host.docker.internal`` is kept as a hostname so Docker embedded DNS
+    (``resolver 127.0.0.11``) can resolve the correct host gateway on each
+    platform. Only ``localhost`` is rewritten, because inside the container it
+    points at the container itself, not the Docker host.
     """
     host = normalize_origin_host(host)
-    if host in _DOCKER_HOST_ALIASES:
+    if host in _LOCALHOST_ALIASES:
         from app.core.config import settings
 
         return settings.waf_origin_host_gateway

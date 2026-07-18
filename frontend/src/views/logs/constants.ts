@@ -99,11 +99,10 @@ export function formatStatsValueLabel(
       return geoCountryLabel[code] || label;
     }
     case "ua":
+    case "full_url":
       return label;
     case "bot_category":
       return botCategoryLabel[key] || botCategoryLabel[label] || label;
-    case "full_url":
-      return label.length > 120 ? `${label.slice(0, 119)}…` : label;
     default:
       return label;
   }
@@ -124,12 +123,12 @@ export const statsDimensionGroups = [
   {
     label: "核心",
     items: [
-      { key: "rule_id", label: "命中规则", desc: "按规则 ID / 名称聚合" },
+      { key: "rule_id", label: "命中规则", desc: "按规则 ID 聚合" },
       { key: "source", label: "防护来源", desc: "规则 / 黑名单 / 限速等" },
       { key: "mode", label: "防护模式", desc: "观察 / 拦截 / 人机等" },
       { key: "blocked", label: "拦截结果", desc: "已拦截 vs 已放行" },
       { key: "log_type", label: "日志类型", desc: "防护 / 访问 / 审计" },
-      { key: "site_id", label: "站点", desc: "按站点聚合" },
+      { key: "site_id", label: "站点", desc: "按站点 ID 聚合（名称实时解析）" },
     ],
   },
   {

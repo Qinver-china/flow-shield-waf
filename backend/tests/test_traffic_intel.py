@@ -13,7 +13,7 @@ def test_detector_flags_50_percent_spike():
         avg_requests=1000.0,
         sample_count=24,
         strategy="same_slot_hourly",
-        slot_key="dow1_h14",
+        slot_key="dow6_h14_q2",
         updated_at=datetime.utcnow(),
     )
     config = TrafficIntelConfig(spike_ratio=0.5)
@@ -30,7 +30,7 @@ def test_detector_ignores_normal_traffic():
         avg_requests=5000.0,
         sample_count=30,
         strategy="same_slot_hourly",
-        slot_key="dow1_h14",
+        slot_key="dow6_h14_q2",
         updated_at=datetime.utcnow(),
     )
     config = TrafficIntelConfig(spike_ratio=0.5)

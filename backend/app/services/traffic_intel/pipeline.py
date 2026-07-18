@@ -5,9 +5,11 @@ import asyncio
 import logging
 import time
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import SessionLocal
+from app.models import Site
 from app.services.traffic_intel.actions import ActionDispatcher
 from app.services.traffic_intel.baseline import BaselineCalculator
 from app.services.traffic_intel.constants import (
@@ -22,6 +24,7 @@ from app.services.traffic_intel.detector import AnomalyDetector
 from app.services.traffic_intel.ingest import SnapshotIngestor
 from app.services.traffic_intel.store.alerts_mysql import AlertStore
 from app.services.traffic_intel.redis_baselines import publish_baselines_to_redis
+from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.types import TrafficIntelConfig
 
 log = logging.getLogger("waf.traffic_intel.pipeline")
@@ -52,6 +55,12 @@ class TrafficIntelPipeline:
         self._alerts = alert_store or AlertStore()
         self._last_baseline_at = 0.0
 
+    async def _baseline_scopes(self, db: AsyncSession) -> list[int | None]:
+        site_ids = (
+            await db.execute(select(Site.id).where(Site.enabled.is_(True)).order_by(Site.id))
+        ).scalars().all()
+        return [None, *site_ids]
+
     async def run_once(self) -> None:
         if not self.config.enabled:
             return
@@ -59,16 +68,28 @@ class TrafficIntelPipeline:
         await self._ingestor.ingest_once()
 
         async with SessionLocal() as db:
+            timezone_name = await get_traffic_timezone(db)
             now = time.monotonic()
             if now - self._last_baseline_at >= DEFAULT_BASELINE_RECALC_INTERVAL_SEC:
-                await self._baseline.recalculate(db, self.config, site_ids=[None])
+                await self._baseline.recalculate(
+                    db,
+                    self.config,
+                    site_ids=await self._baseline_scopes(db),
+                    timezone_name=timezone_name,
+                )
                 await publish_baselines_to_redis(db)
                 self._last_baseline_at = now
 
-            anomalies = await self._detector.evaluate_scope(
-                db, self.config, site_id=None
-            )
-            filtered = await self._filter_cooldown(db, anomalies)
+            all_anomalies = []
+            for site_id in await self._baseline_scopes(db):
+                anomalies = await self._detector.evaluate_scope(
+                    db,
+                    self.config,
+                    site_id=site_id,
+                    timezone_name=timezone_name,
+                )
+                all_anomalies.extend(anomalies)
+            filtered = await self._filter_cooldown(db, all_anomalies)
             if filtered:
                 await self._dispatcher.dispatch(db, filtered, self.config)
 

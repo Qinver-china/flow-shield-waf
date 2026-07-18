@@ -39,6 +39,9 @@ const detailQueryKeys = [
   "log_type",
   "client_ip",
   "rule_id",
+  "site_id",
+  "bot_name",
+  "bot_category",
   "geo_country",
   "method",
   "keyword",
@@ -52,12 +55,15 @@ function applyRouteQuery() {
   const query = route.query;
   const tab = (query.tab as string) || (hasDetailFilters(query) ? "detail" : "stats");
   activeTab.value = tab;
-  nextTick(() => {
-    if (tab === "detail") {
-      detailTabRef.value?.applyFromQuery(query);
-    } else {
+  if (tab !== "detail") {
+    nextTick(() => {
       statsTabRef.value?.applyFromQuery(query);
-    }
+    });
+    return;
+  }
+  // Detail tab mounts after slide transition; LogDetailTab reads route on mount/watch.
+  nextTick(() => {
+    detailTabRef.value?.applyFromQuery(query);
   });
 }
 

@@ -118,10 +118,16 @@ class ClickHouseTrafficStore:
         window_sec: int,
         *,
         site_id: int | None = None,
-        lookback_days: int = 7,
+        lookback_days: int = 28,
         as_of: datetime | None = None,
+        timezone_name: str = "Asia/Shanghai",
+        outlier_quantile: float = 0.95,
     ) -> tuple[float, int]:
-        """Average bucket totals at the same weekday + hour as *as_of*."""
+        """Median bucket totals at the same weekday + hour + quarter as *as_of*.
+
+        Uses configured timezone for slot alignment and trims values above the
+        given quantile before taking the median (robust against past spikes).
+        """
         as_of = as_of or datetime.utcnow()
         bucket_expr = _bucket_expr(window_sec)
         site_clause = (
@@ -129,11 +135,15 @@ class ClickHouseTrafficStore:
             if site_id is None
             else "site_id = {site_id:UInt32}"
         )
+        local_minute = f"toTimeZone(minute, {{tz:String}})"
         params: dict = {
             "lookback_days": lookback_days,
             "dow": as_of.isoweekday(),
             "hour": as_of.hour,
+            "quarter": as_of.minute // 15,
             "as_of": as_of.replace(second=0, microsecond=0),
+            "tz": timezone_name,
+            "outlier_q": outlier_quantile,
         }
         if site_id is not None:
             params["site_id"] = site_id
@@ -147,13 +157,23 @@ class ClickHouseTrafficStore:
               WHERE {site_clause}
                 AND minute >= {{as_of:DateTime}} - INTERVAL {{lookback_days:UInt16}} DAY
                 AND minute < {{as_of:DateTime}}
-                AND toDayOfWeek(minute) = {{dow:UInt8}}
-                AND toHour(minute) = {{hour:UInt8}}
+                AND toDayOfWeek({local_minute}) = {{dow:UInt8}}
+                AND toHour({local_minute}) = {{hour:UInt8}}
+                AND intDiv(toMinute({local_minute}), 15) = {{quarter:UInt8}}
               GROUP BY bucket
+            ),
+            filtered AS (
+              SELECT total
+              FROM buckets
+              WHERE total > 0
+                AND total <= (
+                  SELECT quantile({{outlier_q:Float64}})(total)
+                  FROM buckets
+                  WHERE total > 0
+                )
             )
-            SELECT avg(total) AS avg_r, count() AS samples
-            FROM buckets
-            WHERE total > 0
+            SELECT quantile(0.5)(total) AS avg_r, count() AS samples
+            FROM filtered
             """,
             parameters=params,
         ).result_rows

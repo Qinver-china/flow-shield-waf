@@ -17,8 +17,12 @@ ENUM = "enum"
 BOOL = "bool"
 TRAFFIC = "traffic"
 
-# Rule-configurable global traffic windows (seconds)
-TRAFFIC_RULE_WINDOWS = (30, 300, 1800)
+from app.constants.traffic_windows import (
+    TRAFFIC_WINDOWS_SEC,
+    traffic_window_options,
+)
+
+TRAFFIC_RULE_WINDOWS = TRAFFIC_WINDOWS_SEC
 
 # Fixed value options for enum / bool fields (UI + validation hints)
 BOOL_OPTIONS: list[dict[str, str]] = [
@@ -56,19 +60,25 @@ FIELD_OPTIONS: dict[str, list[dict[str, str]]] = {
         {"value": "education", "label": "教育网"},
         {"value": "government", "label": "政府"},
     ],
-    "traffic.global": [
-        {"value": "30", "label": "30 秒"},
-        {"value": "300", "label": "5 分钟"},
-        {"value": "1800", "label": "30 分钟"},
-    ],
+    "traffic.global": traffic_window_options(as_string=True),
+    "traffic.site": traffic_window_options(as_string=True),
 }
 
 TRAFFIC_COMPARE_MODES: list[dict[str, str]] = [
     {"value": "abs_gt", "label": "请求量高于"},
     {"value": "abs_lt", "label": "请求量低于"},
+    {"value": "qps_gt", "label": "QPS 高于"},
+    {"value": "qps_lt", "label": "QPS 低于"},
     {"value": "baseline_gt", "label": "高于基线百分比"},
     {"value": "baseline_lt", "label": "低于基线百分比"},
 ]
+
+_TRAFFIC_FIELD_DEF = {
+    "value_type": TRAFFIC,
+    "requires_arg": False,
+    "operators": ["compare"],
+    "compare_modes": TRAFFIC_COMPARE_MODES,
+}
 
 # operators grouped by value type
 OPERATORS_BY_TYPE: dict[str, list[str]] = {
@@ -204,12 +214,15 @@ FIELDS: list[dict] = [
     # traffic intelligence
     {
         "key": "traffic.global",
-        "label": "全局请求量",
+        "label": "全站请求量",
         "category": "流量与智能",
-        "value_type": TRAFFIC,
-        "requires_arg": False,
-        "operators": ["compare"],
-        "compare_modes": TRAFFIC_COMPARE_MODES,
+        **_TRAFFIC_FIELD_DEF,
+    },
+    {
+        "key": "traffic.site",
+        "label": "当前站点请求量",
+        "category": "流量与智能",
+        **_TRAFFIC_FIELD_DEF,
     },
 ]
 
@@ -217,7 +230,7 @@ FIELDS: list[dict] = [
 def options_for_field(field: dict) -> list[dict[str, str]] | None:
     if field["value_type"] == BOOL:
         return BOOL_OPTIONS
-    if field["value_type"] == ENUM:
+    if field["value_type"] in (ENUM, TRAFFIC):
         return FIELD_OPTIONS.get(field["key"])
     return None
 

@@ -1083,7 +1083,7 @@
     },
     {
       "key": "traffic.global",
-      "label": "全局请求量",
+      "label": "全站请求量",
       "category": "流量与智能",
       "value_type": "traffic",
       "requires_arg": false,
@@ -1098,6 +1098,50 @@
         {
           "value": "abs_lt",
           "label": "请求量低于"
+        },
+        {
+          "value": "qps_gt",
+          "label": "QPS 高于"
+        },
+        {
+          "value": "qps_lt",
+          "label": "QPS 低于"
+        },
+        {
+          "value": "baseline_gt",
+          "label": "高于基线百分比"
+        },
+        {
+          "value": "baseline_lt",
+          "label": "低于基线百分比"
+        }
+      ]
+    },
+    {
+      "key": "traffic.site",
+      "label": "当前站点请求量",
+      "category": "流量与智能",
+      "value_type": "traffic",
+      "requires_arg": false,
+      "operators": [
+        "compare"
+      ],
+      "compare_modes": [
+        {
+          "value": "abs_gt",
+          "label": "请求量高于"
+        },
+        {
+          "value": "abs_lt",
+          "label": "请求量低于"
+        },
+        {
+          "value": "qps_gt",
+          "label": "QPS 高于"
+        },
+        {
+          "value": "qps_lt",
+          "label": "QPS 低于"
         },
         {
           "value": "baseline_gt",

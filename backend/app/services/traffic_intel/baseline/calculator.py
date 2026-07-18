@@ -33,7 +33,12 @@ class BaselineCalculator:
         *,
         site_ids: list[int | None] | None = None,
         as_of: datetime | None = None,
+        timezone_name: str | None = None,
     ) -> list[Baseline]:
+        from app.services.traffic_intel.timezone import get_traffic_timezone
+
+        if timezone_name is None:
+            timezone_name = await get_traffic_timezone(db)
         scopes = site_ids if site_ids is not None else [None]
         saved: list[Baseline] = []
         for site_id in scopes:
@@ -45,6 +50,7 @@ class BaselineCalculator:
                     window_sec=window_sec,
                     config=config,
                     as_of=as_of,
+                    timezone_name=timezone_name,
                 )
                 if baseline is None:
                     log.debug(

@@ -18,7 +18,7 @@ class ListQuery:
     sort_by: str | None
     sort_order: str
     enabled: bool | None
-    site_id: int | None
+    site_id: list[int] | None
     mode: str | None
     scope: str | None
     expiry: str | None
@@ -29,7 +29,7 @@ def get_list_query(
     sort_by: str | None = Query(None, description="排序字段"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     enabled: bool | None = Query(None, description="启用状态"),
-    site_id: int | None = Query(None, description="生效站点"),
+    site_id: list[int] | None = Query(None, description="生效站点，可多选"),
     mode: str | None = Query(None, description="防护模式"),
     scope: str | None = Query(None, description="例外范围"),
     expiry: str | None = Query(
@@ -95,11 +95,19 @@ def apply_scope_filter(
 def apply_site_filter(
     stmt: Select,
     site_ids_col: InstrumentedAttribute,
-    site_id: int | None,
+    site_id: int | list[int] | None,
 ) -> Select:
     if site_id is None:
         return stmt
-    return stmt.where(site_scope_filter(site_ids_col, site_id))
+    site_ids = [site_id] if isinstance(site_id, int) else [int(x) for x in site_id]
+    site_ids = [sid for sid in site_ids if sid is not None]
+    if not site_ids:
+        return stmt
+    if len(site_ids) == 1:
+        return stmt.where(site_scope_filter(site_ids_col, site_ids[0]))
+    return stmt.where(
+        or_(*[site_scope_filter(site_ids_col, sid) for sid in site_ids])
+    )
 
 
 def apply_cert_expiry_filter(

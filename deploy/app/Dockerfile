@@ -26,7 +26,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_INDEX_URL=${PIP_INDEX_URL} \
     PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
 
-RUN apk add --no-cache python3 py3-pip nginx supervisor curl mysql-client redis libjpeg-turbo
+RUN apk add --no-cache python3 py3-pip nginx supervisor curl mysql-client redis libjpeg-turbo tzdata
 
 # 后端：分层安装 Python 依赖——base 层缓存稳定包，extra 层仅装新增包
 WORKDIR /app/backend

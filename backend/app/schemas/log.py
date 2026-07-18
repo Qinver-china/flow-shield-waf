@@ -75,4 +75,7 @@ class LogStatsGroupOut(BaseModel):
     start: datetime
     end: datetime
     total: int
+    group_total: int = 0
+    page: int = 1
+    page_size: int = 20
     items: list[LogStatsGroupItem]

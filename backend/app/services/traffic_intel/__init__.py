@@ -3,7 +3,7 @@
 Layers
 ------
 1. **采集 (ingest)** — read engine Redis snapshot, persist minute + window history to ClickHouse.
-2. **基线 (baseline)** — learn same-slot hourly averages (1m / 5m / 30m windows).
+2. **基线 (baseline)** — learn same-slot median (weekday + hour + quarter) per global/site.
 3. **检测 (detector)** — flag spikes when current > baseline × (1 + spike_ratio).
 4. **动作 (actions)** — persist alerts, log/notify (extend with webhooks).
 

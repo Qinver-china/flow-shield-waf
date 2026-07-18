@@ -54,6 +54,16 @@ function _M.get_global_count(window_sec)
     return sum_window("g:", now, w)
 end
 
+function _M.get_site_count(site_id, window_sec)
+    if not dict or site_id == nil then return 0 end
+    local sid = tonumber(site_id)
+    if not sid then return 0 end
+    local w = tonumber(window_sec) or 0
+    if w <= 0 then return 0 end
+    local now = math.floor(ngx.now())
+    return sum_window("s:" .. tostring(sid) .. ":", now, w)
+end
+
 function _M.inc(site_id)
     if not dict then return end
     local now = math.floor(ngx.now())
@@ -199,12 +209,40 @@ function _M.tick(cfg)
         }
     end
 
+    local function site_windows_payload(counts)
+        local out = {}
+        for _, w in ipairs(WINDOWS) do
+            local key = tostring(w)
+            local requests = counts[key] or 0
+            out[#out + 1] = {
+                sec = w,
+                requests = requests,
+                qps = requests / w,
+            }
+        end
+        return out
+    end
+
+    local sites_out = {}
+    if cfg and cfg.sites then
+        for _, site in pairs(cfg.sites) do
+            local sid = tonumber(site.id)
+            if sid then
+                local counts = window_counts(now, sid)
+                sites_out[tostring(sid)] = {
+                    windows = site_windows_payload(counts),
+                }
+            end
+        end
+    end
+
     local payload = cjson.encode({
         updated_at = now,
         global = {
             windows = windows_out,
             burst_active = burst,
         },
+        sites = sites_out,
     })
     if not payload then return end
 

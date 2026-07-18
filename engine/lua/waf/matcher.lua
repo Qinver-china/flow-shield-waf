@@ -19,7 +19,10 @@ local function match_leaf(node, ext)
             tostring(node.field))
     end
     if node.field == "traffic.global" and node.op == "compare" then
-        return traffic_compare.match(node.value)
+        return traffic_compare.match(node.value, "global", nil)
+    end
+    if node.field == "traffic.site" and node.op == "compare" then
+        return traffic_compare.match(node.value, "site", ext.cache.site_id)
     end
     if node.op == "in_ip_group" or node.op == "not_in_ip_group" then
         local ip = ext:get(node.field, node.arg)

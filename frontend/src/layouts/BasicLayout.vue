@@ -84,6 +84,7 @@
           <span class="header-title">{{ pageTitle }}</span>
         </div>
         <div class="header-right">
+          <dashboard-live-refresh-toggle v-if="isDashboard" />
           <theme-toggle />
           <a-dropdown>
             <span class="user-trigger">
@@ -91,7 +92,7 @@
               <span class="user-name">{{ auth.username }}</span>
             </span>
             <template #overlay>
-              <a-menu>
+              <a-menu :selectable="false">
                 <a-menu-item @click="logout">退出登录</a-menu-item>
               </a-menu>
             </template>
@@ -132,6 +133,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons-vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
+import DashboardLiveRefreshToggle from "@/components/DashboardLiveRefreshToggle.vue";
 import AppLogo from "@/components/AppLogo.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
 import { useAuthStore } from "@/stores/auth";
@@ -169,7 +171,6 @@ const menuGroups = [
       { path: "/blacklist", label: "黑名单", icon: StopOutlined },
       { path: "/exceptions", label: "防护例外", icon: DisconnectOutlined },
       { path: "/ratelimit", label: "速率防护", icon: DashboardOutlined },
-      { path: "/bots", label: "Bot 库", icon: RobotOutlined },
       { path: "/rules", label: "自定义规则", icon: SafetyOutlined },
     ],
   },
@@ -177,7 +178,8 @@ const menuGroups = [
     key: "observe",
     label: "观测",
     items: [
-      { path: "/ip-groups", label: "IP 组管理", icon: GlobalOutlined },
+    { path: "/bots", label: "Bot 库管理", icon: RobotOutlined },
+    { path: "/ip-groups", label: "IP 组管理", icon: GlobalOutlined },
       { path: "/logs", label: "防护日志", icon: FileSearchOutlined },
       { path: "/alerts", label: "预警通知", icon: BellOutlined },
       { path: "/ai-guard", label: "AI 防护", icon: RobotOutlined },
@@ -192,6 +194,7 @@ const menuGroups = [
 
 const selectedKey = computed(() => route.path);
 const pageTitle = computed(() => (route.meta.title as string) || "");
+const isDashboard = computed(() => route.path === "/dashboard");
 
 function onMenu({ key }: { key: string }) {
   drawerOpen.value = false;

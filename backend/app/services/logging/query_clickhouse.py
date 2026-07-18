@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from app.core.clickhouse import get_clickhouse
 from app.core.db import SessionLocal
+from app.models import BotProfile, IpList, RateLimit, Rule
 from app.models.site import Site
 from app.schemas.log import LogQuery, LogStatsGroupItem, LogStatsGroupOut
 from app.services.logging.labels import (
@@ -84,6 +85,131 @@ async def _site_label_map(site_ids: list[int]) -> dict[int, tuple[str, str]]:
             )
         ).all()
     return {int(r[0]): (str(r[1]), str(r[2])) for r in rows}
+
+
+def _rule_ref(source: str | None, rule_id: int) -> tuple[str, int]:
+    return (source or "unknown", int(rule_id))
+
+
+def _pick_rule_name(
+    source: str | None,
+    rule_id: int,
+    snapshot: str | None,
+    label_map: dict[tuple[str, int], str],
+) -> str:
+    """Prefer current DB name; fall back to log snapshot, then generic label."""
+    return label_map.get(_rule_ref(source, rule_id)) or (snapshot or "").strip() or f"规则 #{rule_id}"
+
+
+def _pick_site_display(
+    site_id: int,
+    domain_snapshot: str | None,
+    label_map: dict[int, tuple[str, str]],
+) -> tuple[str | None, str | None]:
+    """Prefer current DB site name/domain; fall back to log snapshot domain."""
+    name, db_domain = label_map.get(site_id, (None, None))
+    domain = db_domain or (domain_snapshot or "").strip() or None
+    return name, domain
+
+
+async def _rule_label_map(
+    refs: list[tuple[str, int]],
+    *,
+    snapshots: dict[tuple[str, int], str] | None = None,
+) -> dict[tuple[str, int], str]:
+    """Resolve (source, rule_id) -> current display name from the config tables."""
+    snapshots = snapshots or {}
+    unique_refs = sorted({_rule_ref(source, rid) for source, rid in refs})
+    if not unique_refs:
+        return {}
+
+    by_source: dict[str, list[int]] = {}
+    for source, rid in unique_refs:
+        by_source.setdefault(source, []).append(rid)
+
+    names: dict[tuple[str, int], str] = {}
+    async with SessionLocal() as db:
+        if ids := by_source.get("rule"):
+            rows = (
+                await db.execute(select(Rule.id, Rule.name).where(Rule.id.in_(ids)))
+            ).all()
+            for rid, name in rows:
+                names[("rule", int(rid))] = str(name)
+        if ids := by_source.get("ratelimit"):
+            rows = (
+                await db.execute(select(RateLimit.id, RateLimit.name).where(RateLimit.id.in_(ids)))
+            ).all()
+            for rid, name in rows:
+                names[("ratelimit", int(rid))] = str(name)
+        iplist_ids = sorted(
+            set(by_source.get("blacklist", [])) | set(by_source.get("whitelist", []))
+        )
+        if iplist_ids:
+            rows = (
+                await db.execute(select(IpList.id, IpList.name).where(IpList.id.in_(iplist_ids)))
+            ).all()
+            id_to_name = {int(rid): str(name) for rid, name in rows}
+            for src in ("blacklist", "whitelist"):
+                for rid in by_source.get(src, []):
+                    if rid in id_to_name:
+                        names[(src, rid)] = id_to_name[rid]
+        if ids := by_source.get("bot"):
+            rows = (
+                await db.execute(select(BotProfile.id, BotProfile.name).where(BotProfile.id.in_(ids)))
+            ).all()
+            for rid, name in rows:
+                names[("bot", int(rid))] = str(name)
+
+    return {
+        key: names.get(key) or (snapshots.get(key) or "").strip() or f"规则 #{key[1]}"
+        for key in unique_refs
+    }
+
+
+def _paginate(page: int, page_size: int) -> tuple[int, int, str]:
+    page_size = min(max(1, page_size), 100)
+    page = max(1, page)
+    offset = (page - 1) * page_size
+    return page, page_size, f"LIMIT {int(page_size)} OFFSET {int(offset)}"
+
+
+def _dimension_groups_inner_sql(dimension: str, where: str) -> str:
+    """SQL subquery that returns one row per distinct dimension group."""
+    if dimension == "rule_id":
+        return (
+            f"SELECT rule_id, source FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
+            f"GROUP BY rule_id, source"
+        )
+    if dimension == "site_id":
+        return f"SELECT site_id FROM waf_logs WHERE {where} GROUP BY site_id"
+    if dimension == "query_count_bucket":
+        return (
+            f"SELECT multiIf(query_count = 0, '0', query_count <= 5, '1-5', "
+            f"query_count <= 20, '6-20', '20+') AS bucket "
+            f"FROM waf_logs WHERE {where} GROUP BY bucket"
+        )
+    if dimension == "hour_of_day":
+        return f"SELECT toHour(ts) AS h FROM waf_logs WHERE {where} GROUP BY h"
+    if dimension == "weekday":
+        return f"SELECT toDayOfWeek(ts) AS d FROM waf_logs WHERE {where} GROUP BY d"
+    if dimension == "blocked":
+        return f"SELECT blocked FROM waf_logs WHERE {where} GROUP BY blocked"
+    if dimension == "full_url":
+        return (
+            f"SELECT concat(scheme, '://', domain, uri) AS full_url FROM waf_logs "
+            f"WHERE {where} AND domain != '' AND uri != '' GROUP BY full_url"
+        )
+    col = _DIM_COLUMN.get(dimension, dimension)
+    return f"SELECT {col} FROM waf_logs WHERE {where} GROUP BY {col}"
+
+
+def _count_dimension_groups(client, dimension: str, where: str, params: dict) -> int:
+    inner = _dimension_groups_inner_sql(dimension, where)
+    total = client.query(
+        f"SELECT count() FROM ({inner})",
+        parameters=params,
+    ).result_rows[0][0]
+    return int(total)
 
 
 def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> tuple[str, dict]:
@@ -279,7 +405,7 @@ async def stats_overview(
             parameters=params,
         ).result_rows[0][0]
         unique_rules = client.query(
-            f"SELECT uniqExact(rule_id) FROM waf_logs WHERE {where} AND rule_id IS NOT NULL",
+            f"SELECT uniqExact((rule_id, source)) FROM waf_logs WHERE {where} AND rule_id IS NOT NULL",
             parameters=params,
         ).result_rows[0][0]
         window = end_ts - start_ts
@@ -290,8 +416,9 @@ async def stats_overview(
             parameters=params,
         ).result_rows
         top_rules = client.query(
-            f"SELECT rule_id, rule_name, count() AS c FROM waf_logs WHERE {where} "
-            f"AND rule_id IS NOT NULL GROUP BY rule_id, rule_name ORDER BY c DESC LIMIT 10",
+            f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
+            f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
+            f"GROUP BY rule_id, source ORDER BY c DESC LIMIT 10",
             parameters=params,
         ).result_rows
         top_ips = client.query(
@@ -348,7 +475,7 @@ async def stats_overview(
                 }
                 for r in trend_rows
             ],
-            "top_rules": [{"id": r[0], "name": r[1] or "未命名规则", "count": r[2]} for r in top_rules],
+            "top_rules_rows": top_rules,
             "top_ips": [{"ip": r[0], "count": r[1]} for r in top_ips],
             "top_domains": [{"domain": r[0], "count": r[1]} for r in top_domains],
             "top_countries": [
@@ -386,7 +513,25 @@ async def stats_overview(
             ],
         }
 
-    return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10)
+    raw = await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10)
+    top_rows = raw.pop("top_rules_rows", [])
+    refs = [(source, int(rule_id)) for rule_id, source, _, _ in top_rows if rule_id is not None]
+    snapshots = {
+        _rule_ref(source, int(rule_id)): snapshot
+        for rule_id, source, snapshot, _ in top_rows
+        if rule_id is not None
+    }
+    label_map = await _rule_label_map(refs, snapshots=snapshots)
+    raw["top_rules"] = [
+        {
+            "id": rule_id,
+            "source": source,
+            "name": _pick_rule_name(source, int(rule_id), snapshot, label_map),
+            "count": int(count),
+        }
+        for rule_id, source, snapshot, count in top_rows
+    ]
+    return raw
 
 
 async def stats_by_dimension(
@@ -395,15 +540,20 @@ async def stats_by_dimension(
     hours: int = 24,
     start: datetime | None = None,
     end: datetime | None = None,
-    limit: int = 20,
+    page: int = 1,
+    page_size: int = 20,
+    limit: int | None = None,
 ) -> LogStatsGroupOut:
     if dimension not in STATS_DIMENSIONS:
         raise ValueError(f"不支持的统计维度: {dimension}")
 
     start_ts, end_ts = _window(start, end, hours)
     where, params = _where_clause(None, start_ts, end_ts)
-    limit = min(max(1, limit), 100)
+    if limit is not None:
+        page_size = limit
+    page, page_size, page_clause = _paginate(page, page_size)
     client = get_clickhouse()
+    group_total = _count_dimension_groups(client, dimension, where, params)
 
     if dimension == "bot_category":
         async with SessionLocal() as db:
@@ -411,12 +561,20 @@ async def stats_by_dimension(
 
     if dimension == "rule_id":
         rows = client.query(
-            f"SELECT rule_id, rule_name, source, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY rule_id, rule_name, source ORDER BY c DESC LIMIT {limit}",
+            f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
+            f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
+            f"GROUP BY rule_id, source ORDER BY c DESC {page_clause}",
             parameters=params,
         ).result_rows
+        refs = [(source, int(rule_id)) for rule_id, source, _, _ in rows if rule_id is not None]
+        snapshots = {
+            _rule_ref(source, int(rule_id)): snapshot
+            for rule_id, source, snapshot, _ in rows
+            if rule_id is not None
+        }
+        label_map = await _rule_label_map(refs, snapshots=snapshots)
         items = []
-        for rule_id, rule_name, source, count in rows:
+        for rule_id, source, snapshot, count in rows:
             if rule_id is None:
                 key, label = "none", "未关联规则"
             else:
@@ -424,38 +582,39 @@ async def stats_by_dimension(
                 key = f"{src}:{rule_id}"
                 label = format_rule_stats_label(
                     rule_id=rule_id,
-                    rule_name=rule_name,
+                    rule_name=_pick_rule_name(source, int(rule_id), snapshot, label_map),
                     source=source,
                 )
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
     elif dimension == "site_id":
         rows = client.query(
-            f"SELECT site_id, domain, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY site_id, domain ORDER BY c DESC LIMIT {limit}",
+            f"SELECT site_id, anyLast(domain) AS domain_snapshot, count() AS c "
+            f"FROM waf_logs WHERE {where} "
+            f"GROUP BY site_id ORDER BY c DESC {page_clause}",
             parameters=params,
         ).result_rows
         site_ids = [int(site_id) for site_id, _, _ in rows if site_id is not None]
         site_labels = await _site_label_map(site_ids)
         items = []
-        for site_id, domain, count in rows:
+        for site_id, domain_snapshot, count in rows:
             if site_id is None:
                 key, label = "none", "（空）"
             else:
                 key = str(site_id)
-                name, db_domain = site_labels.get(int(site_id), (None, None))
+                name, domain = _pick_site_display(int(site_id), domain_snapshot, site_labels)
                 label = format_dimension_label(
                     "site_id",
                     key,
                     f"站点 #{site_id}",
                     site_name=name,
-                    site_domain=db_domain or domain,
+                    site_domain=domain,
                 )
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
     elif dimension == "query_count_bucket":
         rows = client.query(
             f"SELECT multiIf(query_count = 0, '0', query_count <= 5, '1-5', "
             f"query_count <= 20, '6-20', '20+') AS bucket, count() AS c "
-            f"FROM waf_logs WHERE {where} GROUP BY bucket ORDER BY c DESC LIMIT {limit}",
+            f"FROM waf_logs WHERE {where} GROUP BY bucket ORDER BY c DESC {page_clause}",
             parameters=params,
         ).result_rows
         items = [
@@ -464,7 +623,7 @@ async def stats_by_dimension(
     elif dimension == "hour_of_day":
         rows = client.query(
             f"SELECT toHour(ts) AS h, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY h ORDER BY h LIMIT {limit}",
+            f"GROUP BY h ORDER BY h {page_clause}",
             parameters=params,
         ).result_rows
         items = [
@@ -473,7 +632,7 @@ async def stats_by_dimension(
     elif dimension == "weekday":
         rows = client.query(
             f"SELECT toDayOfWeek(ts) AS d, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY d ORDER BY d LIMIT {limit}",
+            f"GROUP BY d ORDER BY d {page_clause}",
             parameters=params,
         ).result_rows
         names = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -484,7 +643,7 @@ async def stats_by_dimension(
     elif dimension == "blocked":
         rows = client.query(
             f"SELECT blocked, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY blocked ORDER BY c DESC",
+            f"GROUP BY blocked ORDER BY c DESC {page_clause}",
             parameters=params,
         ).result_rows
         items = []
@@ -496,7 +655,7 @@ async def stats_by_dimension(
         rows = client.query(
             f"SELECT concat(scheme, '://', domain, uri) AS full_url, count() AS c "
             f"FROM waf_logs WHERE {where} AND domain != '' AND uri != '' "
-            f"GROUP BY full_url ORDER BY c DESC LIMIT {limit}",
+            f"GROUP BY full_url ORDER BY c DESC {page_clause}",
             parameters=params,
         ).result_rows
         items = []
@@ -511,7 +670,7 @@ async def stats_by_dimension(
         col = _DIM_COLUMN.get(dimension, dimension)
         rows = client.query(
             f"SELECT {col}, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY {col} ORDER BY c DESC LIMIT {limit}",
+            f"GROUP BY {col} ORDER BY c DESC {page_clause}",
             parameters=params,
         ).result_rows
         items = []
@@ -531,5 +690,8 @@ async def stats_by_dimension(
         start=start_ts,
         end=end_ts,
         total=int(total),
+        group_total=group_total,
+        page=page,
+        page_size=page_size,
         items=items,
     )

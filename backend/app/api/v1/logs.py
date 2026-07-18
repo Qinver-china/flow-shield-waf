@@ -75,7 +75,9 @@ async def logs_stats_group(
     hours: int = 24,
     start: datetime | None = None,
     end: datetime | None = None,
-    limit: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    limit: int | None = Query(None, ge=1, le=100),
     _user: User = Depends(get_current_user),
 ):
     if dimension not in STATS_DIMENSIONS:
@@ -83,13 +85,15 @@ async def logs_stats_group(
             status_code=400,
             detail=f"不支持的统计维度，可选: {', '.join(sorted(STATS_DIMENSIONS))}",
         )
+    effective_page_size = limit if limit is not None else page_size
     try:
         data = await stats_by_dimension(
             dimension=dimension,
             hours=hours,
             start=start,
             end=end,
-            limit=limit,
+            page=page,
+            page_size=effective_page_size,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

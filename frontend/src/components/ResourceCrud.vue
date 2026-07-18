@@ -40,7 +40,11 @@
           </a-popconfirm>
         </template>
         <template v-else-if="nameField && column.dataIndex === nameField">
-          <a class="name-link" @click="openView(record)">{{ text }}</a>
+          <resource-name-cell
+            :text="String(text ?? '')"
+            :actions="nameActions(record)"
+            @view="openView(record)"
+          />
         </template>
         <template v-else-if="column.key === 'enabled'">
           <a-switch
@@ -103,7 +107,7 @@
             <a-dropdown>
               <a-button size="small">更多</a-button>
               <template #overlay>
-                <a-menu>
+                <a-menu :selectable="false">
                   <a-menu-item v-if="duplicatable" @click="openDuplicate(row)">复制</a-menu-item>
                   <a-menu-item danger>
                     <a-popconfirm title="确认删除?" @confirm="remove(row.id)">删除</a-popconfirm>
@@ -180,10 +184,12 @@ import { useRoute } from "vue-router";
 import { message } from "ant-design-vue";
 import { api } from "@/api";
 import ListFilterBar from "@/components/ListFilterBar.vue";
+import ResourceNameCell from "@/components/ResourceNameCell.vue";
 import FsFormDrawer, { type FormDrawerMode } from "@/components/FsFormDrawer.vue";
 import TableBatchBar from "@/components/TableBatchBar.vue";
 import BatchEditDrawer from "@/components/BatchEditDrawer.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
+import { useResourceQuickActions } from "@/composables/useResourceQuickActions";
 import { useTableBatch } from "@/composables/useTableBatch";
 import type { BatchConfig } from "@/types/batch";
 import type {
@@ -220,6 +226,7 @@ const props = withDefaults(
 
 const { isMobile } = useBreakpoint();
 const route = useRoute();
+const { buildActions } = useResourceQuickActions();
 
 const rows = ref<any[]>([]);
 const loading = ref(false);
@@ -307,9 +314,12 @@ function buildQueryParams() {
   }
   for (const field of props.filters ?? []) {
     const value = filterValues[field.key];
-    if (value !== undefined && value !== null && value !== "") {
-      params[field.key] = value;
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      if (value.length > 0) params[field.key] = value;
+      continue;
     }
+    params[field.key] = value;
   }
   return params;
 }
@@ -450,6 +460,19 @@ function openView(row: any) {
   drawerOpen.value = true;
 }
 
+function nameActions(row: Record<string, any>) {
+  return buildActions(
+    props.apiBase,
+    row,
+    {
+      openEdit: () => openEdit(row),
+      openDuplicate: props.duplicatable ? () => openDuplicate(row) : undefined,
+      remove: () => remove(row.id),
+    },
+    { duplicatable: props.duplicatable },
+  );
+}
+
 function switchToEdit() {
   drawerMode.value = "edit";
 }
@@ -526,10 +549,28 @@ async function persistDrawerEnabled(enabled: boolean) {
 }
 
 defineExpose({ fetchList, openCreate });
+function parseSiteFilterValue(raw: string | string[], multiple?: boolean) {
+  const values = Array.isArray(raw) ? raw : [raw];
+  const ids = values
+    .flatMap((item) => String(item).split(","))
+    .map((item) => Number(item.trim()))
+    .filter((id) => Number.isFinite(id));
+  if (!ids.length) return undefined;
+  return multiple ? ids : ids[0];
+}
+
 function applyRouteFilters() {
   for (const field of props.filters ?? []) {
     const raw = route.query[field.key];
     if (raw === undefined || raw === null || raw === "") continue;
+    if (field.type === "site") {
+      const parsed = parseSiteFilterValue(
+        Array.isArray(raw) ? raw.map(String) : String(raw),
+        field.multiple,
+      );
+      if (parsed !== undefined) filterValues[field.key] = parsed;
+      continue;
+    }
     const value = Array.isArray(raw) ? raw[0] : raw;
     if (field.key === "enabled") {
       filterValues[field.key] = value === "true" ? true : value === "false" ? false : value;

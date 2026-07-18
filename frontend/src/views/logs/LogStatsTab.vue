@@ -82,16 +82,17 @@
         <a-table
           :columns="tableColumns"
           :data-source="groupItems"
-          :pagination="false"
+          :pagination="tablePagination"
           size="small"
           row-key="key"
           class="stats-table"
+          @change="onTableChange"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'label'">
               <a
                 class="dimension-link"
-                :title="record.key"
+                :title="record.label"
                 @click="emit('drill-down', buildDrillDown(record))"
               >
                 {{ record.label }}
@@ -135,6 +136,9 @@ const overview = reactive({ total: 0, blocked: 0, passed: 0, trend: [] as any[] 
 const groupLoading = ref(false);
 const groupItems = ref<any[]>([]);
 const groupTotal = ref(0);
+const groupItemTotal = ref(0);
+const groupPage = ref(1);
+const groupPageSize = ref(20);
 const dimension = ref<StatsDimension>("rule_id");
 const trendChartEl = ref<HTMLElement>();
 
@@ -154,6 +158,15 @@ const tableColumns = computed(() => [
   { title: "占比", key: "percent", width: 80 },
 ]);
 
+const tablePagination = computed(() => ({
+  current: groupPage.value,
+  pageSize: groupPageSize.value,
+  total: groupItemTotal.value,
+  showTotal: (total: number) => `共 ${total} 项`,
+  showSizeChanger: true,
+  pageSizeOptions: ["20", "50", "100"],
+}));
+
 function percentOf(count: number) {
   if (!groupTotal.value) return "-";
   return `${((count / groupTotal.value) * 100).toFixed(1)}%`;
@@ -166,6 +179,13 @@ function onPresetChange() {
 function selectDimension(key: StatsDimension) {
   if (dimension.value === key) return;
   dimension.value = key;
+  groupPage.value = 1;
+  fetchGroup();
+}
+
+function onTableChange(pagination: { current?: number; pageSize?: number }) {
+  groupPage.value = pagination.current || 1;
+  groupPageSize.value = pagination.pageSize || groupPageSize.value;
   fetchGroup();
 }
 
@@ -287,13 +307,17 @@ function setupChartObservers() {
 async function loadGroup() {
   const resp = await api.get("/api/v1/logs/stats/group", {
     dimension: dimension.value,
-    limit: 20,
+    page: groupPage.value,
+    page_size: groupPageSize.value,
     ...toQueryParams(),
   });
   groupItems.value = localizeStatsItems(dimension.value, resp.data.items || [], {
     formatSiteId,
   });
   groupTotal.value = resp.data.total || 0;
+  groupItemTotal.value = resp.data.group_total || 0;
+  if (resp.data.page) groupPage.value = resp.data.page;
+  if (resp.data.page_size) groupPageSize.value = resp.data.page_size;
 }
 
 let statsFetchSeq = 0;
@@ -315,6 +339,7 @@ async function fetchGroup() {
 
 async function fetchAll() {
   const seq = ++statsFetchSeq;
+  groupPage.value = 1;
   groupLoading.value = true;
   try {
     await Promise.all([fetchOverview(), loadGroup()]);

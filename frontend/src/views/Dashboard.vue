@@ -67,10 +67,13 @@
 
     <a-row :gutter="[12, 12]">
       <a-col :xs="24" :xl="16">
-        <a-card class="panel-card panel-card-clickable" :bordered="false" @click="goRateLimit">
+        <a-card class="panel-card" :bordered="false">
           <template #title>
-            <span class="panel-title"><thunderbolt-outlined /> 实时全站流量</span>
+            <span class="panel-title"><thunderbolt-outlined /> {{ trafficCardTitle }}</span>
             <a-tag v-if="traffic.burst_active" color="orange" style="margin-left: 8px">自动取证中</a-tag>
+          </template>
+          <template #extra>
+            <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
           </template>
           <a-row :gutter="[12, 12]">
             <a-col v-for="w in traffic.windows" :key="w.sec" :xs="12" :sm="8" :md="6" :xl="4">
@@ -92,14 +95,19 @@
           <template #title>
             <span class="panel-title"><alert-outlined /> 流量异常检测</span>
           </template>
+          <template #extra>
+            <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
+          </template>
           <a-empty v-if="!intel.windows?.length" description="暂无基线数据" />
           <div v-else class="intel-list">
             <div v-for="w in intel.windows" :key="w.window_sec" class="intel-item" :class="{ anomaly: w.is_anomaly }">
               <div class="intel-label">{{ w.label }}</div>
               <div class="intel-value">{{ w.current_requests }} 请求</div>
-              <div v-if="w.baseline_avg" class="intel-sub">
-                基线 {{ Math.round(w.baseline_avg) }}
-                <span v-if="w.deviation_ratio"> · {{ (w.deviation_ratio * 100 - 100).toFixed(0) }}%</span>
+              <div class="intel-sub">
+                基线 {{ formatIntelBaseline(w.baseline_avg) }}
+                <span v-if="w.deviation_ratio != null" class="intel-deviation">
+                  · {{ formatIntelDeviation(w.deviation_ratio) }}
+                </span>
               </div>
             </div>
           </div>
@@ -158,7 +166,7 @@
           <template #title>
             <span class="panel-title"><alert-outlined /> Top 命中规则</span>
           </template>
-          <a-table
+          <a-table class="feed-list-body"
             :columns="ruleCols"
             :data-source="stats.top_rules"
             :pagination="false"
@@ -174,7 +182,7 @@
           <template #title>
             <span class="panel-title"><aim-outlined /> Top 攻击 IP</span>
           </template>
-          <a-table
+          <a-table class="feed-list-body"
             :columns="ipCols"
             :data-source="stats.top_ips"
             :pagination="false"
@@ -242,7 +250,10 @@ import type { ECharts } from "echarts";
 import { storeToRefs } from "pinia";
 import { api } from "@/api";
 import StatCard from "@/components/StatCard.vue";
+import SiteSingleSelect from "@/components/SiteSingleSelect.vue";
 import { useLogNavigation } from "@/composables/useLogNavigation";
+import { useSiteOptions } from "@/composables/useSiteOptions";
+import { useDashboardLiveRefresh } from "@/composables/useDashboardLiveRefresh";
 import { echartsThemeName } from "@/composables/useEchartsTheme";
 import { useThemeStore } from "@/stores/theme";
 import { formatDateTimeShort } from "@/utils/datetime";
@@ -274,6 +285,8 @@ const themeStore = useThemeStore();
 const { isDark } = storeToRefs(themeStore);
 const router = useRouter();
 const { goToLogs } = useLogNavigation();
+const { formatSiteId } = useSiteOptions();
+const { enabled: liveRefreshEnabled } = useDashboardLiveRefresh();
 
 const RESOURCE_ROUTES: Record<string, string> = {
   sites: "/sites",
@@ -337,10 +350,15 @@ const feed = reactive<{ items: any[]; pending_ai_incidents: number }>({
   pending_ai_incidents: 0,
 });
 const intel = reactive<any>({ windows: [] });
+const trafficSiteId = ref<number | undefined>(undefined);
 const traffic = reactive<{ burst_active: boolean; windows: any[] }>({
   burst_active: false,
   windows: [],
 });
+
+const trafficCardTitle = computed(() =>
+  trafficSiteId.value == null ? "实时全站流量" : `实时站点流量 · ${formatSiteId(trafficSiteId.value)}`,
+);
 
 const feedLoading = ref(false);
 const trendEl = ref<HTMLElement>();
@@ -350,7 +368,7 @@ const countryEl = ref<HTMLElement>();
 const logTypeEl = ref<HTMLElement>();
 
 const charts: ECharts[] = [];
-let trafficTimer: ReturnType<typeof setInterval> | null = null;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 function enabledSub(item: CountPair) {
   if (item.enabled === undefined) return "";
@@ -414,6 +432,17 @@ function windowLabel(sec: number) {
   return trafficWindowLabels[sec] || `${sec} 秒`;
 }
 
+function formatIntelBaseline(value: number | null | undefined) {
+  if (value == null) return "—";
+  return Math.round(value);
+}
+
+function formatIntelDeviation(ratio: number) {
+  const delta = ratio * 100 - 100;
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${delta.toFixed(0)}%`;
+}
+
 function progressColor(requests: number, threshold: number) {
   const ratio = threshold ? requests / threshold : 0;
   if (ratio >= 1) return "#ef4444";
@@ -473,10 +502,6 @@ function goLogs(filters: Parameters<typeof goToLogs>[0] = { tab: "detail" }) {
   goToLogs(filters);
 }
 
-function goRateLimit() {
-  router.push("/ratelimit");
-}
-
 function goAiGuard() {
   router.push("/ai-guard");
 }
@@ -522,97 +547,161 @@ function onFeedClick(item: { type: string; title?: string }) {
   }
 }
 
-function initChart(
-  el: HTMLElement | undefined,
-  option: echarts.EChartsOption,
-  onClick?: (params: { dataIndex: number }) => void,
-) {
-  if (!el) return;
-  const chart = echarts.init(el, echartsThemeName(isDark.value));
-  chart.setOption(option);
-  if (onClick) chart.on("click", onClick);
-  charts.push(chart);
+type ChartKey = "trend" | "mode" | "source" | "country" | "logType";
+
+const chartStore: Partial<Record<ChartKey, ECharts>> = {};
+
+function chartMotion(silent: boolean): Pick<echarts.EChartsOption, "animation" | "animationDuration" | "animationDurationUpdate"> {
+  return silent
+    ? { animation: false, animationDuration: 0, animationDurationUpdate: 0 }
+    : { animation: true, animationDuration: 300, animationDurationUpdate: 200 };
 }
 
-function renderCharts() {
-  charts.splice(0, charts.length).forEach((c) => c.dispose());
+function upsertChart(
+  key: ChartKey,
+  el: HTMLElement | undefined,
+  option: echarts.EChartsOption,
+  onClick: ((params: { dataIndex: number }) => void) | undefined,
+  silent: boolean,
+) {
+  if (!el) return;
+  const motion = chartMotion(silent);
+  const fullOption: echarts.EChartsOption = {
+    ...option,
+    ...motion,
+    series: Array.isArray(option.series)
+      ? option.series.map((s) => ({ ...s, ...motion }))
+      : option.series,
+  };
 
+  let chart = chartStore[key];
+  if (!chart || chart.isDisposed()) {
+    chart = echarts.init(el, echartsThemeName(isDark.value));
+    if (onClick) chart.on("click", onClick);
+    chartStore[key] = chart;
+    if (!charts.includes(chart)) charts.push(chart);
+    chart.setOption(fullOption);
+    return;
+  }
+
+  chart.setOption(fullOption, { notMerge: false, lazyUpdate: true });
+}
+
+function destroyCharts() {
+  Object.values(chartStore).forEach((chart) => chart?.dispose());
+  (Object.keys(chartStore) as ChartKey[]).forEach((key) => {
+    delete chartStore[key];
+  });
+  charts.splice(0, charts.length);
+}
+
+function updateCharts(silent = false) {
   const times = stats.trend.map((t: any) => formatTrendTime(t.time));
-  initChart(trendEl.value, {
-    color: ["#ef4444", "#22c55e"],
-    tooltip: { trigger: "axis" },
-    legend: { data: ["已拦截", "已放行"], bottom: 0 },
-    grid: { left: 12, right: 12, top: 24, bottom: 40, containLabel: true },
-    xAxis: { type: "category", boundaryGap: false, data: times },
-    yAxis: { type: "value", minInterval: 1 },
-    series: [
-      { name: "已拦截", type: "line", smooth: true, stack: "total", areaStyle: { opacity: 0.22 }, data: stats.trend.map((t: any) => t.blocked ?? 0) },
-      { name: "已放行", type: "line", smooth: true, stack: "total", areaStyle: { opacity: 0.18 }, data: stats.trend.map((t: any) => t.passed ?? t.count ?? 0) },
-    ],
-  }, () => goToLogs({ tab: "detail" }));
+  upsertChart(
+    "trend",
+    trendEl.value,
+    {
+      color: ["#ef4444", "#22c55e"],
+      tooltip: { trigger: "axis" },
+      legend: { data: ["已拦截", "已放行"], bottom: 0 },
+      grid: { left: 12, right: 12, top: 24, bottom: 40, containLabel: true },
+      xAxis: { type: "category", boundaryGap: false, data: times },
+      yAxis: { type: "value", minInterval: 1 },
+      series: [
+        { name: "已拦截", type: "line", smooth: true, stack: "total", areaStyle: { opacity: 0.22 }, data: stats.trend.map((t: any) => t.blocked ?? 0) },
+        { name: "已放行", type: "line", smooth: true, stack: "total", areaStyle: { opacity: 0.18 }, data: stats.trend.map((t: any) => t.passed ?? t.count ?? 0) },
+      ],
+    },
+    () => goToLogs({ tab: "detail" }),
+    silent,
+  );
 
-  initChart(modeEl.value, {
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0, type: "scroll" },
-    series: [{
-      type: "pie",
-      radius: ["42%", "68%"],
-      itemStyle: { borderRadius: 6, borderWidth: 2 },
-      label: { formatter: "{b}\n{d}%" },
-      data: stats.mode_split.map((m: any) => ({
-        name: m.label || m.mode,
-        value: m.count,
-        itemStyle: { color: MODE_CHART_COLORS[m.mode] || MODE_CHART_COLORS.unknown },
-      })),
-    }],
-  }, (params) => {
-    const item = stats.mode_split[params.dataIndex];
-    if (item?.mode) goToLogs({ tab: "detail", mode: item.mode });
-  });
+  upsertChart(
+    "mode",
+    modeEl.value,
+    {
+      tooltip: { trigger: "item" },
+      legend: { bottom: 0, type: "scroll" },
+      series: [{
+        type: "pie",
+        radius: ["42%", "68%"],
+        itemStyle: { borderRadius: 6, borderWidth: 2 },
+        label: { formatter: "{b}\n{d}%" },
+        data: stats.mode_split.map((m: any) => ({
+          name: m.label || m.mode,
+          value: m.count,
+          itemStyle: { color: MODE_CHART_COLORS[m.mode] || MODE_CHART_COLORS.unknown },
+        })),
+      }],
+    },
+    (params) => {
+      const item = stats.mode_split[params.dataIndex];
+      if (item?.mode) goToLogs({ tab: "detail", mode: item.mode });
+    },
+    silent,
+  );
 
-  initChart(sourceEl.value, {
-    color: SOURCE_CHART_COLORS,
-    tooltip: { trigger: "axis" },
-    grid: { left: 12, right: 12, top: 16, bottom: 8, containLabel: true },
-    xAxis: { type: "category", data: stats.source_split.map((s: any) => s.label || s.source) },
-    yAxis: { type: "value", minInterval: 1 },
-    series: [{ type: "bar", barMaxWidth: 36, itemStyle: { borderRadius: [6, 6, 0, 0] }, data: stats.source_split.map((s: any) => s.count) }],
-  }, (params) => {
-    const item = stats.source_split[params.dataIndex];
-    if (item?.source) goToLogs({ tab: "detail", source: item.source });
-  });
+  upsertChart(
+    "source",
+    sourceEl.value,
+    {
+      color: SOURCE_CHART_COLORS,
+      tooltip: { trigger: "axis" },
+      grid: { left: 12, right: 12, top: 16, bottom: 8, containLabel: true },
+      xAxis: { type: "category", data: stats.source_split.map((s: any) => s.label || s.source) },
+      yAxis: { type: "value", minInterval: 1 },
+      series: [{ type: "bar", barMaxWidth: 36, itemStyle: { borderRadius: [6, 6, 0, 0] }, data: stats.source_split.map((s: any) => s.count) }],
+    },
+    (params) => {
+      const item = stats.source_split[params.dataIndex];
+      if (item?.source) goToLogs({ tab: "detail", source: item.source });
+    },
+    silent,
+  );
 
   const countries = [...stats.top_countries].reverse();
-  initChart(countryEl.value, {
-    color: ["#2563eb"],
-    tooltip: { trigger: "axis" },
-    grid: { left: 12, right: 20, top: 8, bottom: 8, containLabel: true },
-    xAxis: { type: "value", minInterval: 1 },
-    yAxis: { type: "category", data: countries.map((c: any) => c.label || c.country) },
-    series: [{ type: "bar", barMaxWidth: 18, itemStyle: { borderRadius: [0, 6, 6, 0] }, data: countries.map((c: any) => c.count) }],
-  }, (params) => {
-    const item = countries[params.dataIndex];
-    const country = item?.country || item?.key;
-    if (country) goToLogs({ tab: "detail", geo_country: country });
-  });
+  upsertChart(
+    "country",
+    countryEl.value,
+    {
+      color: ["#2563eb"],
+      tooltip: { trigger: "axis" },
+      grid: { left: 12, right: 20, top: 8, bottom: 8, containLabel: true },
+      xAxis: { type: "value", minInterval: 1 },
+      yAxis: { type: "category", data: countries.map((c: any) => c.label || c.country) },
+      series: [{ type: "bar", barMaxWidth: 18, itemStyle: { borderRadius: [0, 6, 6, 0] }, data: countries.map((c: any) => c.count) }],
+    },
+    (params) => {
+      const item = countries[params.dataIndex];
+      const country = item?.country || item?.key;
+      if (country) goToLogs({ tab: "detail", geo_country: country });
+    },
+    silent,
+  );
 
-  initChart(logTypeEl.value, {
-    color: ["#0ea5e9", "#14b8a6", "#f59e0b"],
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0 },
-    series: [{
-      type: "pie",
-      radius: ["0%", "68%"],
-      roseType: "radius",
-      itemStyle: { borderRadius: 4 },
-      label: { formatter: "{b}\n{c}" },
-      data: stats.log_type_split.map((item: any) => ({ name: item.label || item.log_type, value: item.count })),
-    }],
-  }, (params) => {
-    const item = stats.log_type_split[params.dataIndex];
-    const logType = item?.log_type || item?.key;
-    if (logType) goToLogs({ tab: "detail", log_type: logType });
-  });
+  upsertChart(
+    "logType",
+    logTypeEl.value,
+    {
+      color: ["#0ea5e9", "#14b8a6", "#f59e0b"],
+      tooltip: { trigger: "item" },
+      legend: { bottom: 0 },
+      series: [{
+        type: "pie",
+        radius: ["0%", "68%"],
+        roseType: "radius",
+        itemStyle: { borderRadius: 4 },
+        label: { formatter: "{b}\n{c}" },
+        data: stats.log_type_split.map((item: any) => ({ name: item.label || item.log_type, value: item.count })),
+      }],
+    },
+    (params) => {
+      const item = stats.log_type_split[params.dataIndex];
+      const logType = item?.log_type || item?.key;
+      if (logType) goToLogs({ tab: "detail", log_type: logType });
+    },
+    silent,
+  );
 }
 
 function resizeCharts() {
@@ -620,22 +709,67 @@ function resizeCharts() {
 }
 
 watch(isDark, async () => {
+  destroyCharts();
   await nextTick();
-  renderCharts();
+  updateCharts(false);
 });
 
 async function loadTraffic() {
-  const resp = await api.get("/api/v1/traffic/stats");
+  const params = trafficSiteId.value != null ? { site_id: trafficSiteId.value } : {};
+  const resp = await api.get("/api/v1/traffic/stats", params);
   traffic.burst_active = resp.data.burst_active || false;
-  traffic.windows = resp.data.global?.windows || [];
+  traffic.windows = resp.data.windows || resp.data.global?.windows || [];
 }
 
-async function loadOverview() {
+async function loadIntel() {
+  const params = trafficSiteId.value != null ? { site_id: trafficSiteId.value } : {};
+  const resp = await api.get("/api/v1/traffic/intel/status", params);
+  Object.assign(intel, resp.data);
+}
+
+function onTrafficSiteChange() {
+  void refreshAll();
+}
+
+watch(trafficSiteId, () => {
+  onTrafficSiteChange();
+});
+
+async function refreshAll(silent = false) {
+  await Promise.allSettled([
+    loadOverview(silent),
+    loadSummary(),
+    loadHealth(),
+    loadFeed(silent),
+    loadTraffic(),
+    loadIntel(),
+  ]);
+}
+
+function startLiveRefresh() {
+  stopLiveRefresh();
+  refreshTimer = setInterval(() => {
+    void refreshAll(true);
+  }, 5000);
+}
+
+function stopLiveRefresh() {
+  if (!refreshTimer) return;
+  clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
+watch(liveRefreshEnabled, (enabled) => {
+  if (enabled) startLiveRefresh();
+  else stopLiveRefresh();
+});
+
+async function loadOverview(silent = false) {
   const resp = await api.get("/api/v1/dashboard/overview");
   Object.assign(counts, resp.data.counts);
   Object.assign(stats, resp.data.last_24h);
   await nextTick();
-  renderCharts();
+  updateCharts(silent);
 }
 
 async function loadSummary() {
@@ -648,39 +782,27 @@ async function loadHealth() {
   Object.assign(health, resp.data);
 }
 
-async function loadFeed() {
-  feedLoading.value = true;
+async function loadFeed(silent = false) {
+  if (!silent) feedLoading.value = true;
   try {
     const resp = await api.get("/api/v1/dashboard/feed", { limit: 15 });
     feed.items = resp.data.items || [];
     feed.pending_ai_incidents = resp.data.pending_ai_incidents || 0;
   } finally {
-    feedLoading.value = false;
+    if (!silent) feedLoading.value = false;
   }
 }
 
-async function loadIntel() {
-  const resp = await api.get("/api/v1/traffic/intel/status");
-  Object.assign(intel, resp.data);
-}
-
 onMounted(async () => {
-  await Promise.allSettled([
-    loadOverview(),
-    loadSummary(),
-    loadHealth(),
-    loadFeed(),
-    loadIntel(),
-  ]);
-  await loadTraffic();
-  trafficTimer = setInterval(loadTraffic, 5000);
+  await refreshAll();
+  if (liveRefreshEnabled.value) startLiveRefresh();
   window.addEventListener("resize", resizeCharts);
 });
 
 onUnmounted(() => {
-  if (trafficTimer) clearInterval(trafficTimer);
+  stopLiveRefresh();
+  destroyCharts();
   window.removeEventListener("resize", resizeCharts);
-  charts.splice(0, charts.length).forEach((c) => c.dispose());
 });
 </script>
 
@@ -810,6 +932,10 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
+.traffic-site-filter {
+  width: min(240px, 42vw);
+}
+
 .traffic-window {
   padding: 12px;
   border-radius: var(--fs-radius-sm);
@@ -891,7 +1017,7 @@ onUnmounted(() => {
 }
 
 .feed-list-body {
-  max-height: 360px;
+  max-height: 430px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 4px;

@@ -54,7 +54,6 @@ CREATE TABLE IF NOT EXISTS waf.mv_stats_core_hourly (
   hour DateTime,
   site_id Nullable(UInt32),
   rule_id Nullable(UInt32),
-  rule_name LowCardinality(Nullable(String)),
   source LowCardinality(String),
   mode LowCardinality(String),
   blocked UInt8,
@@ -72,14 +71,13 @@ SELECT
   toStartOfHour(ts) AS hour,
   site_id,
   rule_id,
-  rule_name,
   source,
   mode,
   blocked,
   log_type,
   count() AS cnt
 FROM waf.waf_logs
-GROUP BY hour, site_id, rule_id, rule_name, source, mode, blocked, log_type;
+GROUP BY hour, site_id, rule_id, source, mode, blocked, log_type;
 
 CREATE TABLE IF NOT EXISTS waf.traffic_minute (
   minute DateTime,

@@ -1,10 +1,8 @@
 """Catalog of alert policy condition types for admin notifications."""
 
-TRAFFIC_WINDOWS = [
-    {"value": 30, "label": "30 秒"},
-    {"value": 300, "label": "5 分钟"},
-    {"value": 1800, "label": "30 分钟"},
-]
+from app.constants.traffic_windows import traffic_window_options
+
+TRAFFIC_WINDOWS = traffic_window_options()
 
 BLOCK_WINDOWS_MIN = [
     {"value": 5, "label": "5 分钟"},
@@ -13,45 +11,79 @@ BLOCK_WINDOWS_MIN = [
     {"value": 60, "label": "60 分钟"},
 ]
 
+_SITE_PARAM = {
+    "key": "site_id",
+    "label": "生效站点",
+    "kind": "site_id",
+    "required": False,
+    "help": "留空表示全站；选择站点则使用该站点的基线与请求量统计",
+}
+
 ALERT_CONDITION_TYPES: list[dict] = [
     {
         "type": "traffic.baseline_gt",
-        "label": "全局流量高于基线",
+        "label": "流量高于基线",
         "category": "流量异常",
         "description": "检测突发流量、CC 攻击。对比同星期同时段历史基线，需运行 1–2 天后较准确。",
         "params": [
+            _SITE_PARAM,
             {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
             {"key": "percent", "label": "高于基线 (%)", "kind": "number", "min": 1, "required": True},
         ],
     },
     {
         "type": "traffic.baseline_lt",
-        "label": "全局流量低于基线",
+        "label": "流量低于基线",
         "category": "流量异常",
         "description": "检测流量异常下跌（源站故障、DNS 问题、线路中断等）。",
         "params": [
+            _SITE_PARAM,
             {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
             {"key": "percent", "label": "低于基线 (%)", "kind": "number", "min": 1, "required": True},
         ],
     },
     {
         "type": "traffic.abs_gt",
-        "label": "全局流量高于固定值",
+        "label": "请求量高于固定值",
         "category": "流量异常",
         "description": "不依赖基线，适合新站或固定容量上限告警。",
         "params": [
+            _SITE_PARAM,
             {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
             {"key": "threshold", "label": "请求量上限", "kind": "number", "min": 1, "required": True},
         ],
     },
     {
         "type": "traffic.abs_lt",
-        "label": "全局流量低于固定值",
+        "label": "请求量低于固定值",
         "category": "流量异常",
         "description": "长时间几乎无流量时提醒（可能 WAF/站点不可用）。",
         "params": [
+            _SITE_PARAM,
             {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
             {"key": "threshold", "label": "请求量下限", "kind": "number", "min": 0, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.qps_gt",
+        "label": "QPS 高于固定值",
+        "category": "流量异常",
+        "description": "按所选时间窗口内的平均 QPS（请求量 ÷ 窗口秒数）判断。",
+        "params": [
+            _SITE_PARAM,
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "QPS 上限", "kind": "number", "min": 0, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.qps_lt",
+        "label": "QPS 低于固定值",
+        "category": "流量异常",
+        "description": "检测平均 QPS 异常偏低。",
+        "params": [
+            _SITE_PARAM,
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "QPS 下限", "kind": "number", "min": 0, "required": True},
         ],
     },
     {

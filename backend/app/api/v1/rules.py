@@ -20,7 +20,7 @@ from app.schemas.common import ok
 from app.schemas.rule import RuleCreate, RuleOut, RuleUpdate
 from app.services import rule_sync
 from app.services.reference_validation import ensure_site_ids_exist
-from app.services.site_scope import apply_site_scope, enrich_row, site_scope_filter
+from app.services.site_scope import apply_site_scope, enrich_row
 
 router = APIRouter()
 
@@ -59,10 +59,8 @@ async def list_rules(
     count = apply_enabled_filter(count, Rule.enabled, query.enabled)
     cond = apply_mode_filter(cond, Rule.mode, query.mode)
     count = apply_mode_filter(count, Rule.mode, query.mode)
-    if query.site_id is not None:
-        scope = site_scope_filter(Rule.site_ids, query.site_id)
-        cond = cond.where(scope)
-        count = count.where(scope)
+    cond = apply_site_filter(cond, Rule.site_ids, query.site_id)
+    count = apply_site_filter(count, Rule.site_ids, query.site_id)
     total = (await db.execute(count)).scalar_one()
     cond = order_by_fields(
         cond,

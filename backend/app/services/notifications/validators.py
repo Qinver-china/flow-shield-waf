@@ -4,10 +4,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.constants.alert_conditions import CONDITION_TYPE_MAP
+from app.constants.traffic_windows import TRAFFIC_BASELINE_MIN_WINDOW_SEC, TRAFFIC_WINDOWS_SEC
 
 
 _BASELINE_CONDITIONS = frozenset({"traffic.baseline_gt", "traffic.baseline_lt"})
-_MIN_BASELINE_WINDOW_SEC = 300
+_QPS_CONDITIONS = frozenset({"traffic.qps_gt", "traffic.qps_lt"})
 
 
 def validate_condition_params(condition_type: str, params: dict[str, Any] | None) -> dict:
@@ -37,8 +38,14 @@ def validate_condition_params(condition_type: str, params: dict[str, Any] | None
             params.pop(key, None)
     if condition_type in _BASELINE_CONDITIONS:
         window_sec = params.get("window_sec")
-        if window_sec is not None and int(window_sec) < _MIN_BASELINE_WINDOW_SEC:
-            raise ValueError(
-                "基线比较不支持 30 秒窗口，请选择 5 分钟或 30 分钟"
-            )
+        if window_sec is not None and int(window_sec) < TRAFFIC_BASELINE_MIN_WINDOW_SEC:
+            raise ValueError("基线比较不支持短于 5 分钟的窗口，请选择 5 分钟或 30 分钟")
+    if condition_type.startswith("traffic."):
+        window_sec = params.get("window_sec")
+        if window_sec is not None and int(window_sec) not in TRAFFIC_WINDOWS_SEC:
+            raise ValueError("不支持的时间窗口")
+    if condition_type in _QPS_CONDITIONS:
+        threshold = params.get("threshold")
+        if threshold is not None and float(threshold) < 0:
+            raise ValueError("QPS 阈值不能为负数")
     return params

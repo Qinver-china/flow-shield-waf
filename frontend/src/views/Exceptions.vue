@@ -73,6 +73,7 @@ import SiteSelect from "@/components/SiteSelect.vue";
 import {
   enabledFilterOptions,
   exceptionScopeFilterOptions,
+  siteScopeFilterField,
 } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
 import { siteIdsColumn } from "@/composables/useSiteOptions";
@@ -91,7 +92,7 @@ const listFilters: ResourceFilterField[] = [
   { key: "q", label: "搜索", type: "search", placeholder: "名称" },
   { key: "scope", label: "范围", type: "select", options: exceptionScopeFilterOptions },
   { key: "enabled", label: "状态", type: "select", options: enabledFilterOptions },
-  { key: "site_id", label: "站点", type: "site" },
+  siteScopeFilterField,
 ];
 
 const batchConfig: BatchConfig = {

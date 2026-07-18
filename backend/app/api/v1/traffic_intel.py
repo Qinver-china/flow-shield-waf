@@ -23,6 +23,7 @@ from app.services.traffic_intel.store.alerts_mysql import AlertStore
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.types import TrafficIntelConfig
+from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.windows import label
 
 router = APIRouter()
@@ -89,11 +90,16 @@ async def intel_status(
     config = _config()
     ch = ClickHouseTrafficStore()
     baselines = BaselineStore()
+    timezone_name = await get_traffic_timezone(db)
 
     windows: list[WindowComparison] = []
     for window_sec in ANALYSIS_WINDOWS_SEC:
         baseline = await baselines.get(
-            db, site_id=site_id, window_sec=window_sec, as_of=datetime.utcnow()
+            db,
+            site_id=site_id,
+            window_sec=window_sec,
+            as_of=datetime.utcnow(),
+            timezone_name=timezone_name,
         )
         current = ch.current_window_requests(window_sec, site_id=site_id)
         baseline_avg = baseline.avg_requests if baseline else None

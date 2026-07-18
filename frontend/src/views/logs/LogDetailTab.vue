@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from "vue";
-import type { LocationQuery } from "vue-router";
+import { useRoute, type LocationQuery } from "vue-router";
 import type { Dayjs } from "dayjs";
 import { DownOutlined, UpOutlined } from "@ant-design/icons-vue";
 import { api } from "@/api";
@@ -111,6 +111,8 @@ import { colSpanForField } from "./useLogFilterField";
 import type { LogDrillDownFilter } from "./LogStatsTab.vue";
 
 const props = defineProps<{ drillDown?: LogDrillDownFilter | null }>();
+
+const route = useRoute();
 
 const quickFilterFields = logDetailQuickFilterFields;
 const advancedFilterGroups = buildAdvancedLogFilterGroups();
@@ -160,6 +162,7 @@ const SELECT_FILTER_KEYS = [
   "method",
   "scheme",
   "http_version",
+  "bot_category",
 ] as const;
 
 const rows = ref<any[]>([]);
@@ -321,9 +324,17 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => route.query,
+  (query) => {
+    if (props.drillDown) return;
+    applyFromQuery(query);
+  },
+);
+
 onMounted(() => {
   void hydrateBotCategoryFilterOptions();
-  if (!props.drillDown) fetchList();
+  if (!props.drillDown) applyFromQuery(route.query);
 });
 
 defineExpose({ applyDrillDown, applyFromQuery });

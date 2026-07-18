@@ -4,6 +4,7 @@ export interface ResourceFilterField {
   type: "search" | "select" | "site";
   placeholder?: string;
   width?: number | string;
+  multiple?: boolean;
   options?: { label: string; value: string | number | boolean }[];
 }
 

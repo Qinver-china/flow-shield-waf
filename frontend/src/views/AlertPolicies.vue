@@ -243,7 +243,14 @@ const logs = ref<any[]>([]);
 const channels = ref<any[]>([]);
 const conditions = ref<any[]>([]);
 const channelTypes = ref<any[]>([]);
-const trafficWindows = ref([{ value: 30, label: "30 秒" }, { value: 300, label: "5 分钟" }, { value: 1800, label: "30 分钟" }]);
+const trafficWindows = ref([
+  { value: 10, label: "10 秒" },
+  { value: 30, label: "30 秒" },
+  { value: 60, label: "1 分钟" },
+  { value: 300, label: "5 分钟" },
+  { value: 1800, label: "30 分钟" },
+  { value: 3600, label: "60 分钟" },
+]);
 const blockWindows = ref([{ value: 5, label: "5 分钟" }, { value: 15, label: "15 分钟" }, { value: 30, label: "30 分钟" }, { value: 60, label: "60 分钟" }]);
 
 const loading = ref(false);
@@ -312,6 +319,7 @@ function defaultParamsFor(type: string) {
   if (type === "traffic.burst_logging") return {};
   if (type.startsWith("traffic.baseline")) return { window_sec: 300, percent: 50 };
   if (type.startsWith("traffic.abs")) return { window_sec: 300, threshold: 1000 };
+  if (type.startsWith("traffic.qps")) return { window_sec: 60, threshold: 100 };
   if (type === "security.block_count") return { window_min: 5, threshold: 100 };
   if (type === "security.block_rate") return { window_min: 5, percent: 30 };
   return {};
@@ -356,6 +364,9 @@ async function loadMeta() {
   ]);
   conditions.value = metaResp.data.conditions || [];
   channelTypes.value = metaResp.data.channel_types || [];
+  if (metaResp.data.traffic_windows?.length) {
+    trafficWindows.value = metaResp.data.traffic_windows;
+  }
   channels.value = chResp.data || [];
 }
 

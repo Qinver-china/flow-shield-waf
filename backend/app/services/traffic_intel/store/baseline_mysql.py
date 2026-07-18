@@ -8,10 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.traffic_intel import TrafficBaseline
 from app.services.traffic_intel.types import Baseline
+from app.services.traffic_intel.timezone import local_datetime
 
 
 def slot_key_for(as_of: datetime) -> str:
-    return f"dow{as_of.isoweekday()}_h{as_of.hour}"
+    """Same weekday + hour + 15-minute quarter in local wall-clock time."""
+    quarter = as_of.minute // 15
+    return f"dow{as_of.isoweekday()}_h{as_of.hour}_q{quarter}"
 
 
 class BaselineStore:
@@ -51,9 +54,15 @@ class BaselineStore:
         site_id: int | None,
         window_sec: int,
         as_of: datetime | None = None,
+        timezone_name: str | None = None,
     ) -> Baseline | None:
         as_of = as_of or datetime.utcnow()
-        slot_key = slot_key_for(as_of)
+        local_as_of = (
+            local_datetime(as_of, timezone_name)
+            if timezone_name
+            else as_of
+        )
+        slot_key = slot_key_for(local_as_of)
         row = (
             await db.execute(
                 select(TrafficBaseline).where(

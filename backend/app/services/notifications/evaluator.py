@@ -17,6 +17,8 @@ from app.services.traffic_intel.constants import REDIS_SNAPSHOT_KEY
 from app.services.traffic_intel.detector import AnomalyDetector
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
+from app.services.traffic_intel.timezone import get_traffic_timezone
+from app.services.traffic_intel.types import TrafficIntelConfig
 from app.services.traffic_intel.types import TrafficIntelConfig
 
 log = logging.getLogger("waf.notify.evaluator")
@@ -69,6 +71,10 @@ class AlertPolicyEvaluator:
             return await self._traffic_abs(params, direction="gt", label=label)
         if ctype == "traffic.abs_lt":
             return await self._traffic_abs(params, direction="lt", label=label)
+        if ctype == "traffic.qps_gt":
+            return await self._traffic_qps(params, direction="gt", label=label)
+        if ctype == "traffic.qps_lt":
+            return await self._traffic_qps(params, direction="lt", label=label)
         if ctype == "traffic.burst_logging":
             return await self._traffic_burst(label)
         if ctype == "security.block_count":
@@ -88,8 +94,13 @@ class AlertPolicyEvaluator:
         window_sec = int(params.get("window_sec", 300))
         percent = float(params.get("percent", 50))
         site_id = params.get("site_id")
+        timezone_name = await get_traffic_timezone(db)
         baseline = await self._baselines.get(
-            db, site_id=site_id, window_sec=window_sec, as_of=datetime.utcnow()
+            db,
+            site_id=site_id,
+            window_sec=window_sec,
+            as_of=datetime.utcnow(),
+            timezone_name=timezone_name,
         )
         if not baseline or baseline.avg_requests <= 0:
             return None
@@ -113,11 +124,38 @@ class AlertPolicyEvaluator:
     async def _traffic_abs(self, params: dict, *, direction: str, label: str) -> str | None:
         window_sec = int(params.get("window_sec", 300))
         threshold = int(params.get("threshold", 0))
-        current = await self._window_requests(window_sec, site_id=None)
+        site_id = params.get("site_id")
+        current = await self._window_requests(window_sec, site_id=site_id)
+        scope = f"站点 #{site_id}" if site_id else "全站"
         if direction == "gt" and current > threshold:
-            return f"【预警】{label}：{window_sec}s 窗口内 {current} 次请求，高于阈值 {threshold}"
+            return (
+                f"【预警】{label}：{scope} {window_sec}s 窗口内 {current} 次请求，"
+                f"高于阈值 {threshold}"
+            )
         if direction == "lt" and current < threshold:
-            return f"【预警】{label}：{window_sec}s 窗口内 {current} 次请求，低于阈值 {threshold}"
+            return (
+                f"【预警】{label}：{scope} {window_sec}s 窗口内 {current} 次请求，"
+                f"低于阈值 {threshold}"
+            )
+        return None
+
+    async def _traffic_qps(self, params: dict, *, direction: str, label: str) -> str | None:
+        window_sec = int(params.get("window_sec", 300))
+        threshold = float(params.get("threshold", 0))
+        site_id = params.get("site_id")
+        current = await self._window_requests(window_sec, site_id=site_id)
+        qps = current / window_sec if window_sec > 0 else 0
+        scope = f"站点 #{site_id}" if site_id else "全站"
+        if direction == "gt" and qps > threshold:
+            return (
+                f"【预警】{label}：{scope} {window_sec}s 窗口平均 QPS {qps:.2f}，"
+                f"高于阈值 {threshold}"
+            )
+        if direction == "lt" and qps < threshold:
+            return (
+                f"【预警】{label}：{scope} {window_sec}s 窗口平均 QPS {qps:.2f}，"
+                f"低于阈值 {threshold}"
+            )
         return None
 
     async def _traffic_burst(self, label: str) -> str | None:
@@ -168,15 +206,20 @@ class AlertPolicyEvaluator:
         *,
         site_id: int | None,
     ) -> int:
-        if window_sec < _LIVE_WINDOW_THRESHOLD_SEC and site_id is None:
-            return await self._snapshot_window_requests(window_sec)
+        if window_sec < _LIVE_WINDOW_THRESHOLD_SEC:
+            return await self._snapshot_window_requests(window_sec, site_id=site_id)
         return await asyncio.to_thread(
             self._ch.current_window_requests,
             window_sec,
             site_id=site_id,
         )
 
-    async def _snapshot_window_requests(self, window_sec: int) -> int:
+    async def _snapshot_window_requests(
+        self,
+        window_sec: int,
+        *,
+        site_id: int | None = None,
+    ) -> int:
         redis = get_redis()
         raw = await redis.get(TRAFFIC_SNAPSHOT_KEY)
         if not raw:
@@ -185,7 +228,11 @@ class AlertPolicyEvaluator:
             data = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             return 0
-        for w in data.get("global", {}).get("windows") or []:
+        if site_id is None:
+            windows = data.get("global", {}).get("windows") or []
+        else:
+            windows = (data.get("sites") or {}).get(str(site_id), {}).get("windows") or []
+        for w in windows:
             try:
                 if int(w.get("sec", 0)) == window_sec:
                     return int(w.get("requests") or 0)

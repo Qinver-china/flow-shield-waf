@@ -39,16 +39,21 @@ export const NO_VALUE_OPS = ["is_empty", "exists", "key_exists", "key_absent"];
 export const LIST_OPS = ["in_list", "not_in", "in_cidr", "geo_in", "between"];
 export const IP_GROUP_OPS = ["in_ip_group", "not_in_ip_group"];
 export const NUMBER_OPS = ["len_gt", "len_lt"];
-export const TRAFFIC_FIELD = "traffic.global";
+export const TRAFFIC_FIELDS = ["traffic.global", "traffic.site"] as const;
 export const TRAFFIC_BASELINE_COMPARES = ["baseline_gt", "baseline_lt"];
+export const TRAFFIC_QPS_COMPARES = ["qps_gt", "qps_lt"];
 export const MAX_GROUP_DEPTH = 10;
 
 export function isTrafficField(fieldKey?: string) {
-  return fieldKey === TRAFFIC_FIELD;
+  return !!fieldKey && (TRAFFIC_FIELDS as readonly string[]).includes(fieldKey);
 }
 
 export function isTrafficBaselineCompare(compare?: string) {
   return !!compare && TRAFFIC_BASELINE_COMPARES.includes(compare);
+}
+
+export function isTrafficQpsCompare(compare?: string) {
+  return !!compare && TRAFFIC_QPS_COMPARES.includes(compare);
 }
 
 export function emptyLeaf(): UiLeaf {
@@ -292,6 +297,8 @@ export function displayLeafValue(
     parts.push(cmp?.label || row.trafficCompare || "-");
     if (isTrafficBaselineCompare(row.trafficCompare)) {
       parts.push(`${row.trafficPercent ?? 0}%`);
+    } else if (isTrafficQpsCompare(row.trafficCompare)) {
+      parts.push(`${row.trafficThreshold ?? 0} QPS`);
     } else {
       parts.push(String(row.trafficThreshold ?? 0));
     }

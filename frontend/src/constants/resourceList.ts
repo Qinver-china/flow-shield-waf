@@ -1,7 +1,18 @@
+import type { ResourceFilterField } from "@/types/resourceList";
+
 export const enabledFilterOptions = [
   { label: "已启用", value: true },
   { label: "已停用", value: false },
 ];
+
+/** 列表筛选：生效站点（多选，与自定义规则一致） */
+export const siteScopeFilterField: ResourceFilterField = {
+  key: "site_id",
+  label: "生效站点",
+  type: "site",
+  multiple: true,
+  width: "320px",
+};
 
 export const modeFilterOptions = [
   { label: "观察", value: "observe" },

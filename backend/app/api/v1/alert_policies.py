@@ -17,9 +17,12 @@ router = APIRouter()
 
 @router.get("/meta/conditions")
 async def alert_condition_types(_user: User = Depends(get_current_user)):
+    from app.constants.alert_conditions import TRAFFIC_WINDOWS
+
     return ok({
         "conditions": ALERT_CONDITION_TYPES,
         "channel_types": CHANNEL_TYPES,
+        "traffic_windows": TRAFFIC_WINDOWS,
     })
 
 

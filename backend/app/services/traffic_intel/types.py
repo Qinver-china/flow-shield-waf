@@ -23,7 +23,7 @@ class TrafficIntelConfig:
 
     enabled: bool = True
     spike_ratio: float = 0.5
-    baseline_lookback_days: int = 7
+    baseline_lookback_days: int = 28
     min_baseline_samples: int = 12
     alert_cooldown_sec: int = 300
     analysis_windows_sec: tuple[int, ...] = (60, 300, 1800)
@@ -47,6 +47,7 @@ class TrafficSnapshot:
     updated_at: int
     global_windows: list[WindowSample] = field(default_factory=list)
     burst_active: bool = False
+    site_windows: dict[int, list[WindowSample]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
