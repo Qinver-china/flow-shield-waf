@@ -618,6 +618,7 @@ onMounted(() => {
 
 .mobile-card {
   padding: 14px;
+  margin-bottom: 12px;
 }
 
 .mobile-card-head {
