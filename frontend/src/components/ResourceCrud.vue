@@ -179,8 +179,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { useRoute } from "vue-router";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import { api } from "@/api";
 import ListFilterBar from "@/components/ListFilterBar.vue";
@@ -226,6 +226,7 @@ const props = withDefaults(
 
 const { isMobile } = useBreakpoint();
 const route = useRoute();
+const router = useRouter();
 const { buildActions } = useResourceQuickActions();
 
 const rows = ref<any[]>([]);
@@ -460,6 +461,41 @@ function openView(row: any) {
   drawerOpen.value = true;
 }
 
+async function openDrawerById(id: number, mode: "view" | "edit") {
+  try {
+    const resp = await api.get(`${props.apiBase}/${id}`);
+    if (mode === "edit") openEdit(resp.data);
+    else openView(resp.data);
+  } catch {
+    message.error("加载资源失败");
+  }
+}
+
+function parseRouteDrawerQuery() {
+  const rawId = route.query.id;
+  const rawDrawer = route.query.drawer;
+  if (!rawId || !rawDrawer) return null;
+  const drawer = Array.isArray(rawDrawer) ? rawDrawer[0] : rawDrawer;
+  if (drawer !== "view" && drawer !== "edit") return null;
+  const id = Number(Array.isArray(rawId) ? rawId[0] : rawId);
+  if (!Number.isFinite(id)) return null;
+  return { id, mode: drawer as "view" | "edit" };
+}
+
+function syncRouteDrawer() {
+  const parsed = parseRouteDrawerQuery();
+  if (!parsed) return;
+  void openDrawerById(parsed.id, parsed.mode);
+}
+
+function clearRouteDrawerQuery() {
+  if (!route.query.id && !route.query.drawer) return;
+  const nextQuery = { ...route.query };
+  delete nextQuery.id;
+  delete nextQuery.drawer;
+  router.replace({ query: nextQuery });
+}
+
 function nameActions(row: Record<string, any>) {
   return buildActions(
     props.apiBase,
@@ -548,7 +584,12 @@ async function persistDrawerEnabled(enabled: boolean) {
   }
 }
 
-defineExpose({ fetchList, openCreate });
+defineExpose({
+  fetchList,
+  openCreate,
+  openViewById: (id: number) => openDrawerById(id, "view"),
+  openEditById: (id: number) => openDrawerById(id, "edit"),
+});
 function parseSiteFilterValue(raw: string | string[], multiple?: boolean) {
   const values = Array.isArray(raw) ? raw : [raw];
   const ids = values
@@ -590,7 +631,19 @@ function applyRouteFilters() {
 onMounted(() => {
   applyRouteFilters();
   fetchList();
+  syncRouteDrawer();
 });
+
+watch(drawerOpen, (open) => {
+  if (!open) clearRouteDrawerQuery();
+});
+
+watch(
+  () => [route.query.id, route.query.drawer],
+  () => {
+    if (route.query.id && route.query.drawer) syncRouteDrawer();
+  },
+);
 </script>
 
 <style scoped>

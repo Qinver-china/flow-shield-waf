@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from app.services.bot_identify import resolve_bot_dimensions
 from app.services.logging.bot_catalog_snapshot import get_bots, get_category_values
@@ -51,7 +52,12 @@ def _site_id_value(entry: dict) -> int | None:
         return None
 
 
-def enrich_entry(entry: dict) -> dict:
+def _enrich_one(
+    entry: dict,
+    *,
+    bots: list[dict[str, Any]],
+    categories: set[str] | None,
+) -> dict:
     out = dict(entry)
     path = out.get("uri_path") or out.get("uri") or "/"
     if isinstance(path, str) and "?" in path:
@@ -69,8 +75,8 @@ def enrich_entry(entry: dict) -> dict:
     bot_name, bot_category = resolve_bot_dimensions(
         ua_str,
         _site_id_value(out),
-        get_bots(),
-        get_category_values() or None,
+        bots,
+        categories,
     )
     if bot_name or bot_category:
         out["bot_name"] = bot_name
@@ -89,3 +95,20 @@ def enrich_entry(entry: dict) -> dict:
         if not out.get("xff_first"):
             out["xff_first"] = _first_xff(payload.get("headers"))
     return out
+
+
+def enrich_entry(entry: dict) -> dict:
+    return _enrich_one(
+        entry,
+        bots=get_bots(),
+        categories=get_category_values() or None,
+    )
+
+
+def enrich_entries(entries: list[dict]) -> list[dict]:
+    """Enrich a batch sharing one bot-catalog snapshot (same result as enrich_entry)."""
+    if not entries:
+        return []
+    bots = get_bots()
+    categories = get_category_values() or None
+    return [_enrich_one(entry, bots=bots, categories=categories) for entry in entries]

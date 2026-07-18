@@ -177,16 +177,16 @@ end
 function _M.tick(cfg)
     if not dict then return end
 
+    -- Heavy window aggregation + Redis publish only on worker 0.
+    if ngx.worker.id() ~= 0 then
+        return
+    end
+
     local now = math.floor(ngx.now())
     local global_counts = window_counts(now, nil)
     cache_global_windows(global_counts)
     local thresholds, logging = thresholds_from_settings(cfg)
     local burst = update_burst(global_counts, logging)
-
-    -- only worker 0 publishes snapshot and polls viewer flag
-    if ngx.worker.id() ~= 0 then
-        return
-    end
 
     refresh_viewer_flag()
 

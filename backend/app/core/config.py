@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     clickhouse_user: str = "default"
     clickhouse_password: str = ""
     clickhouse_database: str = "waf"
+    # Log ingest: larger batches + server-side async_insert reduce insert/MV overhead.
+    clickhouse_async_insert: bool = True
+    # Hourly MV is unused by queries today; detach on ingest hot path when false.
+    clickhouse_hourly_mv_enabled: bool = False
+
+    # log collector (worker)
+    log_collector_batch_size: int = 2000
+    log_collector_max_drain_batches: int = 4
+    log_collector_bot_catalog_refresh_sec: int = 30
 
     # engine integration
     engine_conf_dir: str = "/data/engine/conf.d"

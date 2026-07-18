@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone, timedelta
 
-from app.core.clickhouse import get_clickhouse
+from app.core.clickhouse import get_clickhouse, get_clickhouse_ingest
 from app.services.traffic_intel.constants import (
     CH_MINUTE_TABLE,
     CH_WINDOW_SNAPSHOT_TABLE,
@@ -50,7 +50,7 @@ class ClickHouseTrafficStore:
         *,
         site_id: int | None = None,
     ) -> None:
-        client = get_clickhouse()
+        client = get_clickhouse_ingest()
         client.insert(
             CH_MINUTE_TABLE,
             [[minute.replace(second=0, microsecond=0), int(requests), site_id]],
@@ -75,7 +75,7 @@ class ClickHouseTrafficStore:
             ]
             for s in samples
         ]
-        client = get_clickhouse()
+        client = get_clickhouse_ingest()
         client.insert(
             CH_WINDOW_SNAPSHOT_TABLE,
             rows,

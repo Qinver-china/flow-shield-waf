@@ -13,6 +13,9 @@ local debug_headers = require "waf.debug_headers"
 
 local _M = {}
 
+-- When multiple observe rules match, only the last hit is logged at pipeline end.
+local pending_observe = nil
+
 local function make_request_id()
     if ngx.var.request_id and ngx.var.request_id ~= "" then
         return ngx.var.request_id
@@ -54,15 +57,50 @@ local function rule_cleared(meta, ext)
     }, ext)
 end
 
+local function clear_pending_observe()
+    pending_observe = nil
+end
+
+local function remember_observe(cfg, site, ctx, meta, ext, trace)
+    pending_observe = {
+        cfg = cfg,
+        site = site,
+        ctx = ctx,
+        meta = meta,
+        ext = ext,
+        trace = trace,
+    }
+end
+
+local function flush_pending_observe()
+    if not pending_observe then
+        return
+    end
+    local pending = pending_observe
+    pending_observe = nil
+    log_emit.emit(
+        pending.cfg,
+        pending.ctx,
+        pending.meta,
+        "observe",
+        false,
+        pending.trace,
+        pending.ext
+    )
+end
+
 -- Apply a protection mode. Returns "continue" to keep evaluating, or exits the
 -- request for terminal actions (block / captcha / js_challenge / slide_captcha).
 local function apply_mode(cfg, site, ctx, mode, meta, ext, trace)
     mode = mode or "block"
     debug_headers.apply(cfg, ctx, mode, meta)
     if mode == "observe" then
-        log_emit.emit(cfg, ctx, meta, mode, false, trace, ext)
+        remember_observe(cfg, site, ctx, meta, ext, trace)
         return "continue"
-    elseif mode == "block" then
+    end
+
+    clear_pending_observe()
+    if mode == "block" then
         log_emit.emit(cfg, ctx, meta, mode, true, trace, ext)
         return block.run(cfg, site, ctx, meta)
     elseif mode == "captcha" then
@@ -86,6 +124,8 @@ local function apply_mode(cfg, site, ctx, mode, meta, ext, trace)
 end
 
 function _M.run()
+    pending_observe = nil
+
     if sync.needs_load() then
         sync.load(true)
     end
@@ -188,6 +228,8 @@ function _M.run()
             end
         end
     end
+
+    flush_pending_observe()
 end
 
 return _M

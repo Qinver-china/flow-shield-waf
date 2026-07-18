@@ -13,18 +13,78 @@
       >
         <template #bodyCell="{ column, record, text }">
           <template v-if="columnKey(column) === 'ts'">{{ formatTs(record.ts) }}</template>
+          <template v-else-if="columnKey(column) === 'domain'">
+            <log-dimension-action-cell
+              v-if="record.domain"
+              :label="record.domain"
+              detail-field="domain"
+              :detail-value="record.domain"
+              :filter-state="filterState"
+            />
+            <span v-else>-</span>
+          </template>
+          <template v-else-if="columnKey(column) === 'client_ip'">
+            <log-dimension-action-cell
+              v-if="record.client_ip"
+              :label="record.client_ip"
+              detail-field="client_ip"
+              :detail-value="record.client_ip"
+              :filter-state="filterState"
+            />
+            <span v-else>-</span>
+          </template>
+          <template v-else-if="columnKey(column) === 'method'">
+            <log-dimension-action-cell
+              v-if="record.method"
+              :label="record.method"
+              detail-field="method"
+              :detail-value="record.method"
+              :filter-state="filterState"
+            />
+            <span v-else>-</span>
+          </template>
+          <template v-else-if="columnKey(column) === 'uri'">
+            <log-dimension-action-cell
+              v-if="record.uri"
+              :label="record.uri"
+              detail-field="uri"
+              :detail-value="record.uri"
+              :filter-state="filterState"
+            />
+            <span v-else>-</span>
+          </template>
           <template v-else-if="columnKey(column) === 'source'">
-            <a-tag>{{ sourceLabel[record.source] || record.source || "-" }}</a-tag>
+            <log-dimension-action-cell
+              v-if="record.source"
+              :label="sourceLabel[record.source] || record.source"
+              detail-field="source"
+              :detail-value="record.source"
+              :filter-state="filterState"
+              variant="tag"
+            />
+            <span v-else>-</span>
           </template>
           <template v-else-if="columnKey(column) === 'mode'">
-            <a-tag :color="modeColor[record.mode] || 'default'">
-              {{ modeLabel[record.mode] || record.mode || "-" }}
-            </a-tag>
+            <log-dimension-action-cell
+              v-if="record.mode"
+              :label="modeLabel[record.mode] || record.mode"
+              detail-field="mode"
+              :detail-value="record.mode"
+              :filter-state="filterState"
+              variant="tag"
+              :tag-color="modeColor[record.mode] || 'default'"
+            />
+            <span v-else>-</span>
           </template>
           <template v-else-if="columnKey(column) === 'blocked'">
-            <a-tag :color="record.blocked ? 'red' : 'green'">
-              {{ record.blocked ? "拦截" : "放行" }}
-            </a-tag>
+            <log-dimension-action-cell
+              :label="record.blocked ? '拦截' : '放行'"
+              detail-field="blocked"
+              :detail-value="record.blocked ? 'true' : 'false'"
+              :filter-state="filterState"
+              variant="tag"
+              :tag-color="record.blocked ? 'red' : 'green'"
+            />
           </template>
           <template v-else-if="columnKey(column) === '__action'">
             <a-button type="link" size="small" @click="openDetail(record.id)">查看详情</a-button>
@@ -33,8 +93,6 @@
             <log-dimension-action-cell
               v-if="record.rule_id"
               :label="record.rule_name || `规则 #${record.rule_id}`"
-              dimension="rule_id"
-              :item-key="ruleItemKey(record)"
               :filter-state="filterState"
               :log-rule-record="record"
             />
@@ -134,11 +192,6 @@ function onTableChange(pg: any) {
   page.value = pg.current;
   pageSize.value = pg.pageSize;
   fetchList();
-}
-
-function ruleItemKey(record: { source?: string | null; rule_id?: number | null }) {
-  if (!record.rule_id) return "";
-  return record.source ? `${record.source}:${record.rule_id}` : String(record.rule_id);
 }
 
 function openDetail(id: string) {

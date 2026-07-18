@@ -755,6 +755,37 @@ export const LOG_SOURCE_PAGE: Record<string, string> = {
   bot: "/bots",
 };
 
+export const LOG_API_PAGE: Record<string, string> = {
+  "/api/v1/rules": "/rules",
+  "/api/v1/blacklist": "/blacklist",
+  "/api/v1/whitelist": "/whitelist",
+  "/api/v1/ratelimit": "/ratelimit",
+  "/api/v1/bots": "/bots",
+  "/api/v1/sites": "/sites",
+};
+
+export type ResourceDrawerMode = "view" | "edit";
+
+export function getResourcePagePath(apiBase: string): string | null {
+  return LOG_API_PAGE[apiBase] || null;
+}
+
+export function buildResourceDrawerLocation(
+  apiBase: string,
+  id: number,
+  mode: ResourceDrawerMode = "view",
+) {
+  const path = getResourcePagePath(apiBase);
+  if (!path || !Number.isFinite(id)) return null;
+  return {
+    path,
+    query: {
+      id: String(id),
+      drawer: mode,
+    },
+  };
+}
+
 export function parseRuleStatsKey(key: string): { source?: string; ruleId?: number } {
   const sep = key.indexOf(":");
   if (sep > 0) {
@@ -921,6 +952,18 @@ export function getResourceViewLabel(dimension: StatsDimension, key: string): st
     return `查看${sourceTitle}`;
   }
   return "查看详情";
+}
+
+export function getResourceEditLabel(source: string): string {
+  const labels: Record<string, string> = {
+    rule: "编辑规则",
+    blacklist: "编辑黑名单",
+    whitelist: "编辑白名单",
+    ratelimit: "编辑限速规则",
+    bot: "编辑 Bot",
+    site: "编辑站点",
+  };
+  return labels[source] || "编辑";
 }
 
 export function getResourceViewTargetFromLogRule(record: {

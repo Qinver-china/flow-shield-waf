@@ -248,8 +248,8 @@ function _M.evaluated_fields(trace)
     return list
 end
 
-function _M.summary_columns(trace, ext)
-    local baseline = _M.capture_baseline(ext, trace)
+function _M.summary_columns(trace, ext, captured)
+    local baseline = captured or _M.capture_baseline(ext, trace)
     local ua = header_lookup(baseline.headers, "user-agent")
         or ngx.var.http_user_agent
         or trace_pick(trace, "http.ua")
@@ -260,9 +260,9 @@ function _M.summary_columns(trace, ext)
     }
 end
 
-function _M.build_baseline(trace, meta, ext)
+function _M.build_baseline(trace, meta, ext, captured)
     meta = meta or {}
-    local baseline = _M.capture_baseline(ext, trace)
+    local baseline = captured or _M.capture_baseline(ext, trace)
     return {
         client_ip = baseline.client_ip,
         client = baseline.client,

@@ -157,3 +157,28 @@ def test_enrich_entry_clears_bot_when_no_catalog_match(monkeypatch):
     assert out["bot_category"] is None
     assert out["ua_family"] == "browser"
     assert out["ua_browser"] == "Chrome"
+
+
+def test_enrich_entries_matches_single_enrich(monkeypatch):
+    bots = [
+        {
+            "name": "Googlebot",
+            "category": "search_engine",
+            "enabled": True,
+            "ua_patterns": ["Googlebot"],
+        }
+    ]
+    monkeypatch.setattr("app.services.logging.enrich.get_bots", lambda: bots)
+    monkeypatch.setattr("app.services.logging.enrich.get_category_values", lambda: set())
+    entries = [
+        {"uri": "/", "ua": "Mozilla/5.0 (compatible; Googlebot/2.1)", "site_id": 1},
+        {"uri": "/api", "ua": "Mozilla/5.0 Chrome/120.0.0.0"},
+    ]
+    from app.services.logging.enrich import enrich_entries
+
+    batch = enrich_entries(entries)
+    assert len(batch) == 2
+    assert batch[0]["bot_name"] == "Googlebot"
+    assert batch[1]["ua_family"] == "browser"
+    for entry, enriched in zip(entries, batch):
+        assert enrich_entry(entry) == enriched

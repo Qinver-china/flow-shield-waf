@@ -3,6 +3,7 @@
 -- bumps `waf:config:version` on every change. Workers poll the version.
 local cjson = require "cjson.safe"
 local rc = require "waf.redis_client"
+local rule_sort = require "waf.rule_sort"
 
 local _M = {}
 
@@ -80,6 +81,10 @@ local function sort_by_priority(items)
     return items
 end
 
+local function sort_rules(items)
+    return rule_sort.sort_rules(items)
+end
+
 local function mark_failure()
     _fail_streak = _fail_streak + 1
     local delay = math.min(30, 2 ^ math.min(_fail_streak, 5))
@@ -138,7 +143,7 @@ function _M.load(force)
     _config = {
         version = ver,
         sites = index_by_domain(parsed.sites),
-        rules = sort_by_priority(parsed.rules or {}),
+        rules = sort_rules(parsed.rules or {}),
         whitelist = parsed.whitelist or {},
         blacklist = parsed.blacklist or {},
         exceptions = parsed.exceptions or {},

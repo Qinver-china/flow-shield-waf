@@ -1,5 +1,21 @@
 # 更新日志
 
+## [0.2.8] - 2026-07-18
+
+### 性能
+
+- **ClickHouse 日志写入**：collector 批次默认 2000、支持积压连续 drain；ingest 线程复用连接并默认开启 `async_insert`；默认 detach 小时聚合物化视图以降低写入 CPU（可通过 `CLICKHOUSE_HOURLY_MV_ENABLED=true` 恢复）
+- **Worker enrich**：批量共享 bot 目录快照，减少每条日志重复加载
+- **引擎日志路径**：`capture_baseline` 单次采集；多条 observe 命中仅保留最后一条日志；全匹配 catch-all observe 规则自动置底；traffic 窗口聚合仅在 worker 0 执行
+
+### 日志
+
+- 明细列表域名、IP、方法、URL 等列支持与统计页一致的快捷筛选与资源下钻
+
+### 界面
+
+- 资源管理列表移动端卡片间距优化
+
 ## [0.2.7] - 2026-07-18
 
 ### 日志

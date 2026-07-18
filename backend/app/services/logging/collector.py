@@ -4,7 +4,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
+from app.core.config import settings
 from app.core.redis import get_redis
 from app.services.logging.bot_catalog_snapshot import refresh_from_redis
 from app.services.logging.clickhouse_store import ClickHouseLogStore
@@ -15,9 +17,10 @@ STREAM_KEY = "waf:logs:stream"
 DLQ_STREAM_KEY = "waf:logs:dlq"
 GROUP = "waf-log-ingest"
 CONSUMER = "worker-1"
-BATCH_SIZE = 500
 IDLE_SLEEP = 0.5
 MAX_PERSIST_RETRIES = 3
+
+_last_bot_catalog_refresh = 0.0
 
 
 async def _ensure_group(redis) -> None:
@@ -40,9 +43,9 @@ def _parse_entry(fields: dict) -> dict | None:
         return None
 
 
-async def _read_stream_batch(redis) -> list[tuple[str, dict]]:
+async def _read_stream_batch(redis, *, count: int, block_ms: int) -> list[tuple[str, dict]]:
     resp = await redis.xreadgroup(
-        GROUP, CONSUMER, {STREAM_KEY: ">"}, count=BATCH_SIZE, block=1000
+        GROUP, CONSUMER, {STREAM_KEY: ">"}, count=count, block=block_ms
     )
     if not resp:
         return []
@@ -59,6 +62,42 @@ async def _read_stream_batch(redis) -> list[tuple[str, dict]]:
             }
             out.append((msg_id, parsed_fields))
     return out
+
+
+async def _drain_stream_batch(redis) -> list[tuple[str, dict]]:
+    """Read up to batch_size * max_drain_batches messages when backlog exists."""
+    batch_size = settings.log_collector_batch_size
+    max_batches = max(1, settings.log_collector_max_drain_batches)
+    max_entries = batch_size * max_batches
+    collected: list[tuple[str, dict]] = []
+
+    for batch_idx in range(max_batches):
+        remaining = max_entries - len(collected)
+        if remaining <= 0:
+            break
+        block_ms = 1000 if batch_idx == 0 else 0
+        chunk = await _read_stream_batch(
+            redis,
+            count=min(batch_size, remaining),
+            block_ms=block_ms,
+        )
+        if not chunk:
+            break
+        collected.extend(chunk)
+        if len(chunk) < batch_size:
+            break
+    return collected
+
+
+async def _maybe_refresh_bot_catalog(redis) -> None:
+    global _last_bot_catalog_refresh
+
+    interval = max(5, settings.log_collector_bot_catalog_refresh_sec)
+    now = time.monotonic()
+    if now - _last_bot_catalog_refresh < interval:
+        return
+    await refresh_from_redis(redis)
+    _last_bot_catalog_refresh = now
 
 
 async def _send_dlq(redis, msg_id: str, error: str, fields: dict | None = None) -> None:
@@ -78,12 +117,21 @@ async def run_consumer(stop_event: asyncio.Event | None = None) -> None:
     store = ClickHouseLogStore()
     await store.ensure_schema()
     await _ensure_group(redis)
+    from app.services.logging.clickhouse_patches import ensure_hourly_mv_state
+
+    await asyncio.to_thread(ensure_hourly_mv_state)
     await refresh_from_redis(redis)
-    log.info("log collector started (clickhouse)")
+    global _last_bot_catalog_refresh
+    _last_bot_catalog_refresh = time.monotonic()
+    log.info(
+        "log collector started (clickhouse batch_size=%d max_drain_batches=%d)",
+        settings.log_collector_batch_size,
+        settings.log_collector_max_drain_batches,
+    )
 
     while stop_event is None or not stop_event.is_set():
-        await refresh_from_redis(redis)
-        stream_msgs = await _read_stream_batch(redis)
+        await _maybe_refresh_bot_catalog(redis)
+        stream_msgs = await _drain_stream_batch(redis)
         if not stream_msgs:
             continue
 

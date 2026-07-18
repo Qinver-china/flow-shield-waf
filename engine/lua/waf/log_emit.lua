@@ -47,8 +47,8 @@ local function xff_first()
     return xff:match("^%s*([^,%s]+)")
 end
 
-function _M.build_tier_a(ctx, meta, mode, blocked, trace, ext)
-    local summary = log_snapshot.summary_columns(trace, ext)
+function _M.build_tier_a(ctx, meta, mode, blocked, trace, ext, captured)
+    local summary = log_snapshot.summary_columns(trace, ext, captured)
     local path = uri_path()
     local ua = summary.ua or ngx.var.http_user_agent
     if ua and #ua > MAX_UA then
@@ -103,8 +103,9 @@ function _M.emit(cfg, ctx, meta, mode, blocked, trace, ext)
         return
     end
 
-    local entry = _M.build_tier_a(ctx, meta, mode, blocked, trace, ext)
-    local baseline = log_snapshot.build_baseline(trace, meta, ext)
+    local captured = log_snapshot.capture_baseline(ext, trace)
+    local entry = _M.build_tier_a(ctx, meta, mode, blocked, trace, ext, captured)
+    local baseline = log_snapshot.build_baseline(trace, meta, ext, captured)
     merge_baseline(entry, baseline)
 
     if log_policy.include_detail(cfg, mode) then

@@ -6,8 +6,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from app.core.clickhouse import get_clickhouse
-from app.services.logging.enrich import enrich_entry
+from app.core.clickhouse import get_clickhouse, get_clickhouse_ingest
+from app.services.logging.enrich import enrich_entries
 
 log = logging.getLogger("waf.clickhouse_store")
 
@@ -43,8 +43,7 @@ def _json_str(value) -> str:
         return "{}"
 
 
-def _row_from_entry(entry: dict) -> list:
-    e = enrich_entry(entry)
+def _row_from_enriched(e: dict) -> list:
     ts = _ts_value(e)
     blocked = bool(e.get("blocked"))
     ip_priv = e.get("ip_is_private")
@@ -102,11 +101,11 @@ class ClickHouseLogStore:
     async def add_many(self, entries: list[dict]) -> int:
         if not entries:
             return 0
-        rows = [_row_from_entry(e) for e in entries]
-        client = get_clickhouse()
+        enriched = enrich_entries(entries)
+        rows = [_row_from_enriched(e) for e in enriched]
 
         def _insert():
-            client.insert("waf_logs", rows, column_names=_COLUMNS)
+            get_clickhouse_ingest().insert("waf_logs", rows, column_names=_COLUMNS)
 
         await asyncio.to_thread(_insert)
         return len(rows)
