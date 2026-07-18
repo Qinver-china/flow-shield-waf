@@ -1,5 +1,5 @@
 <template>
-  <a-tooltip title="开启后总览数据每 5 秒自动刷新">
+  <a-tooltip title="开启后总览数据每 8 秒自动刷新">
     <label class="live-refresh-toggle">
       <span class="live-refresh-label">自动刷新</span>
       <a-switch :checked="enabled" size="small" @change="onChange" />

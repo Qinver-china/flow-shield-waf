@@ -247,7 +247,6 @@ import {
 } from "@ant-design/icons-vue";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
-import type { Dayjs } from "dayjs";
 import { storeToRefs } from "pinia";
 import { api } from "@/api";
 import StatCard from "@/components/StatCard.vue";
@@ -258,7 +257,7 @@ import { useDashboardLiveRefresh } from "@/composables/useDashboardLiveRefresh";
 import { echartsThemeName } from "@/composables/useEchartsTheme";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
-import { formatDateTimeShort, formatWindowRange, nowInAppTz } from "@/utils/datetime";
+import { formatDateTimeShort, formatWindowRange } from "@/utils/datetime";
 import { trafficWindowLabels } from "@/views/logs/constants";
 
 interface CountPair {
@@ -371,10 +370,12 @@ const countryEl = ref<HTMLElement>();
 const logTypeEl = ref<HTMLElement>();
 
 const charts: ECharts[] = [];
-const LIVE_REFRESH_DELAY_MS = 5000;
+const LIVE_REFRESH_DELAY_MS = 8000;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let liveRefreshRunning = false;
-const dashboardWindowEnd = ref<Dayjs>(nowInAppTz());
+/** Epoch ms for rolling window end; numeric ref keeps live refresh label reactive. */
+const dashboardWindowEndAt = ref(Date.now());
+const liveClockTick = ref(0);
 const timezoneTick = ref(0);
 
 function enabledSub(item: CountPair) {
@@ -409,7 +410,8 @@ const securityCards = computed(() => [
 
 const statsWindowLabel = computed(() => {
   void timezoneTick.value;
-  return formatWindowRange(24, dashboardWindowEnd.value);
+  void liveClockTick.value;
+  return formatWindowRange(24, dashboardWindowEndAt.value);
 });
 
 const ruleCols = [
@@ -743,7 +745,8 @@ watch(trafficSiteId, () => {
 });
 
 async function syncDashboardWindow() {
-  dashboardWindowEnd.value = nowInAppTz();
+  dashboardWindowEndAt.value = Date.now();
+  liveClockTick.value += 1;
   await nextTick();
 }
 
@@ -757,6 +760,7 @@ async function refreshAll(silent = false) {
     loadTraffic(),
     loadIntel(),
   ]);
+  await syncDashboardWindow();
 }
 
 function scheduleLiveRefresh() {
@@ -789,8 +793,7 @@ watch(liveRefreshEnabled, (enabled) => {
 
 watch(() => appSettings.timezone, async () => {
   timezoneTick.value += 1;
-  dashboardWindowEnd.value = nowInAppTz();
-  await nextTick();
+  await syncDashboardWindow();
   if (stats.trend.length) updateCharts(true);
 });
 
