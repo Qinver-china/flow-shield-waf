@@ -75,7 +75,7 @@
             <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
           </template>
           <a-row class="traffic-metrics-grid" :gutter="[8, 8]">
-            <a-col v-for="w in traffic.windows" :key="w.sec" :xs="12" :sm="6" :md="6" :lg="6" :xl="6">
+            <a-col v-for="w in traffic.windows" :key="w.sec" :xs="12" :sm="8" :md="8" :lg="4" :xl="4">
               <div class="metric-window-card traffic-window">
                 <div class="metric-window-label">{{ windowLabel(w.sec) }}</div>
                 <div class="metric-window-value">
@@ -98,9 +98,9 @@
           <template #extra>
             <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
           </template>
-          <a-empty v-if="!intel.windows?.length" description="暂无数据" />
+          <a-empty v-if="!intelDisplayWindows.length" description="暂无数据" />
           <a-row v-else class="traffic-metrics-grid" :gutter="[8, 8]">
-            <a-col v-for="w in intel.windows" :key="w.window_sec" :xs="12" :sm="6" :md="6" :lg="6" :xl="6">
+            <a-col v-for="w in intelDisplayWindows" :key="w.window_sec" :xs="12" :sm="12" :md="12" :lg="6" :xl="6">
               <div class="metric-window-card intel-item" :class="{ anomaly: w.is_anomaly }">
                 <div class="metric-window-label">{{ w.label }}</div>
                 <div class="metric-window-value">
@@ -368,6 +368,11 @@ const traffic = reactive<{ burst_active: boolean; windows: any[] }>({
 
 const trafficCardTitle = computed(() =>
   trafficSiteId.value == null ? "实时全站流量" : `实时站点流量 · ${formatSiteId(trafficSiteId.value)}`,
+);
+
+/** 异常检测仅展示有基线学习能力的窗口（排除 10s / 30s） */
+const intelDisplayWindows = computed(() =>
+  (intel.windows || []).filter((w: { window_sec: number }) => w.window_sec !== 10 && w.window_sec !== 30),
 );
 
 const feedLoading = ref(false);

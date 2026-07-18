@@ -11,8 +11,8 @@ from app.constants.logging_settings import (
     DEFAULT_LOG_RETENTION_DAYS,
     DEFAULT_OBSERVE_SAMPLE_RATE_ACTIVE,
     DEFAULT_OBSERVE_SAMPLE_RATE_IDLE,
+    TRAFFIC_WINDOWS,
 )
-from app.constants.traffic_windows import TRAFFIC_WINDOW_LABELS, TRAFFIC_WINDOWS_SEC
 from app.services.waf_settings import normalize_auto_thresholds
 
 
@@ -101,7 +101,5 @@ class LoggingSettingsOut(LoggingSettings):
 
 
 def traffic_window_options() -> list[dict]:
-    return [
-        {"window_sec": w, "label": TRAFFIC_WINDOW_LABELS.get(w, f"{w} 秒")}
-        for w in TRAFFIC_WINDOWS_SEC
-    ]
+    labels = {10: "10 秒", 30: "30 秒", 60: "1 分钟", 300: "5 分钟", 1800: "30 分钟", 3600: "60 分钟"}
+    return [{"window_sec": w, "label": labels.get(w, f"{w} 秒")} for w in TRAFFIC_WINDOWS]

@@ -482,6 +482,8 @@ export function logDetailFiltersToConditions(filters: LogDetailFilters): LogFilt
 }
 
 export const trafficWindowLabels: Record<number, string> = {
+  10: "10 秒",
+  30: "30 秒",
   60: "1 分钟",
   300: "5 分钟",
   1800: "30 分钟",

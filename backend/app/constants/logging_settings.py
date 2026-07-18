@@ -1,7 +1,5 @@
 """Default logging / traffic auto-enable settings."""
 
-from app.constants.traffic_windows import TRAFFIC_WINDOWS_SEC
-
 DEFAULT_LOGGING_CONTROL_MODE = "manual"
 DEFAULT_LOGGING_ENABLED = True
 DEFAULT_LOGGING_SKIP_OBSERVE = False
@@ -19,4 +17,4 @@ DEFAULT_AUTO_THRESHOLDS: list[dict] = [
     {"window_sec": 3600, "max_requests": 80000},
 ]
 
-TRAFFIC_WINDOWS = list(TRAFFIC_WINDOWS_SEC)
+TRAFFIC_WINDOWS = [10, 30, 60, 300, 1800, 3600]

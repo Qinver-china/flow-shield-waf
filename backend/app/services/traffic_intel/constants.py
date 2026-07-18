@@ -1,16 +1,16 @@
 """Traffic intelligence constants.
 
 Realtime windows (engine) vs analysis windows (baseline / anomaly detection):
-- Engine keeps 1m–60m sliding counters for dashboard + burst logging.
-- Intel pipeline uses the same windows for baseline comparison and attack hints.
+- Engine keeps 10s–3600s sliding counters for dashboard + burst logging.
+- Intel pipeline focuses on 1m / 5m / 30m for baseline comparison and attack hints.
 """
 
-from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC, TRAFFIC_WINDOWS_SEC
-
 # Windows published by engine (traffic_counter.lua) — keep in sync with Lua WINDOWS.
-REALTIME_WINDOWS_SEC = TRAFFIC_WINDOWS_SEC
+REALTIME_WINDOWS_SEC = (10, 30, 60, 300, 3600)
 
-# Windows used for baseline + anomaly detection.
+# Windows used for baseline + anomaly detection (subset of engine windows).
+from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC
+
 ANALYSIS_WINDOWS_SEC = TRAFFIC_BASELINE_WINDOWS_SEC
 
 from app.constants.traffic_windows import TRAFFIC_WINDOW_LABELS as WINDOW_LABELS
