@@ -3,25 +3,12 @@
     {{ formatLeafRow(row, fieldMap, operators, ipGroupLabel) }}
   </div>
   <div v-else-if="isTrafficField(row.field)" class="cond-row cond-traffic-row">
-    <a-select
+    <condition-field-picker
       v-model:value="row.field"
-      show-search
-      class="field-select"
-      placeholder="字段"
-      option-filter-prop="label"
+      :catalog="catalog"
+      :field-map="fieldMap"
       @change="() => onFieldChange(row, fieldMap)"
-    >
-      <a-select-opt-group v-for="cat in catalog" :key="cat.name" :label="cat.name">
-        <a-select-option
-          v-for="f in cat.fields"
-          :key="f.key"
-          :value="f.key"
-          :label="f.label"
-        >
-          {{ f.label }}
-        </a-select-option>
-      </a-select-opt-group>
-    </a-select>
+    />
 
     <a-select
       v-model:value="row.trafficWindow"
@@ -74,25 +61,12 @@
     <a-button danger size="small" type="text" @click="$emit('remove')">删除</a-button>
   </div>
   <div v-else class="cond-row">
-    <a-select
+    <condition-field-picker
       v-model:value="row.field"
-      show-search
-      class="field-select"
-      placeholder="字段"
-      option-filter-prop="label"
+      :catalog="catalog"
+      :field-map="fieldMap"
       @change="() => onFieldChange(row, fieldMap)"
-    >
-      <a-select-opt-group v-for="cat in catalog" :key="cat.name" :label="cat.name">
-        <a-select-option
-          v-for="f in cat.fields"
-          :key="f.key"
-          :value="f.key"
-          :label="f.label"
-        >
-          {{ f.label }}
-        </a-select-option>
-      </a-select-opt-group>
-    </a-select>
+    />
 
     <a-input
       v-if="fieldMap[row.field || '']?.requires_arg"
@@ -159,7 +133,7 @@
     />
 
     <a-select
-      v-else-if="isListOp(row.op) && !hasOptions(fieldMap, row.field)"
+      v-else-if="(isListOp(row.op) && !hasOptions(fieldMap, row.field)) || isStringMultiOp(row.op)"
       v-model:value="row.valueList"
       mode="tags"
       class="value-input"
@@ -190,6 +164,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import ConditionFieldPicker from "@/components/ConditionFieldPicker.vue";
 import type { Category, Field, UiLeaf } from "@/composables/useConditionModel";
 import type { IpGroupOption } from "@/composables/useIpGroupOptions";
 import {
@@ -200,6 +175,7 @@ import {
   isIpGroupOp,
   isListOp,
   isNumberOp,
+  isStringMultiOp,
   isTrafficBaselineCompare,
   isTrafficField,
   isTrafficQpsCompare,
@@ -243,9 +219,6 @@ const ipGroupSelectOptions = computed(() =>
 }
 .cond-traffic-row .traffic-compare-select {
   width: 148px;
-}
-.field-select {
-  width: 150px;
 }
 .arg-input {
   width: 96px;

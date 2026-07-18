@@ -60,6 +60,10 @@ FIELD_OPTIONS: dict[str, list[dict[str, str]]] = {
         {"value": "education", "label": "教育网"},
         {"value": "government", "label": "政府"},
     ],
+    "ua.family": [
+        {"value": "browser", "label": "浏览器"},
+        {"value": "bot", "label": "Bot"},
+    ],
     "traffic.global": traffic_window_options(as_string=True),
     "traffic.site": traffic_window_options(as_string=True),
 }
@@ -98,8 +102,8 @@ OPERATORS_BY_TYPE: dict[str, list[str]] = {
 OPERATORS: dict[str, str] = {
     "equals": "等于",
     "not_equals": "不等于",
-    "contains": "包含字符",
-    "not_contains": "不包含字符",
+    "contains": "包含字符串",
+    "not_contains": "排除字符串",
     "starts_with": "以…开头",
     "ends_with": "以…结尾",
     "regex": "正则匹配",
@@ -211,6 +215,9 @@ FIELDS: list[dict] = [
     _f("bot.name", "Bot 名称", "Bot 识别", STRING),
     _f("bot.category", "Bot 分类", "Bot 识别", ENUM),
     _f("bot.is_known", "已知 Bot", "Bot 识别", BOOL),
+    # ua parsing (aligned with log stats: ua_family / ua_os)
+    _f("ua.family", "UA 类型", "UA 解析", ENUM),
+    _f("ua.os", "操作系统", "UA 解析", STRING),
     # traffic intelligence
     {
         "key": "traffic.global",

@@ -58,10 +58,27 @@ local OPS = {}
 OPS.equals = function(v, t) return tostr(v) == tostr(t) end
 OPS.not_equals = function(v, t) return tostr(v) ~= tostr(t) end
 OPS.contains = function(v, t)
-    local sv = tostr(v); local st = tostr(t)
-    return sv ~= nil and st ~= nil and sv:find(st, 1, true) ~= nil
+    local sv = tostr(v)
+    if sv == nil then return false end
+    for _, item in ipairs(as_list(t)) do
+        local st = tostr(item)
+        if st ~= nil and st ~= "" and sv:find(st, 1, true) ~= nil then
+            return true
+        end
+    end
+    return false
 end
-OPS.not_contains = function(v, t) return not OPS.contains(v, t) end
+OPS.not_contains = function(v, t)
+    local sv = tostr(v)
+    if sv == nil then return true end
+    for _, item in ipairs(as_list(t)) do
+        local st = tostr(item)
+        if st ~= nil and st ~= "" and sv:find(st, 1, true) ~= nil then
+            return false
+        end
+    end
+    return true
+end
 OPS.starts_with = function(v, t)
     local sv = tostr(v); local st = tostr(t)
     return sv ~= nil and st ~= nil and sv:sub(1, #st) == st

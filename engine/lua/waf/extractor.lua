@@ -302,6 +302,28 @@ function _M:_resolve(field, arg)
         if not self.cache.ip then self.cache.ip = util.client_ip() end
         return util.hmac("fp", (self.cache.ip or "") .. "|" .. (ngx.var.http_user_agent or ""))
 
+    -- ua parsing (log stats: ua_family / ua_os)
+    elseif field == "ua.family" then
+        if self.cache.ua_family ~= nil then
+            return self.cache.ua_family
+        end
+        local ua_parse = require "waf.ua_parse"
+        local sync = require "waf.sync"
+        self.cache.ua_family = ua_parse.family(
+            self:get("http.ua"),
+            sync.get(),
+            self,
+            self.cache.site_id
+        )
+        return self.cache.ua_family
+    elseif field == "ua.os" then
+        if self.cache.ua_os ~= nil then
+            return self.cache.ua_os
+        end
+        local ua_parse = require "waf.ua_parse"
+        self.cache.ua_os = ua_parse.os(self:get("http.ua"))
+        return self.cache.ua_os
+
     -- bot identification
     elseif field == "bot.name" then
         local bot_mod = require "waf.bot"

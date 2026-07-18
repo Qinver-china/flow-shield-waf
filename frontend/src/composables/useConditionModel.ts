@@ -37,6 +37,7 @@ export type ConditionNode = UiLeaf | UiGroup;
 
 export const NO_VALUE_OPS = ["is_empty", "exists", "key_exists", "key_absent"];
 export const LIST_OPS = ["in_list", "not_in", "in_cidr", "geo_in", "between"];
+export const STRING_MULTI_OPS = ["contains", "not_contains"];
 export const IP_GROUP_OPS = ["in_ip_group", "not_in_ip_group"];
 export const NUMBER_OPS = ["len_gt", "len_lt"];
 export const TRAFFIC_FIELDS = ["traffic.global", "traffic.site"] as const;
@@ -98,8 +99,8 @@ function parseLeaf(node: any): UiLeaf {
     : node.value != null && node.value !== ""
       ? [String(node.value)]
       : [];
-  leaf.valueText = Array.isArray(node.value) ? node.value.join(",") : (node.value ?? "");
   leaf.valueList = valueList;
+  leaf.valueText = Array.isArray(node.value) ? valueList.join(",") : (node.value ?? "");
   leaf.valueNumber =
     NUMBER_OPS.includes(node.op) && node.value != null && node.value !== ""
       ? Number(node.value)
@@ -155,7 +156,7 @@ export function serializeLeaf(row: UiLeaf, fieldMap: Record<string, Field>): any
       out.value = (row.valueList || [])
         .map((item) => Number(item))
         .filter((n) => Number.isFinite(n) && n > 0);
-    } else if (LIST_OPS.includes(row.op)) {
+    } else if (LIST_OPS.includes(row.op) || STRING_MULTI_OPS.includes(row.op)) {
       out.value = (row.valueList || []).filter(Boolean);
     } else if (NUMBER_OPS.includes(row.op)) {
       out.value = row.valueNumber;
@@ -205,6 +206,10 @@ export function isListOp(op?: string) {
   return !!op && LIST_OPS.includes(op);
 }
 
+export function isStringMultiOp(op?: string) {
+  return !!op && STRING_MULTI_OPS.includes(op);
+}
+
 export function isNumberOp(op?: string) {
   return !!op && NUMBER_OPS.includes(op);
 }
@@ -230,7 +235,7 @@ export function onOpChange(row: UiLeaf, fieldMap: Record<string, Field>) {
     row.op = "compare";
     return;
   }
-  if (isListOp(row.op)) {
+  if (isListOp(row.op) || isStringMultiOp(row.op)) {
     if (!row.valueList?.length) {
       if (row.valueText) row.valueList = [String(row.valueText)];
       else if (row.valueNumber != null) row.valueList = [String(row.valueNumber)];
@@ -305,7 +310,7 @@ export function displayLeafValue(
     return parts.join(" · ");
   }
   if (!row.op || NO_VALUE_OPS.includes(row.op)) return null;
-  if (isListOp(row.op)) {
+  if (isListOp(row.op) || isStringMultiOp(row.op)) {
     const items = row.valueList?.length ? row.valueList : [];
     if (!items.length) return row.valueText || "-";
     return items.map((v) => formatOptionLabel(fieldMap, row.field!, v)).join("、");

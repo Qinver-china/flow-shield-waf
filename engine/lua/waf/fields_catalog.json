@@ -1082,6 +1082,50 @@
       ]
     },
     {
+      "key": "ua.family",
+      "label": "UA 类型",
+      "category": "UA 解析",
+      "value_type": "enum",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "in_list"
+      ],
+      "options": [
+        {
+          "value": "browser",
+          "label": "浏览器"
+        },
+        {
+          "value": "bot",
+          "label": "Bot"
+        }
+      ]
+    },
+    {
+      "key": "ua.os",
+      "label": "操作系统",
+      "category": "UA 解析",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
       "key": "traffic.global",
       "label": "全站请求量",
       "category": "流量与智能",
@@ -1157,8 +1201,8 @@
   "operators": {
     "equals": "等于",
     "not_equals": "不等于",
-    "contains": "包含字符",
-    "not_contains": "不包含字符",
+    "contains": "包含字符串",
+    "not_contains": "排除字符串",
     "starts_with": "以…开头",
     "ends_with": "以…结尾",
     "regex": "正则匹配",

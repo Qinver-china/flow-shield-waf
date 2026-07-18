@@ -140,3 +140,24 @@ def test_traffic_invalid_window_rejected():
             "op": "compare",
             "value": {"window_sec": 120, "compare": "abs_gt", "threshold": 1},
         })
+
+
+def test_contains_accepts_multiple_values():
+    cond = validate_condition({
+        "field": "http.uri.path",
+        "op": "contains",
+        "value": ["/admin", "/api"],
+    })
+    assert cond["conditions"][0]["value"] == ["/admin", "/api"]
+
+
+def test_ua_family_and_os_fields_exist():
+    keys = {f["key"] for f in FIELDS}
+    assert "ua.family" in keys
+    assert "ua.os" in keys
+    cat = catalog_for_frontend()
+    fields = {f["key"]: f for c in cat["categories"] for f in c["fields"]}
+    assert fields["ua.family"]["options"] == [
+        {"value": "browser", "label": "浏览器"},
+        {"value": "bot", "label": "Bot"},
+    ]
