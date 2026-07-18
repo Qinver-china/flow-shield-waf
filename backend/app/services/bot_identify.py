@@ -5,18 +5,10 @@ import re
 from typing import Any
 
 from app.constants.bot_settings import RESERVED_CATEGORY_OTHER
+from app.services.bot_ua_heuristic import is_bot_ua_heuristic
 from app.services.logging.crawler_detect import is_crawler_ua
 
 _REGEX_WRAPPED = re.compile(r"^/(.*)/([a-z]*)$", re.I)
-
-_BOT_UA_KEYWORDS = ("bot", "spider", "crawl")
-
-
-def is_bot_ua_heuristic(ua: str | None) -> bool:
-    if not ua:
-        return False
-    ua_l = ua.lower()
-    return any(kw in ua_l for kw in _BOT_UA_KEYWORDS)
 
 
 def match_ua_pattern(ua: str, pattern: str) -> bool:

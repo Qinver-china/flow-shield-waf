@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from crawlerdetect import CrawlerDetect
 
-from app.services.bot_identify import is_bot_ua_heuristic
+from app.services.bot_ua_heuristic import is_bot_ua_heuristic
 
 
 def is_crawler_ua(ua: str | None) -> tuple[bool, str | None]:
