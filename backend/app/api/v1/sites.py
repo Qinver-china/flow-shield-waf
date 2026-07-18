@@ -105,6 +105,22 @@ async def site_options(
     return ok([SiteOption.model_validate(r).model_dump() for r in rows])
 
 
+@router.get("/{site_id}")
+async def get_site(
+    site_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    site = (
+        await db.execute(
+            select(Site).options(selectinload(Site.certificate)).where(Site.id == site_id)
+        )
+    ).scalar_one_or_none()
+    if site is None:
+        raise HTTPException(status_code=404, detail="站点不存在")
+    return ok(SiteOut.from_site(site).model_dump())
+
+
 @router.post("")
 async def create_site(
     body: SiteCreate,

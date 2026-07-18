@@ -98,6 +98,18 @@ async def list_items(
     })
 
 
+@router.get("/{item_id}")
+async def get_item(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    item = await db.get(RateLimit, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="限速策略不存在")
+    return ok(enrich_row(item, RateLimitOut.model_validate(item).model_dump()))
+
+
 @router.post("")
 async def create_item(
     body: RateLimitCreate,

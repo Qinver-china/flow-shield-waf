@@ -571,6 +571,13 @@ function applyRouteFilters() {
       if (parsed !== undefined) filterValues[field.key] = parsed;
       continue;
     }
+    if (field.multiple) {
+      const values = (Array.isArray(raw) ? raw : String(raw).split(","))
+        .map((item) => String(item).trim())
+        .filter(Boolean);
+      if (values.length) filterValues[field.key] = values;
+      continue;
+    }
     const value = Array.isArray(raw) ? raw[0] : raw;
     if (field.key === "enabled") {
       filterValues[field.key] = value === "true" ? true : value === "false" ? false : value;

@@ -90,6 +90,18 @@ async def list_rules(
     })
 
 
+@router.get("/{rule_id}")
+async def get_rule(
+    rule_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    rule = await db.get(Rule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="规则不存在")
+    return ok(enrich_row(rule, RuleOut.model_validate(rule).model_dump()))
+
+
 @router.post("")
 async def create_rule(
     body: RuleCreate,

@@ -92,6 +92,17 @@ def make_router(list_type: str) -> APIRouter:
         await rule_sync.publish(db)
         return ok(enrich_row(item, IpListOut.model_validate(item).model_dump()))
 
+    @router.get("/{item_id}")
+    async def get_item(
+        item_id: int,
+        db: AsyncSession = Depends(get_db),
+        _user: User = Depends(get_current_user),
+    ):
+        item = await db.get(IpList, item_id)
+        if item is None or item.list_type != list_type:
+            raise HTTPException(status_code=404, detail="记录不存在")
+        return ok(enrich_row(item, IpListOut.model_validate(item).model_dump()))
+
     @router.put("/{item_id}")
     async def update_item(
         item_id: int,

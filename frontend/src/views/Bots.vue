@@ -37,12 +37,8 @@
           duplicatable
         >
           <template #cell="{ column, record }">
-            <site-ids-cell v-if="column.key === 'site_ids'" :site-ids="record.site_ids" />
-            <template v-else-if="column.key === 'category'">
+            <template v-if="column.key === 'category'">
               {{ categoryLabel(record.category) }}
-            </template>
-            <template v-else-if="column.key === 'pattern_count'">
-              {{ record.pattern_count ?? (record.ua_patterns || []).length }}
             </template>
             <template v-else-if="column.key === 'is_builtin'">
               <a-tag v-if="record.is_builtin" color="blue">内置</a-tag>
@@ -73,9 +69,6 @@
                   :disabled="readonly"
                   :options="categoryOptions"
                 />
-              </a-form-item>
-              <a-form-item label="生效站点（不选=全局）">
-                <site-select v-model:value="record.site_ids" :readonly="readonly" class="site-select-block" />
               </a-form-item>
               <a-form-item label="备注">
                 <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
@@ -164,15 +157,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { api } from "@/api";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
-import SiteIdsCell from "@/components/SiteIdsCell.vue";
-import SiteSelect from "@/components/SiteSelect.vue";
-import { siteIdsColumn } from "@/composables/useSiteOptions";
 import { enabledFilterOptions } from "@/constants/resourceList";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
 
@@ -182,23 +172,23 @@ const categoryCrudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 
 const categoryOptions = ref<{ label: string; value: string }[]>([]);
 
-const botFilters: ResourceFilterField[] = [
+const botFilters = computed<ResourceFilterField[]>(() => [
   { key: "q", label: "搜索", type: "search", placeholder: "名称 / UA 模式" },
-  { key: "category", label: "分类", type: "select", options: [] },
+  {
+    key: "category",
+    label: "分类",
+    type: "select",
+    multiple: true,
+    width: "280px",
+    options: categoryOptions.value,
+  },
   { key: "enabled", label: "状态", type: "select", options: enabledFilterOptions },
-];
+]);
 
 const botColumns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
   { title: "分类", key: "category", dataIndex: "category", width: 110, slotCell: true },
-  {
-    title: "UA 模式",
-    key: "pattern_count",
-    dataIndex: "pattern_count",
-    width: 88,
-    slotCell: true,
-  },
-  siteIdsColumn(),
+  { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "类型", key: "is_builtin", width: 88, slotCell: true },
   { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
 ];
@@ -211,6 +201,7 @@ const categoryColumns: ResourceColumn[] = [
   { title: "标识", key: "value", dataIndex: "value", width: 160, slotCell: true, sorter: true },
   { title: "显示名称", dataIndex: "label", sorter: true },
   { title: "排序", dataIndex: "sort_order", width: 80, sorter: true },
+  { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "类型", key: "is_builtin", width: 88, slotCell: true },
 ];
 
@@ -231,7 +222,6 @@ const defaultBotRecord = () => ({
   name: "",
   category: "other",
   enabled: true,
-  site_ids: [] as number[],
   ua_patterns: [] as string[],
   verify_dns_suffix: "",
   remark: "",
@@ -242,7 +232,6 @@ const defaultBotRecord = () => ({
 function mapBotRecord(row: Record<string, any>) {
   return {
     ...row,
-    site_ids: row.site_ids || [],
     _patternsText: row._patternsText ?? (row.ua_patterns || []).join("\n"),
   };
 }
@@ -252,7 +241,6 @@ function prepareBotPayload(rec: Record<string, any>) {
     name: rec.name,
     category: rec.category,
     enabled: rec.enabled,
-    site_ids: rec.site_ids?.length ? rec.site_ids : null,
     ua_patterns: parseLines(rec._patternsText || ""),
     verify_dns_suffix: rec.verify_dns_suffix || null,
     remark: rec.remark || null,
@@ -282,10 +270,6 @@ function prepareCategoryPayload(rec: Record<string, any>) {
 async function loadCategoryOptions() {
   const resp = await api.get("/api/v1/bot-categories/options");
   categoryOptions.value = resp.data || [];
-  const categoryFilter = botFilters.find((f) => f.key === "category");
-  if (categoryFilter) {
-    categoryFilter.options = categoryOptions.value;
-  }
 }
 
 watch(activeTab, (tab) => {
@@ -300,10 +284,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.site-select-block :deep(.ant-select) {
-  width: 100%;
-  min-width: 0;
-}
 .muted {
   color: var(--fs-text-muted, #94a3b8);
 }

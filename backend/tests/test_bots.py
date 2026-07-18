@@ -111,3 +111,15 @@ async def test_build_config_includes_bots_without_action():
 
 def test_reserved_category_other_constant():
     assert RESERVED_CATEGORY_OTHER == "other"
+
+
+def test_apply_category_filter_supports_multiple():
+    from sqlalchemy import select
+
+    from app.api.v1.bots import _apply_category_filter
+    from app.models import BotProfile
+
+    stmt = select(BotProfile)
+    filtered = _apply_category_filter(stmt, ["search_engine", "ai_crawler"])
+    compiled = str(filtered.compile(compile_kwargs={"literal_binds": True}))
+    assert "bot_profiles.category IN" in compiled

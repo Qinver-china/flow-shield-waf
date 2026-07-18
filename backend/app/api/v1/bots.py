@@ -37,17 +37,22 @@ def _apply_bot_q(stmt: Select, q: str | None) -> Select:
     )
 
 
-def _apply_category_filter(stmt: Select, category: str | None) -> Select:
-    if not category:
+def _apply_category_filter(stmt: Select, categories: list[str] | None) -> Select:
+    if not categories:
         return stmt
-    return stmt.where(BotProfile.category == category)
+    values = [c.strip() for c in categories if c and c.strip()]
+    if not values:
+        return stmt
+    if len(values) == 1:
+        return stmt.where(BotProfile.category == values[0])
+    return stmt.where(BotProfile.category.in_(values))
 
 
 @router.get("")
 async def list_bots(
     pg: Pagination = Depends(),
     query: ListQuery = Depends(get_list_query),
-    category: str | None = Query(None, description="Bot 分类"),
+    category: list[str] | None = Query(None, description="Bot 分类，可多选"),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):

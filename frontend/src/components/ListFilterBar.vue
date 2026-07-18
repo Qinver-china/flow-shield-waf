@@ -16,9 +16,14 @@
           v-model:value="model[field.key]"
           :options="field.options"
           :placeholder="field.placeholder || field.label"
+          :mode="field.multiple ? 'multiple' : undefined"
+          :max-tag-count="field.multiple ? 'responsive' : undefined"
           allow-clear
+          show-search
+          option-filter-prop="label"
           class="filter-control filter-control--select"
-          :style="controlStyle(field, 'select')"
+          :class="{ 'filter-control--select-multi': field.multiple }"
+          :style="controlStyle(field, field.multiple ? 'select-multi' : 'select')"
           @change="emit('change')"
         />
         <a-select
@@ -62,6 +67,7 @@ const { selectOptions: siteSelectOptions, loading: sitesLoading } = useSiteOptio
 const defaultWidths: Record<string, string> = {
   search: "260px",
   select: "200px",
+  "select-multi": "280px",
   site: "240px",
   "site-multi": "320px",
 };
