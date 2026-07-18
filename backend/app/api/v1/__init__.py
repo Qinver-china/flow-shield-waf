@@ -5,6 +5,8 @@ from app.api.v1 import (
     alert_policies,
     auth,
     blacklist,
+    bot_categories,
+    bots,
     certificates,
     dashboard,
     exceptions,
@@ -40,6 +42,10 @@ api_router.include_router(
     rule_suggestions.router, prefix="/rule-suggestions", tags=["rule-suggestions"]
 )
 api_router.include_router(blacklist.router, prefix="/blacklist", tags=["blacklist"])
+api_router.include_router(bots.router, prefix="/bots", tags=["bots"])
+api_router.include_router(
+    bot_categories.router, prefix="/bot-categories", tags=["bot-categories"]
+)
 api_router.include_router(whitelist.router, prefix="/whitelist", tags=["whitelist"])
 api_router.include_router(exceptions.router, prefix="/exceptions", tags=["exceptions"])
 api_router.include_router(ip_groups.router, prefix="/ip-groups", tags=["ip-groups"])

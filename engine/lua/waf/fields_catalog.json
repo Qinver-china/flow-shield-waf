@@ -1038,6 +1038,50 @@
       ]
     },
     {
+      "key": "bot.name",
+      "label": "Bot 名称",
+      "category": "Bot 识别",
+      "value_type": "string",
+      "requires_arg": false,
+      "operators": [
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "regex",
+        "in_list",
+        "not_in",
+        "is_empty",
+        "exists",
+        "len_gt",
+        "len_lt"
+      ]
+    },
+    {
+      "key": "bot.category",
+      "label": "Bot 分类",
+      "category": "Bot 识别",
+      "value_type": "enum",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "neq",
+        "in_list"
+      ]
+    },
+    {
+      "key": "bot.is_known",
+      "label": "已知 Bot",
+      "category": "Bot 识别",
+      "value_type": "bool",
+      "requires_arg": false,
+      "operators": [
+        "eq"
+      ]
+    },
+    {
       "key": "traffic.global",
       "label": "全局请求量",
       "category": "流量与智能",

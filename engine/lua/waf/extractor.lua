@@ -301,6 +301,22 @@ function _M:_resolve(field, arg)
     elseif field == "derived.fingerprint" then
         if not self.cache.ip then self.cache.ip = util.client_ip() end
         return util.hmac("fp", (self.cache.ip or "") .. "|" .. (ngx.var.http_user_agent or ""))
+
+    -- bot identification
+    elseif field == "bot.name" then
+        local bot_mod = require "waf.bot"
+        local sync = require "waf.sync"
+        local match = bot_mod.identify(sync.get(), self, self.cache.site_id)
+        return match and match.name or nil
+    elseif field == "bot.category" then
+        local bot_mod = require "waf.bot"
+        local sync = require "waf.sync"
+        return bot_mod.resolve_category(sync.get(), self, self.cache.site_id)
+    elseif field == "bot.is_known" then
+        local bot_mod = require "waf.bot"
+        local sync = require "waf.sync"
+        local match = bot_mod.identify(sync.get(), self, self.cache.site_id)
+        return match ~= nil
     end
 
     return nil

@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS waf.waf_logs (
   query_count UInt16 DEFAULT 0,
   referer_host LowCardinality(Nullable(String)),
   ua String,
+  bot_name LowCardinality(Nullable(String)),
+  bot_category LowCardinality(Nullable(String)),
   ua_family LowCardinality(Nullable(String)),
   ua_os LowCardinality(Nullable(String)),
   ua_browser LowCardinality(Nullable(String)),

@@ -169,6 +169,7 @@ const menuGroups = [
       { path: "/blacklist", label: "黑名单", icon: StopOutlined },
       { path: "/exceptions", label: "防护例外", icon: DisconnectOutlined },
       { path: "/ratelimit", label: "速率防护", icon: DashboardOutlined },
+      { path: "/bots", label: "Bot 库", icon: RobotOutlined },
       { path: "/rules", label: "自定义规则", icon: SafetyOutlined },
     ],
   },

@@ -101,6 +101,7 @@ import {
   buildAdvancedLogFilterGroups,
   buildLogQueryParams,
   createDefaultLogFilters,
+  hydrateBotCategoryFilterOptions,
   logDetailFiltersUseAdvanced,
   logDetailQuickFilterFields,
   type StatsDimension,
@@ -144,6 +145,8 @@ const TEXT_FILTER_KEYS = [
   "keyword",
   "ua",
   "ua_family",
+  "bot_name",
+  "bot_category",
   "ua_os",
   "ua_browser",
   "tls_version",
@@ -319,6 +322,7 @@ watch(
 );
 
 onMounted(() => {
+  void hydrateBotCategoryFilterOptions();
   if (!props.drillDown) fetchList();
 });
 

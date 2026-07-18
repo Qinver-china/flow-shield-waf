@@ -197,6 +197,10 @@ FIELDS: list[dict] = [
     _f("derived.time.hour", "当前小时", "派生维度", NUMBER),
     _f("derived.time.weekday", "星期几", "派生维度", NUMBER),
     _f("derived.fingerprint", "请求指纹", "派生维度", STRING),
+    # bot identification
+    _f("bot.name", "Bot 名称", "Bot 识别", STRING),
+    _f("bot.category", "Bot 分类", "Bot 识别", ENUM),
+    _f("bot.is_known", "已知 Bot", "Bot 识别", BOOL),
     # traffic intelligence
     {
         "key": "traffic.global",

@@ -80,6 +80,10 @@ services:
     build:
       context: .
       dockerfile: deploy/app/Dockerfile
+      args:
+        # 海外构建可改为 https://pypi.org/simple 并清空 PIP_TRUSTED_HOST
+        PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+        PIP_TRUSTED_HOST: pypi.tuna.tsinghua.edu.cn
     image: flowshield-waf-app:latest
     container_name: flowshield-waf-app
     restart: unless-stopped

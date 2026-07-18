@@ -6,7 +6,15 @@ SOURCE_LABELS: dict[str, str] = {
     "rule": "自定义规则",
     "blacklist": "黑名单",
     "whitelist": "白名单",
+    "bot": "Bot 库",
 }
+
+_BOT_CATEGORY_LABELS: dict[str, str] = {}
+
+
+def set_bot_category_labels(labels: dict[str, str]) -> None:
+    global _BOT_CATEGORY_LABELS
+    _BOT_CATEGORY_LABELS = dict(labels)
 
 MODE_LABELS: dict[str, str] = {
     "observe": "观察",
@@ -113,6 +121,8 @@ def format_dimension_label(
         return _truncate_text(raw_label or key)
     if dimension == "full_url":
         return _truncate_text(raw_label or key, max_len=120)
+    if dimension == "bot_category":
+        return _BOT_CATEGORY_LABELS.get(key, raw_label or key)
     if dimension == "site_id":
         if site_name and site_domain:
             return f"{site_name} ({site_domain})"

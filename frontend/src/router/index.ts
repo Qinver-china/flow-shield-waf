@@ -18,6 +18,7 @@ const router = createRouter({
         { path: "ip-groups", component: () => import("@/views/IpGroups.vue"), meta: { title: "IP 组管理" } },
         { path: "exceptions", component: () => import("@/views/Exceptions.vue"), meta: { title: "防护例外" } },
         { path: "ratelimit", component: () => import("@/views/RateLimit.vue"), meta: { title: "速率防护" } },
+        { path: "bots", component: () => import("@/views/Bots.vue"), meta: { title: "Bot 库" } },
         { path: "logs", component: () => import("@/views/Logs.vue"), meta: { title: "防护日志" } },
         { path: "alerts", component: () => import("@/views/AlertPolicies.vue"), meta: { title: "预警通知" } },
         { path: "ai-guard", component: () => import("@/views/ai-guard/AiGuard.vue"), meta: { title: "AI 防护" } },

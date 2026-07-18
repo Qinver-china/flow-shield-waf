@@ -48,6 +48,17 @@ check_mode "captcha"      "200" "smoke-captcha-bot"
 # observe 模式应放行 (源站返回 200)
 check_mode "observe"      "200" "smoke-observe-bot"
 
+echo "==> 测试 Bot 规则条件（bot.is_known + block）"
+BOT_RULE_ID=$(req -X POST "$PANEL/api/v1/rules" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"name":"smoke-bot-known-block","mode":"block","priority":5,"conditions":{"logic":"and","conditions":[{"field":"bot.is_known","op":"eq","value":"true"}]}}' | \
+  sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+[ -n "$BOT_RULE_ID" ] || fail "创建 Bot 规则失败"
+sleep 4
+BOT_RULE_CODE=$(req -o /dev/null -w '%{http_code}' -H "Host: $DOMAIN" -H "User-Agent: Googlebot/2.1" "$ENGINE/get")
+if [ "$BOT_RULE_CODE" = "403" ]; then pass "bot.is_known 规则 block -> HTTP 403"; else fail "bot.is_known block 期望 403 实得 $BOT_RULE_CODE"; fi
+req -X DELETE "$PANEL/api/v1/rules/$BOT_RULE_ID" -H "$AUTH" >/dev/null
+sleep 3
+
 echo "==> 全部通过"
 
 echo "==> 验证配置版本递增"

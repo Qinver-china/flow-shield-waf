@@ -6,6 +6,8 @@ from app.models.ai_guard import (
     AiGuardSetting,
 )
 from app.models.base import Base
+from app.models.bot_category import BotCategory
+from app.models.bot_profile import BotProfile
 from app.models.certificate import Certificate
 from app.models.exception import Exception_
 from app.models.ip_group import IpGroup
@@ -25,6 +27,8 @@ __all__ = [
     "Site",
     "Certificate",
     "Rule",
+    "BotCategory",
+    "BotProfile",
     "IpGroup",
     "IpList",
     "Exception_",

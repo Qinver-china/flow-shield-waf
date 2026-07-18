@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis
-from app.models import Exception_, IpGroup, IpList, RateLimit, Rule, Site
+from app.models import BotCategory, BotProfile, Exception_, IpGroup, IpList, RateLimit, Rule, Site
 from app.services import waf_settings
 from app.services.site_scope import resolved_site_ids
 from app.services.site_domains import site_domain_list
@@ -75,6 +75,8 @@ async def build_config(db: AsyncSession) -> dict:
     exceptions = (await db.execute(select(Exception_))).scalars().all()
     ratelimits = (await db.execute(select(RateLimit))).scalars().all()
     ip_groups = (await db.execute(select(IpGroup))).scalars().all()
+    bots = (await db.execute(select(BotProfile))).scalars().all()
+    bot_categories = (await db.execute(select(BotCategory))).scalars().all()
 
     whitelist, blacklist = [], []
     for row in lists:
@@ -124,6 +126,21 @@ async def build_config(db: AsyncSession) -> dict:
         for g in ip_groups
     }
 
+    bot_items = []
+    for b in bots:
+        it = {
+            "id": b.id,
+            "name": b.name,
+            "category": b.category,
+            "ua_patterns": b.ua_patterns or [],
+            "enabled": b.enabled,
+            "verify_dns_suffix": b.verify_dns_suffix,
+        }
+        site_ids = resolved_site_ids(b)
+        if site_ids:
+            it["site_ids"] = site_ids
+        bot_items.append(it)
+
     return {
         "sites": [_site_item(s) for s in sites],
         "rules": rule_items,
@@ -132,6 +149,8 @@ async def build_config(db: AsyncSession) -> dict:
         "exceptions": exc_items,
         "ratelimits": rl_items,
         "ip_groups": ip_group_map,
+        "bots": bot_items,
+        "bot_category_values": sorted(c.value for c in bot_categories),
         "settings": settings_cfg,
     }
 

@@ -350,6 +350,7 @@ cd backend && pytest
 | [`docs/api.md`](docs/api.md) | REST API 说明 |
 | [`docs/review-after-fix.md`](docs/review-after-fix.md) | 安全加固与审查记录 |
 | [`docs/upgrade.md`](docs/upgrade.md) | **版本更新**、回滚与检查清单 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本更新日志 |
 | [`deploy/baota/README.md`](deploy/baota/README.md) | 宝塔部署指南 |
 
 ---

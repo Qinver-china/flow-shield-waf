@@ -94,6 +94,7 @@ function _M.run()
     local domain = ngx.var.host
     local site = sync.site_by_domain(domain)
     local site_id = site and site.id or tonumber(ngx.var.waf_site_id)
+    ext.cache.site_id = site_id
     local ctx = make_ctx(site_id, domain, cfg.settings)
 
     if ngx.var.uri == "/.waf/challenge-submit"

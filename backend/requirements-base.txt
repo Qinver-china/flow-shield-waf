@@ -1,0 +1,21 @@
+# 稳定依赖：Docker 单独一层安装，仅在本文件变更时重装
+fastapi>=0.111
+uvicorn[standard]>=0.30
+sqlalchemy[asyncio]>=2.0.30
+aiomysql>=0.2.0
+pydantic>=2.7
+pydantic-settings>=2.3
+redis>=5.0
+pyjwt>=2.8
+passlib[bcrypt]>=1.7
+bcrypt>=4.0,<4.1
+python-multipart>=0.0.9
+cryptography>=42.0
+httpx>=0.27
+clickhouse-connect>=0.7
+openai>=1.40
+pi-captcha>=0.0.1
+pillow>=10.0
+ua-parser[regex]>=1.0.2
+crawlerdetect>=0.3.2
+

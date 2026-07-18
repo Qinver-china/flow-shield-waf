@@ -23,6 +23,30 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_waf_setting_timezone(conn)
     await _ensure_waf_setting_ratelimit_fail_open(conn)
     await _ensure_site_extra_domains(conn)
+    await _drop_legacy_bot_columns(conn)
+
+
+async def _column_exists(conn, table: str, column: str) -> bool:
+    result = await conn.execute(
+        text(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() "
+            f"AND TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}'"
+        )
+    )
+    return int(result.scalar_one()) > 0
+
+
+async def _drop_legacy_bot_columns(conn) -> None:
+    for table, column in (
+        ("bot_profile", "action"),
+        ("waf_setting", "bot_management_enabled"),
+        ("waf_setting", "bot_unknown_action"),
+    ):
+        if not await _column_exists(conn, table, column):
+            continue
+        await conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+        log.info("schema patch applied: dropped %s.%s", table, column)
 
 
 async def _ensure_site_extra_domains(conn) -> None:
@@ -75,3 +99,4 @@ async def _ensure_waf_setting_ratelimit_fail_open(conn) -> None:
         )
     )
     log.info("schema patch applied: waf_setting.ratelimit_fail_open")
+

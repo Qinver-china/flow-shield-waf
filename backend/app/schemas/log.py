@@ -56,6 +56,8 @@ class LogQuery(BaseModel):
     ua_family: str | None = None
     ua_os: str | None = None
     ua_browser: str | None = None
+    bot_name: str | None = None
+    bot_category: str | None = None
     tls_version: str | None = None
     keyword: str | None = None
     page: int = 1

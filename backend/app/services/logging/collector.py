@@ -6,6 +6,7 @@ import json
 import logging
 
 from app.core.redis import get_redis
+from app.services.logging.bot_catalog_snapshot import refresh_from_redis
 from app.services.logging.clickhouse_store import ClickHouseLogStore
 
 log = logging.getLogger("waf.log_collector")
@@ -77,9 +78,11 @@ async def run_consumer(stop_event: asyncio.Event | None = None) -> None:
     store = ClickHouseLogStore()
     await store.ensure_schema()
     await _ensure_group(redis)
+    await refresh_from_redis(redis)
     log.info("log collector started (clickhouse)")
 
     while stop_event is None or not stop_event.is_set():
+        await refresh_from_redis(redis)
         stream_msgs = await _read_stream_batch(redis)
         if not stream_msgs:
             continue

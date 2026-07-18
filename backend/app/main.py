@@ -51,9 +51,22 @@ async def _bootstrap() -> None:
         seeded = await ensure_default_policies(db)
         if seeded:
             log.info("bootstrap: seeded %d default policies", seeded)
+        from app.services.bootstrap_bot_categories import ensure_builtin_categories
+
+        cat_seeded = await ensure_builtin_categories(db)
+        if cat_seeded:
+            log.info("bootstrap: seeded %d builtin bot categories", cat_seeded)
+        from app.services.bootstrap_bots import ensure_builtin_bots
+
+        bot_seeded = await ensure_builtin_bots(db)
+        if bot_seeded:
+            log.info("bootstrap: seeded %d builtin bot profiles", bot_seeded)
         from app.services.logging.clickhouse_store import ClickHouseLogStore
 
         await ClickHouseLogStore().ensure_schema()
+        from app.services.logging.clickhouse_patches import ensure_clickhouse_columns
+
+        ensure_clickhouse_columns()
         from app.services.logging.retention_ttl import apply_log_retention_ttl
 
         await apply_log_retention_ttl()

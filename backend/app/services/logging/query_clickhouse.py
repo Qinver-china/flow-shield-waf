@@ -11,14 +11,20 @@ from app.core.clickhouse import get_clickhouse
 from app.core.db import SessionLocal
 from app.models.site import Site
 from app.schemas.log import LogQuery, LogStatsGroupItem, LogStatsGroupOut
-from app.services.logging.labels import format_dimension_label, format_rule_stats_label
+from app.services.logging.labels import (
+    format_dimension_label,
+    format_rule_stats_label,
+    set_bot_category_labels,
+)
+from app.services.bot_catalog import category_label_map
 
 STATS_DIMENSIONS = frozenset({
     "rule_id", "client_ip", "source", "mode", "site_id", "domain", "geo_country",
     "method", "blocked", "log_type", "ip_is_private", "xff_first", "geo_region",
     "geo_city", "geo_isp", "geo_ip_type", "geo_asn", "scheme", "http_version",
     "uri_path", "uri_ext", "uri_depth", "uri_pattern", "full_url", "referer_host",
-    "query_count_bucket", "ua", "ua_family", "ua_os", "ua_browser", "tls_version",
+    "query_count_bucket", "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
+    "bot_category", "tls_version",
     "tls_ja3", "hour_of_day", "weekday",
 })
 
@@ -51,6 +57,8 @@ _DIM_COLUMN = {
     "ua_family": "ua_family",
     "ua_os": "ua_os",
     "ua_browser": "ua_browser",
+    "bot_name": "bot_name",
+    "bot_category": "bot_category",
     "tls_version": "tls_version",
     "tls_ja3": "tls_ja3",
 }
@@ -167,6 +175,12 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
     if q.ua_browser:
         parts.append("ua_browser = {ua_browser:String}")
         params["ua_browser"] = q.ua_browser
+    if q.bot_name:
+        parts.append("bot_name = {bot_name:String}")
+        params["bot_name"] = q.bot_name
+    if q.bot_category:
+        parts.append("bot_category = {bot_category:String}")
+        params["bot_category"] = q.bot_category
     if q.tls_version:
         parts.append("tls_version = {tls_version:String}")
         params["tls_version"] = q.tls_version
@@ -390,6 +404,10 @@ async def stats_by_dimension(
     where, params = _where_clause(None, start_ts, end_ts)
     limit = min(max(1, limit), 100)
     client = get_clickhouse()
+
+    if dimension == "bot_category":
+        async with SessionLocal() as db:
+            set_bot_category_labels(await category_label_map(db))
 
     if dimension == "rule_id":
         rows = client.query(

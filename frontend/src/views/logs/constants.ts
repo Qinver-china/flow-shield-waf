@@ -15,11 +15,22 @@ export const modeColor: Record<string, string> = {
   slide_captcha: "cyan",
 };
 
+export const botCategoryLabel: Record<string, string> = {
+  search_engine: "搜索引擎",
+  monitoring: "监控探测",
+  social: "社交平台",
+  seo_tool: "SEO 工具",
+  scraper: "通用爬虫",
+  malicious: "恶意 Bot",
+  other: "其他",
+};
+
 export const sourceLabel: Record<string, string> = {
   ratelimit: "速率防护",
   rule: "自定义规则",
   blacklist: "黑名单",
   whitelist: "白名单",
+  bot: "Bot 库",
 };
 
 export const logTypeLabel: Record<string, string> = {
@@ -89,6 +100,8 @@ export function formatStatsValueLabel(
     }
     case "ua":
       return label;
+    case "bot_category":
+      return botCategoryLabel[key] || botCategoryLabel[label] || label;
     case "full_url":
       return label.length > 120 ? `${label.slice(0, 119)}…` : label;
     default:
@@ -154,6 +167,8 @@ export const statsDimensionGroups = [
     items: [
       { key: "ua", label: "User-Agent", desc: "完整 UA 字符串（Top 命中）" },
       { key: "ua_family", label: "UA 类型", desc: "浏览器 / Bot" },
+      { key: "bot_name", label: "Bot 名称", desc: "命中的已知 Bot" },
+      { key: "bot_category", label: "Bot 分类", desc: "搜索引擎 / 爬虫等" },
       { key: "ua_os", label: "操作系统", desc: "OS 分布" },
       { key: "ua_browser", label: "浏览器", desc: "浏览器分布" },
       { key: "tls_version", label: "TLS 版本", desc: "TLS 协议版本" },
@@ -277,7 +292,9 @@ export const logDetailFilterGroups: { label: string; fields: LogFilterFieldDef[]
     label: "客户端",
     fields: [
       { key: "ua", label: "User-Agent", type: "text", placeholder: "模糊匹配" },
-      { key: "ua_family", label: "UA 类型", type: "text", placeholder: "如 Browser / Bot" },
+      { key: "ua_family", label: "UA 类型", type: "text", placeholder: "如 browser / bot" },
+      { key: "bot_name", label: "Bot 名称", type: "text", placeholder: "如 Googlebot" },
+      { key: "bot_category", label: "Bot 分类", type: "select", options: [] },
       { key: "ua_os", label: "操作系统", type: "text", placeholder: "精确匹配" },
       { key: "ua_browser", label: "浏览器", type: "text", placeholder: "精确匹配" },
       { key: "tls_version", label: "TLS 版本", type: "text", placeholder: "如 TLSv1.3" },
@@ -338,6 +355,8 @@ export function logDetailFiltersUseAdvanced(filters: LogDetailFilters): boolean 
   if (filters.referer_host) return true;
   if (filters.ua) return true;
   if (filters.ua_family) return true;
+  if (filters.bot_name) return true;
+  if (filters.bot_category) return true;
   if (filters.ua_os) return true;
   if (filters.ua_browser) return true;
   if (filters.tls_version) return true;
@@ -372,6 +391,8 @@ export type LogDetailFilters = {
   keyword: string;
   ua: string;
   ua_family: string;
+  bot_name: string;
+  bot_category: string;
   ua_os: string;
   ua_browser: string;
   tls_version: string;
@@ -406,6 +427,8 @@ export function createDefaultLogFilters(): LogDetailFilters {
     keyword: "",
     ua: "",
     ua_family: "",
+    bot_name: "",
+    bot_category: "",
     ua_os: "",
     ua_browser: "",
     tls_version: "",
@@ -447,6 +470,8 @@ export function buildLogQueryParams(
     keyword: filters.keyword || undefined,
     ua: filters.ua || undefined,
     ua_family: filters.ua_family || undefined,
+    bot_name: filters.bot_name || undefined,
+    bot_category: filters.bot_category || undefined,
     ua_os: filters.ua_os || undefined,
     ua_browser: filters.ua_browser || undefined,
     tls_version: filters.tls_version || undefined,
@@ -542,6 +567,12 @@ export function applyStatsDrillDownToFilters(
     case "ua_family":
       filters.ua_family = key;
       break;
+    case "bot_name":
+      filters.bot_name = key;
+      break;
+    case "bot_category":
+      filters.bot_category = key;
+      break;
     case "ua_os":
       filters.ua_os = key;
       break;
@@ -556,5 +587,27 @@ export function applyStatsDrillDownToFilters(
       break;
     default:
       break;
+  }
+}
+
+export async function hydrateBotCategoryFilterOptions() {
+  const { api } = await import("@/api");
+  try {
+    const resp = await api.get("/api/v1/bot-categories/options");
+    const options = (resp.data || []).map((item: { value: string; label: string }) => ({
+      label: item.label,
+      value: item.value,
+    }));
+    for (const group of logDetailFilterGroups) {
+      const field = group.fields.find((f) => f.key === "bot_category");
+      if (field && field.type === "select") {
+        field.options = options;
+      }
+    }
+    for (const item of options) {
+      botCategoryLabel[item.value] = item.label;
+    }
+  } catch {
+    // keep static fallbacks when API unavailable
   }
 }
