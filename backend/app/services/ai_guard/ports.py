@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -15,19 +15,24 @@ from app.models import IpList, RateLimit, Rule, Site
 from app.models.notification import NotificationChannel
 from app.models.rule import MODES
 from app.schemas.ip_list import IpListCreate
-from app.schemas.log import LogQuery
 from app.schemas.rate_limit import RateLimitCreate
 from app.schemas.rule import RuleCreate
 from app.schemas.site import SiteCreate
 from app.services import nginx_conf, rule_sync
+from app.services.ai_guard.log_query import build_log_query_from_tool_args
 from app.services.logging.query_clickhouse import query_logs as ch_query_logs
-from app.services.logging.query_clickhouse import stats_overview
+from app.services.logging.query_clickhouse import stats_by_dimension, stats_overview
 from app.services.notifications.channels import send_via_channel
 from app.services.site_scope import apply_site_scope
 from app.services.site_domains import site_domain_list
 
 log = logging.getLogger("waf.ai_guard.ports")
 _FIELDS = field_map()
+_BLOCK_PAGE_KEYS = ("custom_block_page_enabled", "block_page_status_code", "block_page_html")
+
+
+def _block_page_payload(payload: dict) -> dict:
+    return {k: payload[k] for k in _BLOCK_PAGE_KEYS if k in payload}
 
 
 class AiResourceWriter:
@@ -64,6 +69,7 @@ class AiResourceWriter:
                     "priority": r.priority,
                     "site_ids": ids,
                     "enabled": r.enabled,
+                    "custom_block_page_enabled": r.custom_block_page_enabled,
                 }
             )
         return items
@@ -158,8 +164,10 @@ class AiResourceWriter:
                 "enabled": payload.get("enabled", True),
                 "conditions": preview["conditions"],
                 "remark": payload.get("remark"),
+                **_block_page_payload(payload),
             }
         )
+        RateLimitCreate.model_validate(data)
         row = RateLimit(**data)
         db.add(row)
         await db.commit()
@@ -174,66 +182,71 @@ class AiResourceWriter:
         }
 
     async def query_logs(self, arguments: dict) -> dict:
-        hours = int(arguments.get("hours") or 24)
-        hours = min(max(1, hours), 168)
-        limit = min(max(1, int(arguments.get("limit") or 50)), 100)
-        end = datetime.utcnow()
-        start = end - timedelta(hours=hours)
-        q = LogQuery(
-            start=start,
-            end=end,
-            site_id=arguments.get("site_id"),
-            blocked=arguments.get("blocked"),
-            client_ip=arguments.get("client_ip"),
-            keyword=arguments.get("keyword"),
-            page=1,
-            page_size=limit,
-        )
+        q = build_log_query_from_tool_args(arguments)
         total, items = await ch_query_logs(q)
         return {
             "total": total,
             "returned": len(items),
-            "hours": hours,
+            "page": q.page,
+            "page_size": q.page_size,
+            "start": q.start.isoformat() if q.start else None,
+            "end": q.end.isoformat() if q.end else None,
+            "filters_applied": {
+                "site_id": q.site_id,
+                "blocked": q.blocked,
+                "keyword": q.keyword,
+                "filters": q.filters,
+            },
             "logs": [_sanitize_log_item(item) for item in items],
         }
 
     async def get_log_stats(self, arguments: dict) -> dict:
+        q = build_log_query_from_tool_args({**arguments, "limit": 1, "page": 1})
         hours = int(arguments.get("hours") or 24)
         hours = min(max(1, hours), 168)
-        site_id = arguments.get("site_id")
-        if site_id is None:
-            return await stats_overview(hours=hours)
+        data = await stats_overview(
+            hours=hours,
+            start=q.start,
+            end=q.end,
+            q=q,
+            trend_granularity=arguments.get("trend_granularity"),
+        )
+        return data
 
-        end = datetime.utcnow()
-        start = end - timedelta(hours=hours)
-        q = LogQuery(start=start, end=end, site_id=site_id, page=1, page_size=1)
-        total, _ = await ch_query_logs(q)
-        blocked_q = LogQuery(
-            start=start, end=end, site_id=site_id, blocked=True, page=1, page_size=1
+    async def query_log_stats_group(self, arguments: dict) -> dict:
+        dimension = arguments.get("dimension")
+        if not dimension:
+            raise ValueError("dimension 为必填参数")
+        q = build_log_query_from_tool_args({**arguments, "limit": 1, "page": 1})
+        hours = int(arguments.get("hours") or 24)
+        hours = min(max(1, hours), 168)
+        limit = min(max(1, int(arguments.get("limit") or 20)), 100)
+        data = await stats_by_dimension(
+            dimension=str(dimension),
+            hours=hours,
+            start=q.start,
+            end=q.end,
+            page=1,
+            page_size=limit,
+            limit=limit,
+            q=q,
         )
-        blocked_total, _ = await ch_query_logs(blocked_q)
-        rows, meta = await log_sampler.sample(
-            window_min=min(hours * 60, 24 * 60),
-            site_id=site_id,
-            max_rows=200,
-        )
-        return {
-            "start": start.isoformat(),
-            "end": end.isoformat(),
-            "window_hours": hours,
-            "site_id": site_id,
-            "total": total,
-            "blocked": blocked_total,
-            "passed": max(0, total - blocked_total),
-            "sample_meta": meta,
-            "sample_logs": compact_log_rows(rows, limit=30),
-        }
+        return data.model_dump()
 
     async def preview_rule(self, payload: dict) -> dict:
         conditions = validate_condition(payload.get("conditions"))
         mode = payload.get("mode", "observe")
         if mode not in MODES:
             raise ValueError(f"无效的防护方式: {mode}")
+        RuleCreate.model_validate(
+            {
+                "name": payload.get("name") or "preview",
+                "mode": mode,
+                "priority": payload.get("priority", 100),
+                "conditions": conditions,
+                **_block_page_payload(payload),
+            }
+        )
         return {"valid": True, "conditions": conditions, "mode": mode}
 
     async def create_site(self, db: AsyncSession, payload: dict) -> dict:
@@ -270,20 +283,15 @@ class AiResourceWriter:
         return {"id": site.id, "name": site.name, "domain": site.domain, "domains": domains}
 
     async def create_rule(self, db: AsyncSession, payload: dict) -> dict:
-        conditions = validate_condition(payload.get("conditions"))
-        mode = payload.get("mode", "observe")
-        if mode not in MODES:
-            raise ValueError(f"无效的防护方式: {mode}")
-        data = apply_site_scope(
+        body = RuleCreate.model_validate(
             {
-                "name": payload["name"],
-                "mode": mode,
-                "priority": payload.get("priority", 100),
-                "site_ids": payload.get("site_ids"),
-                "enabled": payload.get("enabled", True),
-                "conditions": conditions,
+                **payload,
+                "conditions": validate_condition(payload.get("conditions")),
             }
         )
+        if body.mode not in MODES:
+            raise ValueError(f"无效的防护方式: {body.mode}")
+        data = apply_site_scope(body.model_dump())
         rule = Rule(**data)
         db.add(rule)
         await db.commit()
@@ -303,8 +311,10 @@ class AiResourceWriter:
                 "enabled": payload.get("enabled", True),
                 "conditions": conditions,
                 "remark": payload.get("remark"),
+                **_block_page_payload(payload),
             }
         )
+        IpListCreate.model_validate({**data, "list_type": "white"})
         row = IpList(**data)
         db.add(row)
         await db.commit()
@@ -362,6 +372,8 @@ class AiResourceWriter:
             return await self.query_logs(arguments)
         if tool_name == "get_log_stats":
             return await self.get_log_stats(arguments)
+        if tool_name == "query_log_stats_group":
+            return await self.query_log_stats_group(arguments)
         if tool_name == "preview_rule":
             return await self.preview_rule(arguments)
         if tool_name == "preview_rate_limit":
@@ -501,10 +513,14 @@ def _sanitize_log_item(item: dict) -> dict:
         "method": item.get("method"),
         "domain": item.get("domain"),
         "uri": (item.get("uri") or "")[:200],
+        "uri_path": item.get("uri_path"),
         "blocked": bool(item.get("blocked")),
+        "source": item.get("source"),
+        "rule_id": item.get("rule_id"),
         "rule_name": item.get("rule_name"),
         "mode": item.get("mode"),
         "action": item.get("action"),
+        "site_id": item.get("site_id"),
         "geo_country": item.get("geo_country"),
         "ua_family": item.get("ua_family"),
         "log_type": item.get("log_type"),

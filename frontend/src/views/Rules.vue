@@ -67,6 +67,14 @@
           <condition-editor v-model:value="record.conditions" :readonly="readonly" />
         </a-form-item>
       </fs-form-section>
+
+      <block-page-form-section
+        v-if="record.mode === 'block'"
+        :record="record"
+        :readonly="readonly"
+        switch-label="启用规则专属拦截页"
+        description="关闭时使用站点或全局防护页面；命中本规则时优先使用此处配置"
+      />
     </template>
   </resource-crud>
   </page-shell>
@@ -74,6 +82,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import BlockPageFormSection from "@/components/BlockPageFormSection.vue";
 import ConditionEditor from "@/components/ConditionEditor.vue";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
@@ -84,6 +93,8 @@ import SiteSelect from "@/components/SiteSelect.vue";
 import { enabledFilterOptions, modeFilterOptions, siteScopeFilterField } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
 import { siteIdsColumn } from "@/composables/useSiteOptions";
+import { BLOCK_PAGE_FIELD_DEFAULTS, validateBlockPageOverride } from "@/constants/blockPage";
+import { hasMatchingConditions } from "@/utils/conditions";
 import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceDefaultSort, ResourceFilterField } from "@/types/resourceList";
 
@@ -138,16 +149,17 @@ const defaultRecord = () => ({
   site_ids: [],
   enabled: true,
   conditions: { logic: "and", conditions: [] },
+  ...BLOCK_PAGE_FIELD_DEFAULTS,
 });
 
-function hasConditions(record: Record<string, any>) {
-  return Array.isArray(record.conditions?.conditions) && record.conditions.conditions.length > 0;
-}
-
 function preparePayload(row: Record<string, any>) {
-  if (row.mode !== "observe" && !hasConditions(row)) {
+  if (row.mode !== "observe" && !hasMatchingConditions(row.conditions)) {
     throw new Error("非观察模式必须配置至少一条匹配条件");
   }
+  if (row.mode !== "block") {
+    row.custom_block_page_enabled = false;
+  }
+  validateBlockPageOverride(row);
   return row;
 }
 </script>

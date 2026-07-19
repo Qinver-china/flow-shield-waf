@@ -34,6 +34,15 @@ VERSION_KEY = "waf:config:version"
 DIRTY_KEY = "waf:config:dirty"
 
 
+def _attach_block_page(item: dict, row) -> None:
+    if getattr(row, "custom_block_page_enabled", False):
+        item["block_page"] = {
+            "enabled": True,
+            "status_code": row.block_page_status_code or DEFAULT_BLOCK_PAGE_STATUS,
+            "html": row.block_page_html or DEFAULT_BLOCK_PAGE_HTML,
+        }
+
+
 def _base(row) -> dict:
     item: dict = {
         "id": row.id,
@@ -44,6 +53,7 @@ def _base(row) -> dict:
     site_ids = resolved_site_ids(row)
     if site_ids:
         item["site_ids"] = site_ids
+    _attach_block_page(item, row)
     return item
 
 

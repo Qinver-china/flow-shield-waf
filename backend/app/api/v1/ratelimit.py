@@ -14,6 +14,7 @@ from app.api.listing import (
 )
 from app.core.db import get_db
 from app.fields import field_map, validate_condition_with_refs
+from app.fields.validator import has_meaningful_conditions
 from app.models import RateLimit, User
 from app.models.rule import MODES
 from app.schemas.common import ok
@@ -38,7 +39,7 @@ async def _check(db: AsyncSession, mode, keys, conditions):
             if field not in _FIELDS:
                 raise HTTPException(status_code=400, detail=f"未知限速字段: {field}")
     allow_empty = resolved_mode == "observe"
-    if not allow_empty and not conditions:
+    if not allow_empty and not has_meaningful_conditions(conditions):
         raise HTTPException(status_code=400, detail="非观察模式必须配置至少一条匹配条件")
     if conditions:
         try:

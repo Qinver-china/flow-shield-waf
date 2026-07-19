@@ -64,8 +64,26 @@ function _M.render(html, vars)
     return out
 end
 
-function _M.resolve_block_page(cfg, site)
-    local override = pick_site_override(site, "block_page")
+local function pick_meta_override(meta, key)
+    if not meta or type(meta) ~= "table" then
+        return nil
+    end
+    local cfg = meta[key]
+    if type(cfg) ~= "table" or cfg.enabled ~= true then
+        return nil
+    end
+    return cfg
+end
+
+function _M.resolve_block_page(cfg, site, meta)
+    local override = pick_meta_override(meta, "block_page")
+    if override then
+        return {
+            status_code = tonumber(override.status_code) or DEFAULT_BLOCK_STATUS,
+            html = override.html or DEFAULT_BLOCK_HTML,
+        }
+    end
+    override = pick_site_override(site, "block_page")
     if override then
         return {
             status_code = tonumber(override.status_code) or DEFAULT_BLOCK_STATUS,
@@ -92,7 +110,7 @@ function _M.resolve_captcha_footer(cfg, site)
 end
 
 function _M.render_block_page(cfg, site, ctx, meta)
-    local page = _M.resolve_block_page(cfg, site)
+    local page = _M.resolve_block_page(cfg, site, meta)
     local html = _M.render(page.html, _M.template_vars(ctx, meta))
     return page.status_code, html
 end

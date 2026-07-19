@@ -15,7 +15,7 @@ log = logging.getLogger("waf.ai_guard.llm")
 
 # 部分 OpenAI 兼容中转站会拦截官方 SDK 的 User-Agent，导致 chat 返回 502。
 _LLM_USER_AGENT = "FlowShield-WAF/1.0"
-_LLM_TIMEOUT_SEC = 60.0
+_LLM_TIMEOUT_SEC = 120.0
 _LLM_MAX_ATTEMPTS = 3
 _RETRYABLE_STATUS = frozenset({429, 502, 503, 524})
 
@@ -138,6 +138,63 @@ class LlmClient:
             delta = chunk.choices[0].delta
             if delta.content:
                 yield delta.content
+
+    async def stream_completion(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        tools: list[dict] | None = None,
+        temperature: float | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream completion; final yield has event=done with content and tool_calls."""
+        kwargs: dict[str, Any] = {
+            "model": self._config.model,
+            "messages": messages,
+            "temperature": temperature if temperature is not None else self._config.temperature,
+            "max_tokens": self._config.max_tokens,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+
+        stream = await self._create_completion(**kwargs)
+        content_parts: list[str] = []
+        tool_calls_acc: dict[int, dict[str, Any]] = {}
+
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.content:
+                content_parts.append(delta.content)
+                yield {"event": "delta", "content": delta.content}
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    if idx not in tool_calls_acc:
+                        tool_calls_acc[idx] = {
+                            "id": "",
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        }
+                    acc = tool_calls_acc[idx]
+                    if tc.id:
+                        acc["id"] = tc.id
+                    if tc.function:
+                        if tc.function.name:
+                            acc["function"]["name"] += tc.function.name
+                        if tc.function.arguments:
+                            acc["function"]["arguments"] += tc.function.arguments
+
+        tool_calls = (
+            [tool_calls_acc[i] for i in sorted(tool_calls_acc)] if tool_calls_acc else None
+        )
+        yield {
+            "event": "done",
+            "content": "".join(content_parts),
+            "tool_calls": tool_calls,
+        }
 
     async def chat_json(
         self,

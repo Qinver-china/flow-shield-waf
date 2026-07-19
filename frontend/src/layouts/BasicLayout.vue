@@ -111,6 +111,7 @@
         </div>
       </a-layout-content>
     </a-layout>
+    <floating-ai-chat />
   </a-layout>
 </template>
 
@@ -137,6 +138,7 @@ import {
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import DashboardLiveRefreshToggle from "@/components/DashboardLiveRefreshToggle.vue";
 import AppLogo from "@/components/AppLogo.vue";
+import FloatingAiChat from "@/components/ai-chat/FloatingAiChat.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
 import { useAuthStore } from "@/stores/auth";
 import { useAppSettingsStore } from "@/stores/appSettings";

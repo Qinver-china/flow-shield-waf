@@ -139,7 +139,31 @@
       @ok="save"
     >
       <a-form layout="vertical">
+        <a-tabs
+          v-if="showJsonImport"
+          v-model:active-key="createFormTab"
+          class="resource-crud__create-tabs"
+        >
+          <a-tab-pane key="form" tab="表单填写">
+            <slot
+              name="form"
+              :record="record"
+              :readonly="false"
+              :mode="drawerMode"
+              :enabled-loading="drawerEnabledToggling"
+              :on-enabled-persist="persistDrawerEnabled"
+            />
+          </a-tab-pane>
+          <a-tab-pane key="import" tab="JSON 导入">
+            <resource-json-import
+              :default-record="defaultRecord"
+              bare
+              @import="onJsonImport"
+            />
+          </a-tab-pane>
+        </a-tabs>
         <slot
+          v-else
           name="form"
           :record="record"
           :readonly="drawerMode === 'view'"
@@ -186,6 +210,7 @@ import { api } from "@/api";
 import ListFilterBar from "@/components/ListFilterBar.vue";
 import ResourceNameCell from "@/components/ResourceNameCell.vue";
 import FsFormDrawer, { type FormDrawerMode } from "@/components/FsFormDrawer.vue";
+import ResourceJsonImport from "@/components/ResourceJsonImport.vue";
 import TableBatchBar from "@/components/TableBatchBar.vue";
 import BatchEditDrawer from "@/components/BatchEditDrawer.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
@@ -240,6 +265,7 @@ const pageSize = ref(20);
 const total = ref(0);
 const togglingId = ref<number | null>(null);
 const drawerEnabledToggling = ref(false);
+const createFormTab = ref<"form" | "import">("form");
 const filterValues = reactive<Record<string, unknown>>({});
 const sortField = ref(props.defaultSort?.field);
 const sortOrder = ref<"asc" | "desc" | undefined>(props.defaultSort?.order);
@@ -257,6 +283,10 @@ const drawerSubtitle = computed(() => {
 });
 
 const recordJson = computed(() => JSON.stringify(record, null, 2));
+
+const showJsonImport = computed(
+  () => drawerMode.value === "create" || drawerMode.value === "copy",
+);
 
 const hasEnabledColumn = computed(() => props.columns.some((c) => c.key === "enabled"));
 
@@ -420,12 +450,18 @@ function reset(obj: Record<string, any>) {
   Object.assign(record, obj);
 }
 
+function onJsonImport(merged: Record<string, unknown>) {
+  reset(applyMapRecord(merged));
+  createFormTab.value = "form";
+}
+
 function applyMapRecord(row: Record<string, any>) {
   return props.mapRecord ? props.mapRecord(row) : row;
 }
 
 function openCreate() {
   drawerMode.value = "create";
+  createFormTab.value = "form";
   reset(applyMapRecord(props.defaultRecord()));
   drawerOpen.value = true;
 }
@@ -451,6 +487,7 @@ function buildDuplicate(row: Record<string, any>) {
 
 function openDuplicate(row: any) {
   drawerMode.value = "copy";
+  createFormTab.value = "form";
   reset(applyMapRecord(buildDuplicate(row)));
   drawerOpen.value = true;
 }
@@ -515,6 +552,7 @@ function switchToEdit() {
 
 function switchToDuplicate() {
   drawerMode.value = "copy";
+  createFormTab.value = "form";
   reset(applyMapRecord(buildDuplicate(record)));
 }
 
@@ -734,5 +772,9 @@ watch(
   display: flex;
   justify-content: center;
   padding: 8px 0;
+}
+
+.resource-crud__create-tabs {
+  margin-top: -4px;
 }
 </style>

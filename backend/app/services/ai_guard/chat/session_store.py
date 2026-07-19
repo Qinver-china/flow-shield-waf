@@ -1,7 +1,7 @@
 """Chat session persistence."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_guard import AiGuardChatMessage, AiGuardChatSession
@@ -67,3 +67,24 @@ async def update_message_action(
     await db.commit()
     await db.refresh(row)
     return row
+
+
+async def delete_session(db: AsyncSession, session_id: int) -> None:
+    await db.execute(delete(AiGuardChatMessage).where(AiGuardChatMessage.session_id == session_id))
+    row = await db.get(AiGuardChatSession, session_id)
+    if row is not None:
+        await db.delete(row)
+    await db.commit()
+
+
+async def delete_all_sessions(db: AsyncSession, *, user_id: int | None) -> int:
+    q = select(AiGuardChatSession.id)
+    if user_id is not None:
+        q = q.where(AiGuardChatSession.user_id == user_id)
+    session_ids = [int(row[0]) for row in (await db.execute(q)).all()]
+    if not session_ids:
+        return 0
+    await db.execute(delete(AiGuardChatMessage).where(AiGuardChatMessage.session_id.in_(session_ids)))
+    await db.execute(delete(AiGuardChatSession).where(AiGuardChatSession.id.in_(session_ids)))
+    await db.commit()
+    return len(session_ids)

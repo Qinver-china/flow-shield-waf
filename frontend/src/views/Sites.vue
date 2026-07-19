@@ -130,7 +130,7 @@
           </template>
         </fs-form-section>
 
-        <fs-form-section title="自定义防护页面" description="关闭时使用系统设置中的全局防护页面">
+        <fs-form-section title="自定义防护页面" description="关闭时使用系统设置中的全局防护页面；优先级低于规则/黑名单/限速的专属配置">
           <div class="fs-switch-row">
             <span>启用站点专属防护页面</span>
             <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />

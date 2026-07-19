@@ -103,6 +103,29 @@ def _validate_leaf(node: dict[str, Any]) -> None:
                 raise ValueError("IP 组 ID 必须是正整数")
 
 
+def _normalize_condition_shape(node: Any) -> Any:
+    """Accept LLM-friendly all/any aliases as logic/conditions groups."""
+    if not isinstance(node, dict):
+        return node
+    if "conditions" in node:
+        out = dict(node)
+        conds = out.get("conditions")
+        if isinstance(conds, list):
+            out["conditions"] = [_normalize_condition_shape(c) for c in conds]
+        return out
+    if "all" in node:
+        items = node.get("all")
+        if not isinstance(items, list):
+            raise ValueError("all 必须是数组")
+        return {"logic": "and", "conditions": [_normalize_condition_shape(c) for c in items]}
+    if "any" in node:
+        items = node.get("any")
+        if not isinstance(items, list):
+            raise ValueError("any 必须是数组")
+        return {"logic": "or", "conditions": [_normalize_condition_shape(c) for c in items]}
+    return node
+
+
 def _validate_node(node: Any, depth: int = 0) -> None:
     if depth > 10:
         raise ValueError("条件嵌套层级过深")
@@ -121,12 +144,24 @@ def _validate_node(node: Any, depth: int = 0) -> None:
         _validate_leaf(node)
 
 
+def _count_leaf_conditions(node: Any) -> int:
+    if not isinstance(node, dict):
+        return 0
+    if node.get("field"):
+        return 1
+    conds = node.get("conditions")
+    if isinstance(conds, list):
+        return sum(_count_leaf_conditions(child) for child in conds)
+    return 0
+
+
+def has_meaningful_conditions(condition: dict | None) -> bool:
+    """Return True when the tree contains at least one leaf condition."""
+    return _count_leaf_conditions(condition) > 0
+
+
 def _is_empty_condition(condition: dict | None) -> bool:
-    if condition is None or condition == {}:
-        return True
-    if "conditions" in condition:
-        return not (condition.get("conditions") or [])
-    return False
+    return not has_meaningful_conditions(condition)
 
 
 def validate_condition(condition: dict | None, *, allow_empty: bool = True) -> dict:
@@ -138,9 +173,12 @@ def validate_condition(condition: dict | None, *, allow_empty: bool = True) -> d
         if allow_empty:
             return {"logic": "and", "conditions": []}
         raise ValueError("条件不能为空")
+    condition = _normalize_condition_shape(condition)
     # normalize a bare leaf into a group for consistency
     if "conditions" not in condition and "field" in condition:
         condition = {"logic": "and", "conditions": [condition]}
+    if not allow_empty and _is_empty_condition(condition):
+        raise ValueError("条件不能为空")
     _validate_node(condition)
     return condition
 

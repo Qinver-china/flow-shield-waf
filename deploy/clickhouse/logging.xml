@@ -1,0 +1,24 @@
+<clickhouse>
+    <!--
+      Production logging profile for Docker:
+      - warning: only warnings/errors go to container stdout (captured as json.log)
+      - disable internal *_log system tables: they grow quickly under high ingest
+    -->
+    <logger>
+        <level>warning</level>
+        <console>true</console>
+    </logger>
+
+    <query_log remove="remove"/>
+    <query_thread_log remove="remove"/>
+    <query_views_log remove="remove"/>
+    <text_log remove="remove"/>
+    <trace_log remove="remove"/>
+    <metric_log remove="remove"/>
+    <asynchronous_metric_log remove="remove"/>
+    <session_log remove="remove"/>
+    <part_log remove="remove"/>
+    <processors_profile_log remove="remove"/>
+    <query_metric_log remove="remove"/>
+    <background_schedule_pool_log remove="remove"/>
+</clickhouse>

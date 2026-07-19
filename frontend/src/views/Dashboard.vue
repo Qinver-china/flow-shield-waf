@@ -368,7 +368,7 @@ const traffic = reactive<{ burst_active: boolean; windows: any[] }>({
 });
 
 const trafficCardTitle = computed(() =>
-  trafficSiteId.value == null ? "实时全站流量" : `实时站点流量 · ${formatSiteId(trafficSiteId.value)}`,
+  trafficSiteId.value == null ? "实时全站流量" :"实时站点流量",
 );
 
 /** 异常检测仅展示有基线学习能力的窗口（排除 10s / 30s） */

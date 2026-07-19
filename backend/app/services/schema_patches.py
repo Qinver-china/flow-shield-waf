@@ -23,7 +23,28 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_waf_setting_timezone(conn)
     await _ensure_waf_setting_ratelimit_fail_open(conn)
     await _ensure_site_extra_domains(conn)
+    await _ensure_resource_block_page_columns(conn)
     await _drop_legacy_bot_columns(conn)
+
+
+async def _ensure_resource_block_page_columns(conn) -> None:
+    for table in ("rule", "rate_limit", "ip_list"):
+        if not await _column_exists(conn, table, "custom_block_page_enabled"):
+            await conn.execute(
+                text(
+                    f"ALTER TABLE {table} "
+                    "ADD COLUMN custom_block_page_enabled TINYINT(1) NOT NULL DEFAULT 0"
+                )
+            )
+            log.info("schema patch applied: %s.custom_block_page_enabled", table)
+        if not await _column_exists(conn, table, "block_page_status_code"):
+            await conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN block_page_status_code INT NULL")
+            )
+            log.info("schema patch applied: %s.block_page_status_code", table)
+        if not await _column_exists(conn, table, "block_page_html"):
+            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN block_page_html TEXT NULL"))
+            log.info("schema patch applied: %s.block_page_html", table)
 
 
 async def _column_exists(conn, table: str, column: str) -> bool:

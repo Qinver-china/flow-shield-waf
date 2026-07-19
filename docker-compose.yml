@@ -2,6 +2,12 @@
 # mysql + redis（官方镜像）+ app（后端/Worker/引擎/面板合一）
 name: flowshield-waf
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   mysql:
     image: mysql:8.0
@@ -19,6 +25,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *default-logging
     networks:
       - waf_net
 
@@ -49,6 +56,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *default-logging
     networks:
       - waf_net
 
@@ -64,6 +72,8 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - ./deploy/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./deploy/clickhouse/listen.xml:/etc/clickhouse-server/config.d/listen.xml:ro
+      - ./deploy/clickhouse/logging.xml:/etc/clickhouse-server/config.d/logging.xml:ro
+      - ./deploy/clickhouse/disable-query-log.xml:/etc/clickhouse-server/users.d/disable-query-log.xml:ro
     ulimits:
       nofile:
         soft: 262144
@@ -73,6 +83,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *default-logging
     networks:
       - waf_net
 
@@ -144,6 +155,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s
+    logging: *default-logging
     networks:
       - waf_net
 

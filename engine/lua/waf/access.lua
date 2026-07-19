@@ -39,14 +39,18 @@ local function make_ctx(site_id, domain, settings)
     }
 end
 
-local function rule_meta(source, id, name, keys)
-    return {
+local function rule_meta(source, id, name, keys, item)
+    local meta = {
         type = source == "rule" and "protection" or "access-control",
         source = source,
         id = id,
         name = name,
         keys = keys,
     }
+    if item and type(item.block_page) == "table" and item.block_page.enabled == true then
+        meta.block_page = item.block_page
+    end
+    return meta
 end
 
 local function rule_cleared(meta, ext)
@@ -180,7 +184,7 @@ function _M.run()
             local matched, trace = log_trace.match(matcher, b.conditions, ext)
             if matched then
                 return apply_mode(cfg, site, ctx, "block",
-                    rule_meta("blacklist", b.id, b.name, nil), ext, trace)
+                    rule_meta("blacklist", b.id, b.name, nil, b), ext, trace)
             end
         end
     end
@@ -203,7 +207,7 @@ function _M.run()
     if not skip_rate then
         for _, rl in ipairs(cfg.ratelimits) do
             if rl.enabled ~= false and applies(rl) then
-                local meta = rule_meta("ratelimit", rl.id, rl.name, rl.keys)
+                local meta = rule_meta("ratelimit", rl.id, rl.name, rl.keys, rl)
                 local hit, trace = log_trace.ratelimit_hit(rl, ext, function()
                     local rl_mode = rl.mode or "block"
                     return (rl_mode == "captcha" or rl_mode == "js_challenge" or rl_mode == "slide_captcha")
@@ -222,7 +226,7 @@ function _M.run()
             if r.enabled ~= false and applies(r) then
                 local matched, trace = log_trace.match(matcher, r.conditions, ext)
                 if matched then
-                    local res = apply_mode(cfg, site, ctx, r.mode, rule_meta("rule", r.id, r.name, nil), ext, trace)
+                    local res = apply_mode(cfg, site, ctx, r.mode, rule_meta("rule", r.id, r.name, nil, r), ext, trace)
                     if res ~= "continue" then return end
                 end
             end

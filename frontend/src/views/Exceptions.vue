@@ -77,6 +77,7 @@ import {
 } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
 import { siteIdsColumn } from "@/composables/useSiteOptions";
+import { hasMatchingConditions } from "@/utils/conditions";
 import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
 
@@ -118,10 +119,6 @@ const defaultRecord = () => ({
   conditions: { logic: "and", conditions: [] },
 });
 
-function hasConditions(record: Record<string, any>) {
-  return Array.isArray(record.conditions?.conditions) && record.conditions.conditions.length > 0;
-}
-
 function conditionHint(scope: string) {
   if (scope === "all") {
     return "跳过全部防护时必须至少配置一条匹配条件";
@@ -130,7 +127,7 @@ function conditionHint(scope: string) {
 }
 
 function preparePayload(row: Record<string, any>) {
-  if (row.scope === "all" && !hasConditions(row)) {
+  if (row.scope === "all" && !hasMatchingConditions(row.conditions)) {
     throw new Error("跳过全部防护时必须配置至少一条匹配条件");
   }
   return row;

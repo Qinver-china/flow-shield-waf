@@ -269,6 +269,30 @@ def catalog_for_frontend() -> dict:
 def catalog_compact_for_llm() -> dict:
     """Lightweight field catalog for LLM prompts (no UI option lists)."""
     return {
+        "condition_format": {
+            "group": {"logic": "and|or", "conditions": ["<node>", "..."]},
+            "leaf": {"field": "<key>", "op": "<operator>", "value": "<value>", "arg": "<optional>"},
+            "notes": [
+                "必须使用 logic + conditions，不要使用 all/any",
+                "单条叶子条件可省略外层分组，系统会自动包裹",
+                "requires_arg=true 的字段必须提供 arg（如 http.header 的 Header 名）",
+            ],
+        },
+        "traffic_value": {
+            "field": "traffic.global | traffic.site",
+            "op": "compare",
+            "value": {
+                "window_sec": "60|300|1800|3600|86400",
+                "compare": "abs_gt|abs_lt|qps_gt|qps_lt|baseline_gt|baseline_lt",
+                "threshold": "非负数（abs/qps 比较时）",
+                "percent": "非负数（baseline 比较时，百分比）",
+            },
+        },
+        "block_page": {
+            "custom_block_page_enabled": "bool，启用自定义拦截页",
+            "block_page_status_code": "403|429|451|503",
+            "block_page_html": "HTML，可用变量 request_id/client_ip/domain/method/uri/rule_id/rule_name/source",
+        },
         "fields": [
             {
                 "key": f["key"],

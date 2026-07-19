@@ -40,6 +40,13 @@
       <fs-form-section title="命中条件" description="命中即拦截；必须至少配置一条条件，否则会拦截全部流量">
         <condition-editor v-model:value="record.conditions" :readonly="readonly" />
       </fs-form-section>
+
+      <block-page-form-section
+        :record="record"
+        :readonly="readonly"
+        switch-label="启用黑名单专属拦截页"
+        description="关闭时使用站点或全局防护页面；命中本条目时优先使用此处配置"
+      />
     </template>
   </resource-crud>
   </page-shell>
@@ -47,6 +54,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import BlockPageFormSection from "@/components/BlockPageFormSection.vue";
 import ConditionEditor from "@/components/ConditionEditor.vue";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
@@ -57,6 +65,8 @@ import SiteSelect from "@/components/SiteSelect.vue";
 import { enabledFilterOptions, siteScopeFilterField } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
 import { siteIdsColumn } from "@/composables/useSiteOptions";
+import { BLOCK_PAGE_FIELD_DEFAULTS, validateBlockPageOverride } from "@/constants/blockPage";
+import { hasMatchingConditions } from "@/utils/conditions";
 import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
 
@@ -83,16 +93,14 @@ const defaultRecord = () => ({
   site_ids: [],
   enabled: true,
   conditions: { logic: "and", conditions: [] },
+  ...BLOCK_PAGE_FIELD_DEFAULTS,
 });
 
-function hasConditions(record: Record<string, any>) {
-  return Array.isArray(record.conditions?.conditions) && record.conditions.conditions.length > 0;
-}
-
 function preparePayload(row: Record<string, any>) {
-  if (!hasConditions(row)) {
+  if (!hasMatchingConditions(row.conditions)) {
     throw new Error("黑名单必须配置至少一条匹配条件");
   }
+  validateBlockPageOverride(row);
   return row;
 }
 </script>

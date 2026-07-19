@@ -255,13 +255,28 @@
   border-top: 1px solid var(--fs-border);
 }
 
+.fs-json-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .fs-json-block__title {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--fs-text-muted);
+}
+
+.fs-json-block__copy {
+  flex-shrink: 0;
+  padding: 0;
+  height: auto;
+  font-size: 13px;
 }
 
 .fs-json-block__content {

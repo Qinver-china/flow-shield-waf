@@ -22,6 +22,25 @@ def test_group_and_or_ok():
     assert validate_condition(cond) == cond
 
 
+def test_all_any_aliases_normalized():
+    cond = validate_condition(
+        {
+            "any": [
+                {"field": "http.uri.query", "op": "regex", "value": "(?i)<script"},
+                {
+                    "all": [
+                        {"field": "http.method", "op": "eq", "value": "POST"},
+                        {"field": "http.body.raw", "op": "regex", "value": "(?i)onerror="},
+                    ],
+                },
+            ],
+        }
+    )
+    assert cond["logic"] == "or"
+    assert cond["conditions"][1]["logic"] == "and"
+    assert cond["conditions"][1]["conditions"][0]["field"] == "http.method"
+
+
 def test_empty_condition_allowed():
     assert validate_condition(None) == {"logic": "and", "conditions": []}
 

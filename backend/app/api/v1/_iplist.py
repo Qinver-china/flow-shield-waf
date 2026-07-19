@@ -113,8 +113,11 @@ def make_router(list_type: str) -> APIRouter:
         item = await db.get(IpList, item_id)
         if item is None or item.list_type != list_type:
             raise HTTPException(status_code=404, detail="记录不存在")
-        normalized = _validate(body.conditions, allow_empty=allow_empty)
-        for k, v in apply_site_scope(body.model_dump(exclude_unset=True)).items():
+        patch = apply_site_scope(body.model_dump(exclude_unset=True))
+        normalized = None
+        if "conditions" in patch:
+            normalized = _validate(patch["conditions"], allow_empty=allow_empty)
+        for k, v in patch.items():
             if k == "conditions" and normalized is not None:
                 v = normalized
             setattr(item, k, v)

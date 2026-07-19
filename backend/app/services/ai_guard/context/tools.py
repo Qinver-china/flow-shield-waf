@@ -1,6 +1,95 @@
 """OpenAI function tool definitions for chat."""
 from __future__ import annotations
 
+from app.services.ai_guard.log_query import LOG_FILTER_OPS, LOG_SCALAR_FIELDS
+from app.services.logging.query_clickhouse import STATS_DIMENSIONS
+_BLOCK_PAGE_PROPERTIES = {
+    "custom_block_page_enabled": {
+        "type": "boolean",
+        "description": "是否启用自定义拦截页（命中规则/限速/白名单拦截时）",
+    },
+    "block_page_status_code": {
+        "type": "integer",
+        "description": "拦截页 HTTP 状态码，可选 403/429/451/503",
+    },
+    "block_page_html": {
+        "type": "string",
+        "description": "拦截页 HTML，支持变量 {request_id} {client_ip} {domain} {method} {uri} {rule_id} {rule_name} {source}",
+    },
+}
+
+_CONDITION_SCHEMA = {
+    "type": "object",
+    "description": "条件树：{logic: and|or, conditions: [...]} 或叶子 {field, op, value[, arg]}",
+}
+
+_LOG_FILTER_ITEM = {
+    "type": "object",
+    "properties": {
+        "field": {
+            "type": "string",
+            "enum": sorted(LOG_SCALAR_FIELDS),
+            "description": "日志字段名",
+        },
+        "op": {
+            "type": "string",
+            "enum": list(LOG_FILTER_OPS),
+            "description": "eq/ne/contains/not_contains/like",
+        },
+        "value": {
+            "description": "筛选值；多值可用字符串数组（OR 组合）",
+        },
+    },
+    "required": ["field", "op", "value"],
+}
+
+_LOG_TIME_PROPERTIES = {
+    "hours": {
+        "type": "integer",
+        "description": "回溯小时数，默认 24，最大 168",
+        "default": 24,
+    },
+    "start": {"type": "string", "description": "开始时间 ISO8601，可选"},
+    "end": {"type": "string", "description": "结束时间 ISO8601，可选"},
+}
+
+_LOG_COMMON_FILTER_PROPERTIES = {
+    "site_id": {"type": "integer", "description": "按站点 ID 过滤"},
+    "blocked": {"type": "boolean", "description": "true=仅拦截，false=仅放行"},
+    "client_ip": {"type": "string", "description": "客户端 IP"},
+    "rule_id": {"type": "integer", "description": "规则 ID"},
+    "rule_name": {"type": "string", "description": "规则名称子串"},
+    "source": {
+        "type": "string",
+        "description": "命中来源：rule / ratelimit / blacklist / whitelist / bot",
+    },
+    "log_type": {
+        "type": "string",
+        "description": "protection / access-control / audit",
+    },
+    "mode": {"type": "string", "description": "observe / block / captcha 等"},
+    "domain": {"type": "string"},
+    "method": {"type": "string"},
+    "uri_path": {"type": "string", "description": "URI 路径"},
+    "uri_ext": {"type": "string", "description": "URI 扩展名"},
+    "geo_country": {"type": "string", "description": "国家代码，如 CN"},
+    "geo_city": {"type": "string"},
+    "ua": {"type": "string", "description": "User-Agent 子串"},
+    "ua_family": {"type": "string"},
+    "bot_name": {"type": "string"},
+    "bot_category": {"type": "string"},
+    "tls_version": {"type": "string"},
+    "keyword": {
+        "type": "string",
+        "description": "在 URI/UA/域名/完整 URL 中搜索关键词",
+    },
+    "filters": {
+        "type": "array",
+        "description": "高级筛选条件数组（与日志页一致）；多个条件 AND 组合，详见知识上下文 log_query",
+        "items": _LOG_FILTER_ITEM,
+    },
+}
+
 TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
@@ -44,28 +133,20 @@ TOOL_DEFINITIONS: list[dict] = [
         "type": "function",
         "function": {
             "name": "query_logs",
-            "description": "查询最近 WAF 访问/拦截日志（ClickHouse），用于分析攻击或排查问题",
+            "description": (
+                "查询 WAF 访问/拦截日志明细（ClickHouse）。"
+                "请根据分析目标自主组合 site_id、blocked、keyword 与 filters 筛选；"
+                "知识上下文 log_query 含完整字段与示例。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "hours": {
-                        "type": "integer",
-                        "description": "回溯小时数，默认 24",
-                        "default": 24,
-                    },
-                    "site_id": {"type": "integer", "description": "按站点过滤，可选"},
-                    "blocked": {
-                        "type": "boolean",
-                        "description": "true=仅拦截，false=仅放行，省略=全部",
-                    },
-                    "client_ip": {"type": "string", "description": "按客户端 IP 过滤"},
-                    "keyword": {
-                        "type": "string",
-                        "description": "在 URI/UA/域名中搜索关键词",
-                    },
+                    **_LOG_TIME_PROPERTIES,
+                    **_LOG_COMMON_FILTER_PROPERTIES,
+                    "page": {"type": "integer", "description": "页码，默认 1", "default": 1},
                     "limit": {
                         "type": "integer",
-                        "description": "返回条数上限，默认 50，最大 100",
+                        "description": "每页条数，默认 50，最大 100",
                         "default": 50,
                     },
                 },
@@ -77,18 +158,49 @@ TOOL_DEFINITIONS: list[dict] = [
         "type": "function",
         "function": {
             "name": "get_log_stats",
-            "description": "获取指定时间窗口内的日志统计概览（总量、拦截数、Top IP、Top 规则等）",
+            "description": (
+                "获取日志统计概览（总量、拦截数、趋势、Top IP/规则/域名等）。"
+                "筛选参数与 query_logs 相同，可先统计再按需 query_logs 拉明细。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "hours": {
-                        "type": "integer",
-                        "description": "统计窗口小时数，默认 24",
-                        "default": 24,
+                    **_LOG_TIME_PROPERTIES,
+                    **_LOG_COMMON_FILTER_PROPERTIES,
+                    "trend_granularity": {
+                        "type": "string",
+                        "description": "趋势粒度：5m/10m/1h/1d 等，省略则自动",
                     },
-                    "site_id": {"type": "integer", "description": "按站点过滤，可选"},
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_log_stats_group",
+            "description": (
+                "按维度聚合统计日志（如 client_ip、rule_id、domain、source）。"
+                "用于找出攻击 IP、高频命中规则等；筛选参数与 query_logs 相同。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    **_LOG_TIME_PROPERTIES,
+                    **_LOG_COMMON_FILTER_PROPERTIES,
+                    "dimension": {
+                        "type": "string",
+                        "enum": sorted(STATS_DIMENSIONS),
+                        "description": "聚合维度",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回分组数量上限，默认 20，最大 100",
+                        "default": 20,
+                    },
+                },
+                "required": ["dimension"],
             },
         },
     },
@@ -128,7 +240,7 @@ TOOL_DEFINITIONS: list[dict] = [
         "type": "function",
         "function": {
             "name": "create_rule",
-            "description": "创建自定义防护规则（基于请求特征匹配，不含频率限速；需用户确认后才会写入）",
+            "description": "创建自定义防护规则（URI/Header/Body/Bot/流量/TLS 等特征匹配，不含 CC 限速；需用户确认后才会写入）",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -140,7 +252,8 @@ TOOL_DEFINITIONS: list[dict] = [
                     "priority": {"type": "integer"},
                     "site_ids": {"type": "array", "items": {"type": "integer"}},
                     "enabled": {"type": "boolean"},
-                    "conditions": {"type": "object"},
+                    "conditions": _CONDITION_SCHEMA,
+                    **_BLOCK_PAGE_PROPERTIES,
                 },
                 "required": ["name", "mode", "conditions"],
             },
@@ -183,10 +296,11 @@ TOOL_DEFINITIONS: list[dict] = [
                     "site_ids": {"type": "array", "items": {"type": "integer"}},
                     "enabled": {"type": "boolean"},
                     "conditions": {
-                        "type": "object",
+                        **_CONDITION_SCHEMA,
                         "description": "可选前置条件，如仅对动态页面限速、排除静态资源",
                     },
                     "remark": {"type": "string"},
+                    **_BLOCK_PAGE_PROPERTIES,
                 },
                 "required": ["name", "window", "threshold", "mode"],
             },
@@ -202,9 +316,10 @@ TOOL_DEFINITIONS: list[dict] = [
                 "properties": {
                     "name": {"type": "string"},
                     "site_ids": {"type": "array", "items": {"type": "integer"}},
-                    "conditions": {"type": "object"},
+                    "conditions": _CONDITION_SCHEMA,
                     "remark": {"type": "string"},
                     "enabled": {"type": "boolean"},
+                    **_BLOCK_PAGE_PROPERTIES,
                 },
                 "required": ["name", "conditions"],
             },
@@ -220,7 +335,7 @@ TOOL_DEFINITIONS: list[dict] = [
                 "properties": {
                     "name": {"type": "string"},
                     "mode": {"type": "string"},
-                    "conditions": {"type": "object"},
+                    "conditions": _CONDITION_SCHEMA,
                 },
                 "required": ["conditions"],
             },
@@ -249,7 +364,7 @@ TOOL_DEFINITIONS: list[dict] = [
                     "window": {"type": "integer"},
                     "threshold": {"type": "integer"},
                     "mode": {"type": "string"},
-                    "conditions": {"type": "object"},
+                    "conditions": _CONDITION_SCHEMA,
                 },
                 "required": ["window", "threshold", "mode"],
             },

@@ -10,9 +10,9 @@
       </a-button>
     </template>
     <a-tabs v-model:active-key="tab" class="ai-guard-tabs fs-tabs-animated">
-      <a-tab-pane key="chat" tab="智能助手" />
-      <a-tab-pane key="policies" tab="自动防护策略" />
-      <a-tab-pane key="incidents" tab="分析记录" />
+      <a-tab-pane key="chat" tab="AI智能助手" />
+      <a-tab-pane key="policies" tab="AI防护策略" />
+      <a-tab-pane key="incidents" tab="AI分析记录" />
       <a-tab-pane key="settings" tab="AI 配置" />
     </a-tabs>
     <fs-slide-transition :transition-key="tab">
