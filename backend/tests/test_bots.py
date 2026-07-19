@@ -107,6 +107,8 @@ async def test_build_config_includes_bots_without_action():
     assert "action" not in cfg["bots"][0]
     assert "bot" not in cfg["settings"]
     assert cfg["bot_category_values"] == ["search_engine"]
+    assert "patterns" in cfg["crawler_detect"]
+    assert "exclusions" in cfg["crawler_detect"]
 
 
 def test_reserved_category_other_constant():

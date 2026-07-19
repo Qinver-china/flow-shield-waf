@@ -24,7 +24,7 @@ ALERT_CONDITION_TYPES: list[dict] = [
         "type": "traffic.baseline_gt",
         "label": "流量高于基线",
         "category": "流量异常",
-        "description": "检测突发流量、CC 攻击。对比同星期同时段历史基线，需运行 1–2 天后较准确。",
+        "description": "检测突发流量、CC 攻击。对比同星期同时段历史基线；部署后数小时可显示初步基线，运行数天后更准确。",
         "params": [
             _SITE_PARAM,
             {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},

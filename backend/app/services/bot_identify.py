@@ -1,4 +1,4 @@
-"""Bot identification from UA patterns (mirrors engine/lua/waf/bot.lua)."""
+"""Bot identification from UA patterns (aligned with engine/lua/waf/bot.lua)."""
 from __future__ import annotations
 
 import re

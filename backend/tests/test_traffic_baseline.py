@@ -3,6 +3,11 @@ from datetime import datetime
 
 from app.services.traffic_intel.store.baseline_mysql import slot_key_for
 from app.services.traffic_intel.timezone import local_datetime
+from app.services.traffic_intel.windows import (
+    is_baseline_stable,
+    stable_min_samples,
+    warmup_min_samples,
+)
 
 
 def test_slot_key_includes_quarter():
@@ -15,3 +20,15 @@ def test_local_datetime_from_utc():
     local = local_datetime(utc, "Asia/Shanghai")
     assert local.hour == 14
     assert local.minute == 30
+
+
+def test_warmup_thresholds_are_lower_than_stable():
+    for window_sec in (60, 300, 1800, 3600):
+        assert warmup_min_samples(window_sec) < stable_min_samples(window_sec)
+
+
+def test_baseline_stable_requires_more_samples_for_short_windows():
+    assert not is_baseline_stable(60, warmup_min_samples(60))
+    assert is_baseline_stable(60, stable_min_samples(60))
+    assert is_baseline_stable(3600, warmup_min_samples(3600))
+

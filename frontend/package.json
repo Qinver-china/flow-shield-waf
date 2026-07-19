@@ -1,6 +1,6 @@
 {
   "name": "flowshield-waf-frontend",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",

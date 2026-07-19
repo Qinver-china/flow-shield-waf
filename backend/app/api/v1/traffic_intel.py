@@ -27,7 +27,7 @@ from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.types import TrafficIntelConfig
 from app.services.traffic_intel.timezone import get_traffic_timezone
-from app.services.traffic_intel.windows import label
+from app.services.traffic_intel.windows import is_baseline_stable, label
 
 router = APIRouter()
 
@@ -140,6 +140,12 @@ async def intel_status(
             current = 0
 
         baseline_avg = baseline.avg_requests if baseline else None
+        baseline_sample_count = baseline.sample_count if baseline else None
+        baseline_warmup = bool(
+            baseline is not None
+            and baseline_avg is not None
+            and not is_baseline_stable(window_sec, baseline.sample_count)
+        )
         ratio = (current / baseline_avg) if baseline_avg and baseline_avg > 0 else None
         threshold = (
             baseline_avg * (1 + config.spike_ratio)
@@ -152,9 +158,15 @@ async def intel_status(
                 label=label(window_sec),
                 current_requests=current,
                 baseline_avg=baseline_avg,
+                baseline_sample_count=baseline_sample_count,
+                baseline_warmup=baseline_warmup,
                 deviation_ratio=round(ratio, 3) if ratio is not None else None,
                 spike_threshold_ratio=config.spike_ratio,
-                is_anomaly=bool(threshold is not None and current > threshold),
+                is_anomaly=bool(
+                    threshold is not None
+                    and not baseline_warmup
+                    and current > threshold
+                ),
             )
         )
 

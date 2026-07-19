@@ -110,7 +110,8 @@
                 <div class="metric-window-sub">
                   <template v-if="w.baseline_avg != null">
                     基线 {{ formatIntelBaseline(w.baseline_avg) }}
-                    <span v-if="w.deviation_ratio != null" class="intel-deviation">
+                    <span v-if="w.baseline_warmup" class="intel-warmup">· 学习中</span>
+                    <span v-else-if="w.deviation_ratio != null" class="intel-deviation">
                       · {{ formatIntelDeviation(w.deviation_ratio) }}
                     </span>
                   </template>
@@ -1042,6 +1043,11 @@ onUnmounted(() => {
 }
 
 .intel-deviation {
+  white-space: nowrap;
+}
+
+.intel-warmup {
+  color: #f59e0b;
   white-space: nowrap;
 }
 

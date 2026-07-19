@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.redis import get_redis
 from app.models import BotCategory, BotProfile, Exception_, IpGroup, IpList, RateLimit, Rule, Site
 from app.services import waf_settings
+from app.services.crawler_signatures import get_crawler_detect_config
 from app.services.site_scope import resolved_site_ids
 from app.services.site_domains import site_domain_list
 from app.services.traffic_intel.redis_baselines import publish_baselines_to_redis
@@ -151,6 +152,7 @@ async def build_config(db: AsyncSession) -> dict:
         "ip_groups": ip_group_map,
         "bots": bot_items,
         "bot_category_values": sorted(c.value for c in bot_categories),
+        "crawler_detect": get_crawler_detect_config(),
         "settings": settings_cfg,
     }
 

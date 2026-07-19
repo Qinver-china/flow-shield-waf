@@ -9,6 +9,14 @@ from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.store.baseline_mysql import slot_key_for
 from app.services.traffic_intel.timezone import local_datetime
 from app.services.traffic_intel.types import Baseline, TrafficIntelConfig
+from app.services.traffic_intel.windows import warmup_min_samples
+
+# Try the most specific slot first; widen when history is still sparse.
+_SLOT_FALLBACK_CHAIN: tuple[tuple[str, str], ...] = (
+    ("same_slot_hourly", "quarter"),
+    ("same_slot_hourly:hour", "hour"),
+    ("same_slot_hourly:hour_only", "hour_only"),
+)
 
 
 class BaselineStrategy(ABC):
@@ -28,7 +36,7 @@ class BaselineStrategy(ABC):
 
 
 class SameSlotHourlyStrategy(BaselineStrategy):
-    """Learn median traffic for the same weekday + hour + quarter over lookback days."""
+    """Learn median traffic for aligned historical slots over lookback days."""
 
     name = "same_slot_hourly"
 
@@ -44,22 +52,27 @@ class SameSlotHourlyStrategy(BaselineStrategy):
     ) -> Baseline | None:
         as_of = as_of or datetime.utcnow()
         local_as_of = local_datetime(as_of, timezone_name)
-        avg_r, samples = store.same_slot_window_averages(
-            window_sec,
-            site_id=site_id,
-            lookback_days=config.baseline_lookback_days,
-            as_of=local_as_of,
-            timezone_name=timezone_name,
-            outlier_quantile=DEFAULT_BASELINE_OUTLIER_QUANTILE,
-        )
-        if samples < config.min_baseline_samples or avg_r <= 0:
-            return None
-        return Baseline(
-            site_id=site_id,
-            window_sec=window_sec,
-            avg_requests=avg_r,
-            sample_count=samples,
-            strategy=self.name,
-            slot_key=slot_key_for(local_as_of),
-            updated_at=as_of,
-        )
+        warmup_min = warmup_min_samples(window_sec)
+
+        for strategy_name, slot_mode in _SLOT_FALLBACK_CHAIN:
+            avg_r, samples = store.same_slot_window_averages(
+                window_sec,
+                site_id=site_id,
+                lookback_days=config.baseline_lookback_days,
+                as_of_utc=as_of,
+                timezone_name=timezone_name,
+                slot_mode=slot_mode,
+                outlier_quantile=DEFAULT_BASELINE_OUTLIER_QUANTILE,
+            )
+            if samples < warmup_min or avg_r <= 0:
+                continue
+            return Baseline(
+                site_id=site_id,
+                window_sec=window_sec,
+                avg_requests=avg_r,
+                sample_count=samples,
+                strategy=strategy_name,
+                slot_key=slot_key_for(local_as_of),
+                updated_at=as_of,
+            )
+        return None

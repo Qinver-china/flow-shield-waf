@@ -328,8 +328,7 @@ function _M:_resolve(field, arg)
     elseif field == "bot.name" then
         local bot_mod = require "waf.bot"
         local sync = require "waf.sync"
-        local match = bot_mod.identify(sync.get(), self, self.cache.site_id)
-        return match and match.name or nil
+        return bot_mod.resolve_name(sync.get(), self, self.cache.site_id)
     elseif field == "bot.category" then
         local bot_mod = require "waf.bot"
         local sync = require "waf.sync"

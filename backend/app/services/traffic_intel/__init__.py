@@ -4,6 +4,7 @@ Layers
 ------
 1. **采集 (ingest)** — read engine Redis snapshot, persist minute + window history to ClickHouse.
 2. **基线 (baseline)** — learn same-slot median (weekday + hour + quarter) per global/site.
+   Warm-start widens to same hour / hour-only when history is sparse; alerts wait for stable samples.
 3. **检测 (detector)** — flag spikes when current > baseline × (1 + spike_ratio).
 4. **动作 (actions)** — persist alerts, log/notify (extend with webhooks).
 

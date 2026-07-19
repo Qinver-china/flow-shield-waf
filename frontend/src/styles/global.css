@@ -93,6 +93,11 @@ code,
   background-color: color-mix(in srgb, var(--fs-color-primary) 12%, var(--fs-bg-surface)) !important;
 }
 
+.ant-select-single.ant-select-show-arrow .ant-select-selection-item,
+.ant-select-single.ant-select-show-arrow .ant-select-selection-placeholder {
+  padding-inline-end: 11px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

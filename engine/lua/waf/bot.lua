@@ -10,6 +10,56 @@ local function cfg_bots(cfg)
     return (cfg and cfg.bots) or {}
 end
 
+local function cfg_crawler_detect(cfg)
+    cfg = cfg or sync.get()
+    return cfg and cfg.crawler_detect
+end
+
+function _M.match_crawler(cfg, ua)
+    if not ua or ua == "" then
+        return nil
+    end
+    local cd = cfg_crawler_detect(cfg)
+    if not cd then
+        return nil
+    end
+
+    local agent = ua
+    local exclusions = cd.exclusions
+    if exclusions and exclusions ~= "" then
+        local ok, stripped = pcall(function()
+            return ngx.re.gsub(agent, exclusions, "", "ioj")
+        end)
+        if ok and stripped then
+            agent = stripped
+        end
+    end
+    if agent == "" then
+        return nil
+    end
+
+    local patterns = cd.patterns
+    if not patterns or patterns == "" then
+        return nil
+    end
+    local ok, match = pcall(function()
+        return ngx.re.match(agent, patterns, "ioj")
+    end)
+    if not ok or not match then
+        return nil
+    end
+    for i = 1, #match do
+        local name = match[i]
+        if name and name ~= "" then
+            return name
+        end
+    end
+    if match[0] and match[0] ~= "" then
+        return match[0]
+    end
+    return nil
+end
+
 function _M.is_bot_ua(ua)
     if not ua or ua == "" then
         return false
@@ -98,13 +148,31 @@ function _M.identify(cfg, ext, site_id)
     return nil
 end
 
+function _M.resolve_name(cfg, ext, site_id)
+    if ext.cache.bot_name_resolved then
+        return ext.cache.bot_name
+    end
+    ext.cache.bot_name_resolved = true
+
+    local match = _M.identify(cfg, ext, site_id)
+    if match and match.name then
+        ext.cache.bot_name = match.name
+        return match.name
+    end
+
+    local ua = ext:get("http.ua")
+    local crawler_name = _M.match_crawler(cfg, ua)
+    ext.cache.bot_name = crawler_name
+    return crawler_name
+end
+
 function _M.resolve_category(cfg, ext, site_id)
     local match = _M.identify(cfg, ext, site_id)
     if match and match.category then
         return match.category
     end
     local ua = ext:get("http.ua")
-    if _M.is_bot_ua(ua) then
+    if _M.match_crawler(cfg, ua) or _M.is_bot_ua(ua) then
         return OTHER_CATEGORY
     end
     return nil

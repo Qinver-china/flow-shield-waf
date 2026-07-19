@@ -15,7 +15,7 @@ from app.services.traffic_intel.types import (
     Baseline,
     TrafficIntelConfig,
 )
-from app.services.traffic_intel.windows import label
+from app.services.traffic_intel.windows import label, stable_min_samples
 
 log = logging.getLogger("waf.traffic_intel.detector")
 
@@ -55,7 +55,7 @@ class AnomalyDetector:
             )
             if baseline is None or baseline.avg_requests <= 0:
                 continue
-            if baseline.sample_count < config.min_baseline_samples:
+            if baseline.sample_count < stable_min_samples(window_sec):
                 continue
 
             current = await asyncio.to_thread(

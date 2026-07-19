@@ -19,7 +19,7 @@ from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.types import TrafficIntelConfig
-from app.services.traffic_intel.types import TrafficIntelConfig
+from app.services.traffic_intel.windows import is_baseline_stable
 
 log = logging.getLogger("waf.notify.evaluator")
 
@@ -103,6 +103,8 @@ class AlertPolicyEvaluator:
             timezone_name=timezone_name,
         )
         if not baseline or baseline.avg_requests <= 0:
+            return None
+        if not is_baseline_stable(window_sec, baseline.sample_count):
             return None
         current = await self._window_requests(window_sec, site_id=site_id)
         if direction == "gt":

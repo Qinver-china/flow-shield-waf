@@ -23,6 +23,9 @@ function _M.family(ua, cfg, ext, site_id)
     if bot.identify(cfg, ext, site_id) then
         return "bot"
     end
+    if bot.match_crawler(cfg, ua) then
+        return "bot"
+    end
     if bot.is_bot_ua(ua) then
         return "bot"
     end

@@ -9,7 +9,25 @@ from app.services.traffic_intel.constants import (
     CH_MINUTE_TABLE,
     CH_WINDOW_SNAPSHOT_TABLE,
 )
+from app.services.traffic_intel.timezone import local_datetime
 from app.services.traffic_intel.types import WindowSample
+
+
+def _slot_filters(slot_mode: str, local_minute: str) -> str:
+    if slot_mode == "quarter":
+        return (
+            f"AND toDayOfWeek({local_minute}) = {{dow:UInt8}} "
+            f"AND toHour({local_minute}) = {{hour:UInt8}} "
+            f"AND intDiv(toMinute({local_minute}), 15) = {{quarter:UInt8}}"
+        )
+    if slot_mode == "hour":
+        return (
+            f"AND toDayOfWeek({local_minute}) = {{dow:UInt8}} "
+            f"AND toHour({local_minute}) = {{hour:UInt8}}"
+        )
+    if slot_mode == "hour_only":
+        return f"AND toHour({local_minute}) = {{hour:UInt8}}"
+    raise ValueError(f"unsupported baseline slot mode: {slot_mode}")
 
 
 def _bucket_expr(window_sec: int) -> str:
@@ -121,16 +139,22 @@ class ClickHouseTrafficStore:
         *,
         site_id: int | None = None,
         lookback_days: int = 28,
-        as_of: datetime | None = None,
+        as_of_utc: datetime | None = None,
         timezone_name: str = "Asia/Shanghai",
+        slot_mode: str = "quarter",
         outlier_quantile: float = 0.95,
     ) -> tuple[float, int]:
-        """Median bucket totals at the same weekday + hour + quarter as *as_of*.
+        """Median bucket totals for a historical traffic slot aligned to *as_of_utc*.
 
-        Uses configured timezone for slot alignment and trims values above the
-        given quantile before taking the median (robust against past spikes).
+        Slot modes (most to least specific):
+        - quarter: same weekday + hour + 15-minute quarter
+        - hour: same weekday + hour
+        - hour_only: same hour across all weekdays (warm-start fallback)
+
+        Minute rollups in ClickHouse are UTC; slot alignment uses *timezone_name*.
         """
-        as_of = as_of or datetime.utcnow()
+        as_of_utc = (as_of_utc or datetime.utcnow()).replace(second=0, microsecond=0)
+        local_as_of = local_datetime(as_of_utc, timezone_name)
         bucket_expr = _bucket_expr(window_sec)
         site_clause = (
             "site_id IS NULL"
@@ -138,12 +162,13 @@ class ClickHouseTrafficStore:
             else "site_id = {site_id:UInt32}"
         )
         local_minute = f"toTimeZone(minute, {{tz:String}})"
+        slot_clause = _slot_filters(slot_mode, local_minute)
         params: dict = {
             "lookback_days": lookback_days,
-            "dow": as_of.isoweekday(),
-            "hour": as_of.hour,
-            "quarter": as_of.minute // 15,
-            "as_of": as_of.replace(second=0, microsecond=0),
+            "dow": local_as_of.isoweekday(),
+            "hour": local_as_of.hour,
+            "quarter": local_as_of.minute // 15,
+            "as_of": as_of_utc,
             "tz": timezone_name,
             "outlier_q": outlier_quantile,
         }
@@ -159,9 +184,7 @@ class ClickHouseTrafficStore:
               WHERE {site_clause}
                 AND minute >= {{as_of:DateTime}} - INTERVAL {{lookback_days:UInt16}} DAY
                 AND minute < {{as_of:DateTime}}
-                AND toDayOfWeek({local_minute}) = {{dow:UInt8}}
-                AND toHour({local_minute}) = {{hour:UInt8}}
-                AND intDiv(toMinute({local_minute}), 15) = {{quarter:UInt8}}
+                {slot_clause}
               GROUP BY bucket
             ),
             filtered AS (

@@ -35,6 +35,8 @@ class WindowComparison(BaseModel):
     label: str
     current_requests: int
     baseline_avg: float | None = None
+    baseline_sample_count: int | None = None
+    baseline_warmup: bool = False
     deviation_ratio: float | None = None
     spike_threshold_ratio: float = 0.5
     is_anomaly: bool = False
