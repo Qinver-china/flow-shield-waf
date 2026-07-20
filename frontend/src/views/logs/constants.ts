@@ -1,7 +1,10 @@
 import { logStatsDimensionLayout } from "@/constants/logDimensionLayout";
 import {
+  formatGeoAsn,
+  formatGeoCity,
   formatGeoCountry,
   formatGeoIsp,
+  formatGeoRegion,
   geoCountrySelectOptions,
   GEO_COUNTRY_LABELS as geoCountryLabel,
 } from "@/utils/geoLabels";
@@ -74,6 +77,12 @@ export function formatStatsValueLabel(
     case "geo_country": {
       return formatGeoCountry(key || label) || label;
     }
+    case "geo_region":
+      return formatGeoRegion(key || label) || label;
+    case "geo_city":
+      return formatGeoCity(key || label) || label;
+    case "geo_asn":
+      return formatGeoAsn(key || label) || label;
     case "geo_isp":
       return formatGeoIsp(key || label) || label;
     case "ua":
@@ -273,6 +282,15 @@ export function formatConditionLabel(condition: LogFilterCondition): string {
     }
     if (field.key === "geo_isp") {
       return formatGeoIsp(raw) || raw;
+    }
+    if (field.key === "geo_region") {
+      return formatGeoRegion(raw) || raw;
+    }
+    if (field.key === "geo_city") {
+      return formatGeoCity(raw) || raw;
+    }
+    if (field.key === "geo_asn") {
+      return formatGeoAsn(raw) || raw;
     }
     if (field.type === "bool") {
       if (raw === "true") return field.key === "blocked" ? "已拦截" : "是";
@@ -476,8 +494,8 @@ export const logDetailFilterGroups: { label: string; fields: LogFilterFieldDef[]
       { key: "scheme", label: "协议", type: "select", options: schemeOptions },
       { key: "http_version", label: "HTTP 版本", type: "select", options: httpVersionOptions },
       { key: "geo_country", label: "IP 国家/地区", type: "select", options: geoCountryOptions },
-      { key: "geo_region", label: "IP 省/州", type: "text", placeholder: "代码，如 GD / VA" },
-      { key: "geo_city", label: "IP 城市", type: "text", placeholder: "英文名，如 Beijing" },
+      { key: "geo_region", label: "IP 省/州", type: "text", placeholder: "代码，如 GD / VA（展示为中文）" },
+      { key: "geo_city", label: "IP 城市", type: "text", placeholder: "英文名，如 Beijing（展示为中文）" },
       { key: "geo_asn", label: "IP ASN", type: "number" },
       { key: "geo_isp", label: "运营商 ISP", type: "text", placeholder: "精确匹配组织名，如 Amazon.com, Inc." },
       { key: "geo_ip_type", label: "IP 类型", type: "text", placeholder: "如 datacenter / residential" },

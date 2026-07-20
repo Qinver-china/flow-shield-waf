@@ -22,7 +22,13 @@ from app.constants.traffic_windows import (
     TRAFFIC_WINDOWS_SEC,
     traffic_window_options,
 )
-from app.services.logging.labels import geo_country_field_options, geo_isp_field_options
+from app.services.logging.labels import (
+    geo_asn_field_options,
+    geo_city_field_options,
+    geo_country_field_options,
+    geo_isp_field_options,
+    geo_region_field_options,
+)
 
 TRAFFIC_RULE_WINDOWS = TRAFFIC_WINDOWS_SEC
 
@@ -55,6 +61,9 @@ FIELD_OPTIONS: dict[str, list[dict[str, str]]] = {
         {"value": "3.0", "label": "HTTP/3"},
     ],
     "geo.country": geo_country_field_options(),
+    "geo.region": geo_region_field_options(),
+    "geo.city": geo_city_field_options(),
+    "geo.asn": geo_asn_field_options(),
     "geo.isp": geo_isp_field_options(),
     "geo.ip_type": [
         {"value": "residential", "label": "家庭宽带"},

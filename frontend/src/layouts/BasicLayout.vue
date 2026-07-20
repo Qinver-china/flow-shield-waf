@@ -316,13 +316,8 @@ onMounted(() => {
 
 .app-sider :deep(.app-nav-menu .ant-menu-item-selected),
 .nav-drawer :deep(.app-nav-menu .ant-menu-item-selected) {
-  color: var(--fs-text-inverse) !important;
+  color: #fff !important;
   background: var(--fs-color-primary) !important;
-}
-
-.app-sider :deep(.app-nav-menu .ant-menu-item-selected .anticon),
-.nav-drawer :deep(.app-nav-menu .ant-menu-item-selected .anticon) {
-  color: var(--fs-text-inverse) !important;
 }
 
 .logo {

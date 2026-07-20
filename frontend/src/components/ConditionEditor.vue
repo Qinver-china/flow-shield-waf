@@ -77,7 +77,7 @@ onMounted(async () => {
   border: 1px solid rgb(229, 231, 235, 0.1);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(78, 78, 78, 0.05);
+  background: rgba(79, 97, 131, 0.03);
   font-size: 13px;
 }
 

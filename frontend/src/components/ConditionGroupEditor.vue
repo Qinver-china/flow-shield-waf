@@ -115,7 +115,7 @@ export default {
   border-radius: 6px;
   padding: 10px;
   margin-bottom: 8px;
-  background: rgba(105, 105, 105, 0.05);
+  background: rgba(79, 97, 131, 0.03);
 }
 .logic-row {
   display: flex;

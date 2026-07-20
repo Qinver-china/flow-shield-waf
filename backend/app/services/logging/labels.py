@@ -130,6 +130,365 @@ GEO_CN_REGION_LABELS: dict[str, str] = {
     "XJ": "新疆",
 }
 
+GEO_US_REGION_LABELS: dict[str, str] = {
+    "AL": "阿拉巴马",
+    "AK": "阿拉斯加",
+    "AZ": "亚利桑那",
+    "AR": "阿肯色",
+    "CA": "加利福尼亚",
+    "CO": "科罗拉多",
+    "CT": "康涅狄格",
+    "DE": "特拉华",
+    "FL": "佛罗里达",
+    "GA": "佐治亚",
+    "HI": "夏威夷",
+    "ID": "爱达荷",
+    "IL": "伊利诺伊",
+    "IN": "印第安纳",
+    "IA": "艾奥瓦",
+    "KS": "堪萨斯",
+    "KY": "肯塔基",
+    "LA": "路易斯安那",
+    "ME": "缅因",
+    "MD": "马里兰",
+    "MA": "马萨诸塞",
+    "MI": "密歇根",
+    "MN": "明尼苏达",
+    "MS": "密西西比",
+    "MO": "密苏里",
+    "MT": "蒙大拿",
+    "NE": "内布拉斯加",
+    "NV": "内华达",
+    "NH": "新罕布什尔",
+    "NJ": "新泽西",
+    "NM": "新墨西哥",
+    "NY": "纽约",
+    "NC": "北卡罗来纳",
+    "ND": "北达科他",
+    "OH": "俄亥俄",
+    "OK": "俄克拉何马",
+    "OR": "俄勒冈",
+    "PA": "宾夕法尼亚",
+    "RI": "罗得岛",
+    "SC": "南卡罗来纳",
+    "SD": "南达科他",
+    "TN": "田纳西",
+    "TX": "得克萨斯",
+    "UT": "犹他",
+    "VT": "佛蒙特",
+    "VA": "弗吉尼亚",
+    "WA": "华盛顿",
+    "WV": "西弗吉尼亚",
+    "WI": "威斯康星",
+    "WY": "怀俄明",
+    "DC": "哥伦比亚特区",
+}
+
+GEO_REGION_NAME_LABELS: dict[str, str] = {
+    "beijing": "北京",
+    "tianjin": "天津",
+    "hebei": "河北",
+    "shanxi": "山西",
+    "inner mongolia": "内蒙古",
+    "nei mongol": "内蒙古",
+    "liaoning": "辽宁",
+    "jilin": "吉林",
+    "heilongjiang": "黑龙江",
+    "shanghai": "上海",
+    "jiangsu": "江苏",
+    "zhejiang": "浙江",
+    "anhui": "安徽",
+    "fujian": "福建",
+    "jiangxi": "江西",
+    "shandong": "山东",
+    "henan": "河南",
+    "hubei": "湖北",
+    "hunan": "湖南",
+    "guangdong": "广东",
+    "guangxi": "广西",
+    "hainan": "海南",
+    "chongqing": "重庆",
+    "sichuan": "四川",
+    "guizhou": "贵州",
+    "yunnan": "云南",
+    "tibet": "西藏",
+    "xizang": "西藏",
+    "shaanxi": "陕西",
+    "gansu": "甘肃",
+    "qinghai": "青海",
+    "ningxia": "宁夏",
+    "xinjiang": "新疆",
+    "california": "加利福尼亚",
+    "new york": "纽约",
+    "texas": "得克萨斯",
+    "florida": "佛罗里达",
+    "washington": "华盛顿",
+    "virginia": "弗吉尼亚",
+    "illinois": "伊利诺伊",
+    "pennsylvania": "宾夕法尼亚",
+    "ohio": "俄亥俄",
+    "georgia": "佐治亚",
+    "north carolina": "北卡罗来纳",
+    "michigan": "密歇根",
+    "new jersey": "新泽西",
+    "arizona": "亚利桑那",
+    "massachusetts": "马萨诸塞",
+    "tennessee": "田纳西",
+    "indiana": "印第安纳",
+    "missouri": "密苏里",
+    "maryland": "马里兰",
+    "wisconsin": "威斯康星",
+    "colorado": "科罗拉多",
+    "minnesota": "明尼苏达",
+    "south carolina": "南卡罗来纳",
+    "alabama": "阿拉巴马",
+    "louisiana": "路易斯安那",
+    "kentucky": "肯塔基",
+    "oregon": "俄勒冈",
+    "oklahoma": "俄克拉何马",
+    "connecticut": "康涅狄格",
+    "utah": "犹他",
+    "iowa": "艾奥瓦",
+    "nevada": "内华达",
+    "arkansas": "阿肯色",
+    "mississippi": "密西西比",
+    "kansas": "堪萨斯",
+    "new mexico": "新墨西哥",
+    "nebraska": "内布拉斯加",
+    "west virginia": "西弗吉尼亚",
+    "idaho": "爱达荷",
+    "hawaii": "夏威夷",
+    "new hampshire": "新罕布什尔",
+    "maine": "缅因",
+    "montana": "蒙大拿",
+    "rhode island": "罗得岛",
+    "delaware": "特拉华",
+    "south dakota": "南达科他",
+    "north dakota": "北达科他",
+    "alaska": "阿拉斯加",
+    "vermont": "佛蒙特",
+    "wyoming": "怀俄明",
+    "district of columbia": "哥伦比亚特区",
+    "england": "英格兰",
+    "scotland": "苏格兰",
+    "wales": "威尔士",
+    "northern ireland": "北爱尔兰",
+    "ontario": "安大略",
+    "quebec": "魁北克",
+    "british columbia": "不列颠哥伦比亚",
+    "tokyo": "东京都",
+    "osaka": "大阪府",
+    "hong kong": "香港",
+}
+
+GEO_CITY_LABELS: dict[str, str] = {
+    "beijing": "北京",
+    "shanghai": "上海",
+    "guangzhou": "广州",
+    "shenzhen": "深圳",
+    "hangzhou": "杭州",
+    "chengdu": "成都",
+    "chongqing": "重庆",
+    "wuhan": "武汉",
+    "xi'an": "西安",
+    "xian": "西安",
+    "nanjing": "南京",
+    "tianjin": "天津",
+    "suzhou": "苏州",
+    "zhengzhou": "郑州",
+    "changsha": "长沙",
+    "dongguan": "东莞",
+    "foshan": "佛山",
+    "ningbo": "宁波",
+    "qingdao": "青岛",
+    "dalian": "大连",
+    "xiamen": "厦门",
+    "kunming": "昆明",
+    "hefei": "合肥",
+    "fuzhou": "福州",
+    "shenyang": "沈阳",
+    "harbin": "哈尔滨",
+    "jinan": "济南",
+    "wuxi": "无锡",
+    "wenzhou": "温州",
+    "nanchang": "南昌",
+    "changchun": "长春",
+    "guiyang": "贵阳",
+    "nanning": "南宁",
+    "haikou": "海口",
+    "sanya": "三亚",
+    "lanzhou": "兰州",
+    "urumqi": "乌鲁木齐",
+    "hohhot": "呼和浩特",
+    "lhasa": "拉萨",
+    "taiyuan": "太原",
+    "shijiazhuang": "石家庄",
+    "zhuhai": "珠海",
+    "zhongshan": "中山",
+    "huizhou": "惠州",
+    "jiangmen": "江门",
+    "quanzhou": "泉州",
+    "putian": "莆田",
+    "yantai": "烟台",
+    "weifang": "潍坊",
+    "baoding": "保定",
+    "tangshan": "唐山",
+    "luoyang": "洛阳",
+    "changzhou": "常州",
+    "nantong": "南通",
+    "xuzhou": "徐州",
+    "yangzhou": "扬州",
+    "jiaxing": "嘉兴",
+    "shaoxing": "绍兴",
+    "jinhua": "金华",
+    "taizhou": "台州",
+    "hong kong": "香港",
+    "macau": "澳门",
+    "macao": "澳门",
+    "taipei": "台北",
+    "new taipei": "新北",
+    "kaohsiung": "高雄",
+    "taichung": "台中",
+    "tainan": "台南",
+    "singapore": "新加坡",
+    "tokyo": "东京",
+    "osaka": "大阪",
+    "yokohama": "横滨",
+    "nagoya": "名古屋",
+    "seoul": "首尔",
+    "busan": "釜山",
+    "bangkok": "曼谷",
+    "ho chi minh city": "胡志明市",
+    "hanoi": "河内",
+    "jakarta": "雅加达",
+    "kuala lumpur": "吉隆坡",
+    "manila": "马尼拉",
+    "mumbai": "孟买",
+    "delhi": "德里",
+    "new delhi": "新德里",
+    "bangalore": "班加罗尔",
+    "bengaluru": "班加罗尔",
+    "chennai": "金奈",
+    "hyderabad": "海得拉巴",
+    "london": "伦敦",
+    "manchester": "曼彻斯特",
+    "birmingham": "伯明翰",
+    "paris": "巴黎",
+    "frankfurt": "法兰克福",
+    "berlin": "柏林",
+    "munich": "慕尼黑",
+    "amsterdam": "阿姆斯特丹",
+    "rotterdam": "鹿特丹",
+    "brussels": "布鲁塞尔",
+    "zurich": "苏黎世",
+    "geneva": "日内瓦",
+    "madrid": "马德里",
+    "barcelona": "巴塞罗那",
+    "rome": "罗马",
+    "milan": "米兰",
+    "stockholm": "斯德哥尔摩",
+    "dublin": "都柏林",
+    "moscow": "莫斯科",
+    "saint petersburg": "圣彼得堡",
+    "istanbul": "伊斯坦布尔",
+    "dubai": "迪拜",
+    "abu dhabi": "阿布扎比",
+    "new york": "纽约",
+    "los angeles": "洛杉矶",
+    "san francisco": "旧金山",
+    "san jose": "圣何塞",
+    "seattle": "西雅图",
+    "chicago": "芝加哥",
+    "dallas": "达拉斯",
+    "houston": "休斯顿",
+    "miami": "迈阿密",
+    "atlanta": "亚特兰大",
+    "boston": "波士顿",
+    "washington": "华盛顿",
+    "denver": "丹佛",
+    "phoenix": "凤凰城",
+    "philadelphia": "费城",
+    "las vegas": "拉斯维加斯",
+    "toronto": "多伦多",
+    "montreal": "蒙特利尔",
+    "vancouver": "温哥华",
+    "sydney": "悉尼",
+    "melbourne": "墨尔本",
+    "brisbane": "布里斯班",
+    "auckland": "奥克兰",
+    "sao paulo": "圣保罗",
+    "são paulo": "圣保罗",
+    "rio de janeiro": "里约热内卢",
+    "mexico city": "墨西哥城",
+}
+
+GEO_ASN_LABELS: dict[int, str] = {
+    # 中国运营商 / 教育科研
+    4134: "中国电信",
+    4809: "中国电信 CN2",
+    4812: "中国电信上海",
+    4837: "中国联通",
+    9929: "中国联通精品网",
+    9808: "中国移动",
+    56040: "中国移动",
+    56046: "中国移动",
+    56048: "中国移动",
+    24400: "中国移动",
+    4538: "教育网 CERNET",
+    7497: "中科院 CSTNET",
+    23910: "教育网 CERNET2",
+    # 国内云 / 互联网
+    37963: "阿里云",
+    45102: "阿里云",
+    45090: "腾讯云",
+    132203: "腾讯云",
+    136958: "华为云",
+    55967: "百度",
+    38365: "北京百度",
+    137753: "北京北龙超级云",
+    137718: "北京火山引擎",
+    59019: "北京金山云",
+    135377: "优刻得 UCloud",
+    58466: "中国广电",
+    # 港澳台
+    9304: "香港电讯 HKT",
+    9269: "香港宽频",
+    10103: "香港宽频",
+    9381: "HKBN",
+    3462: "中华电信",
+    9924: "台湾固网",
+    24158: "台湾大哥大",
+    # 海外云 / CDN
+    13335: "Cloudflare",
+    20940: "Akamai",
+    16625: "Akamai",
+    54113: "Fastly",
+    16509: "亚马逊 AWS",
+    14618: "亚马逊 AWS",
+    15169: "谷歌",
+    396982: "谷歌云",
+    8075: "微软",
+    8068: "微软",
+    14061: "DigitalOcean",
+    63949: "Linode / Akamai",
+    20473: "Vultr",
+    16276: "OVH",
+    24940: "Hetzner",
+    31898: "甲骨文云",
+    36351: "SoftLayer / IBM",
+    32934: "Meta",
+    714: "Apple",
+    36459: "GitHub",
+    60068: "CDN77",
+    133752: "Leaseweb",
+    9009: "M247",
+    174: "Cogent",
+    3356: "Lumen / Level3",
+    1299: "Arelion / Telia",
+    2914: "NTT",
+    6939: "Hurricane Electric",
+}
+
 
 def format_geo_country(code: str | None) -> str:
     c = (code or "").strip().upper()
@@ -137,6 +496,50 @@ def format_geo_country(code: str | None) -> str:
         return ""
     name = GEO_COUNTRY_LABELS.get(c)
     return f"{name} ({c})" if name else c
+
+
+def _resolve_region_label(code: str, country: str | None = None) -> str | None:
+    cc = (country or "").strip().upper()
+    if cc == "CN":
+        return GEO_CN_REGION_LABELS.get(code)
+    if cc == "US":
+        return GEO_US_REGION_LABELS.get(code)
+    return GEO_CN_REGION_LABELS.get(code) or GEO_US_REGION_LABELS.get(code)
+
+
+def format_geo_region(region: str | None, country: str | None = None) -> str:
+    raw = (region or "").strip()
+    if not raw:
+        return ""
+    code = raw.upper()
+    by_code = _resolve_region_label(code, country)
+    if by_code:
+        return f"{by_code} ({code})"
+    by_name = GEO_REGION_NAME_LABELS.get(raw.lower())
+    if by_name:
+        return f"{by_name} ({raw})"
+    return raw
+
+
+def format_geo_city(city: str | None) -> str:
+    raw = (city or "").strip()
+    if not raw:
+        return ""
+    name = GEO_CITY_LABELS.get(raw.lower())
+    return f"{name} ({raw})" if name else raw
+
+
+def format_geo_asn(asn: int | str | None) -> str:
+    if asn is None or asn == "":
+        return ""
+    try:
+        n = int(str(asn).strip())
+    except (TypeError, ValueError):
+        return str(asn).strip()
+    if n <= 0:
+        return ""
+    name = GEO_ASN_LABELS.get(n)
+    return f"{name} ({n})" if name else str(n)
 
 
 # Common MaxMind ASN org-name keywords → Chinese labels (case-insensitive substring).
@@ -255,6 +658,83 @@ def geo_cn_region_field_options() -> list[dict[str, str]]:
     return items
 
 
+# CN/US 重叠的省州码（无国家上下文时优先中国语义，选项里只保留中国侧）
+_GEO_REGION_CODE_OVERLAP = frozenset({"HI", "NM", "SC", "SD"})
+
+# MaxMind city names en 特例（不能简单 .title()）
+_GEO_CITY_CANONICAL: dict[str, str] = {
+    "xi'an": "Xi'an",
+    "são paulo": "São Paulo",
+    "sao paulo": "Sao Paulo",
+    "ho chi minh city": "Ho Chi Minh City",
+    "kuala lumpur": "Kuala Lumpur",
+    "new york": "New York",
+    "los angeles": "Los Angeles",
+    "san francisco": "San Francisco",
+    "san jose": "San Jose",
+    "las vegas": "Las Vegas",
+    "new delhi": "New Delhi",
+    "abu dhabi": "Abu Dhabi",
+    "saint petersburg": "Saint Petersburg",
+    "rio de janeiro": "Rio de Janeiro",
+    "mexico city": "Mexico City",
+    "hong kong": "Hong Kong",
+    "new taipei": "New Taipei",
+}
+
+
+def _city_canonical_en(en_lower: str) -> str:
+    special = _GEO_CITY_CANONICAL.get(en_lower)
+    if special:
+        return special
+    return " ".join(part.capitalize() for part in en_lower.split())
+
+
+def geo_region_field_options() -> list[dict[str, str]]:
+    """省/州下拉：中国大陆 + 不与中国码冲突的美国州。"""
+    items = [
+        {"value": code, "label": f"{name} ({code})"}
+        for code, name in GEO_CN_REGION_LABELS.items()
+    ]
+    for code, name in GEO_US_REGION_LABELS.items():
+        if code in GEO_CN_REGION_LABELS or code in _GEO_REGION_CODE_OVERLAP:
+            continue
+        items.append({"value": code, "label": f"{name} ({code})"})
+    items.sort(key=lambda x: x["label"])
+    return items
+
+
+def geo_city_field_options() -> list[dict[str, str]]:
+    """城市下拉：常见英文名（与 MaxMind city names en 对齐）+ 中文标签。"""
+    items = [
+        {
+            "value": _city_canonical_en(en_lower),
+            "label": f"{zh} ({_city_canonical_en(en_lower)})",
+        }
+        for en_lower, zh in GEO_CITY_LABELS.items()
+    ]
+    # 去重（xian / xi'an 等）
+    seen: set[str] = set()
+    uniq: list[dict[str, str]] = []
+    for item in items:
+        if item["value"] in seen:
+            continue
+        seen.add(item["value"])
+        uniq.append(item)
+    uniq.sort(key=lambda x: x["label"])
+    return uniq
+
+
+def geo_asn_field_options() -> list[dict[str, str]]:
+    """ASN 下拉：常见 ASN 号 + 语义化组织名。"""
+    items = [
+        {"value": str(asn), "label": f"{name} ({asn})"}
+        for asn, name in GEO_ASN_LABELS.items()
+    ]
+    items.sort(key=lambda x: x["label"])
+    return items
+
+
 def geo_isp_field_options() -> list[dict[str, str]]:
     return list(GEO_ISP_SELECT_HINTS)
 
@@ -304,6 +784,12 @@ def format_dimension_label(
     if dimension == "geo_country":
         code = (key or raw_label or "").upper()
         return format_geo_country(code) or raw_label or code
+    if dimension == "geo_region":
+        return format_geo_region(key or raw_label) or raw_label or key
+    if dimension == "geo_city":
+        return format_geo_city(key or raw_label) or raw_label or key
+    if dimension == "geo_asn":
+        return format_geo_asn(key or raw_label) or raw_label or key
     if dimension == "geo_isp":
         return format_geo_isp(key or raw_label) or raw_label or key
     if dimension == "ua":

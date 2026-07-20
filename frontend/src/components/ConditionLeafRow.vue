@@ -89,24 +89,16 @@
     <a-select
       v-if="hasOptions(fieldMap, row.field) && isListOp(row.op)"
       v-model:value="row.valueList"
-      mode="multiple"
+      mode="tags"
       class="value-input"
-      placeholder="请选择（可搜索）"
+      placeholder="选择或输入（可搜索，回车添加）"
       show-search
       option-filter-prop="label"
-    >
-      <a-select-option
-        v-for="opt in optionsFor(fieldMap, row.field)"
-        :key="opt.value"
-        :value="opt.value"
-        :label="opt.label"
-      >
-        {{ opt.label }}
-      </a-select-option>
-    </a-select>
+      :options="optionsFor(fieldMap, row.field)"
+    />
 
     <a-auto-complete
-      v-else-if="hasOptions(fieldMap, row.field) && isStringField(fieldMap, row.field)"
+      v-else-if="hasOptions(fieldMap, row.field) && !isBoolField(fieldMap, row.field)"
       v-model:value="row.valueText"
       class="value-input"
       placeholder="选择或输入（可搜索）"
@@ -118,19 +110,11 @@
       v-else-if="hasOptions(fieldMap, row.field)"
       v-model:value="row.valueText"
       class="value-input"
-      placeholder="请选择（可搜索）"
+      placeholder="请选择"
       show-search
       option-filter-prop="label"
-    >
-      <a-select-option
-        v-for="opt in optionsFor(fieldMap, row.field)"
-        :key="opt.value"
-        :value="opt.value"
-        :label="opt.label"
-      >
-        {{ opt.label }}
-      </a-select-option>
-    </a-select>
+      :options="optionsFor(fieldMap, row.field)"
+    />
 
     <a-select
       v-else-if="isIpGroupOp(row.op)"
@@ -184,10 +168,10 @@ import {
   compareModesFor,
   formatLeafRow,
   hasOptions,
+  isBoolField,
   isIpGroupOp,
   isListOp,
   isNumberOp,
-  isStringField,
   isStringMultiOp,
   isTrafficBaselineCompare,
   isTrafficField,

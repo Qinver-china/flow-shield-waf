@@ -1,4 +1,4 @@
-import { formatGeoIsp } from "@/utils/geoLabels";
+import { formatGeoAsn, formatGeoCity, formatGeoIsp, formatGeoRegion } from "@/utils/geoLabels";
 
 export interface Field {
   key: string;
@@ -204,6 +204,10 @@ export function isStringField(fieldMap: Record<string, Field>, fieldKey?: string
   return !!fieldKey && fieldMap[fieldKey]?.value_type === "string";
 }
 
+export function isBoolField(fieldMap: Record<string, Field>, fieldKey?: string) {
+  return !!fieldKey && fieldMap[fieldKey]?.value_type === "bool";
+}
+
 /** AutoComplete options: value is matched/stored; label is shown in dropdown. */
 export function autoCompleteOptions(fieldMap: Record<string, Field>, fieldKey?: string) {
   return optionsFor(fieldMap, fieldKey).map((opt) => ({
@@ -300,6 +304,15 @@ export function formatOptionLabel(
   if (opt?.label) return opt.label;
   if (fieldKey === "geo.isp") {
     return formatGeoIsp(value) || value;
+  }
+  if (fieldKey === "geo.region") {
+    return formatGeoRegion(value) || value;
+  }
+  if (fieldKey === "geo.city") {
+    return formatGeoCity(value) || value;
+  }
+  if (fieldKey === "geo.asn") {
+    return formatGeoAsn(value) || value;
   }
   return value;
 }
