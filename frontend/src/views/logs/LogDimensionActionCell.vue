@@ -125,6 +125,6 @@ const actions = computed(() => {
 }
 
 .log-dimension-menu {
-  min-width: 156px;
+  min-width: 180px;
 }
 </style>

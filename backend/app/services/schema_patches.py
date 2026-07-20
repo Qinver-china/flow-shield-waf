@@ -29,6 +29,8 @@ async def _apply_schema_patches(conn) -> None:
     await _drop_legacy_bot_columns(conn)
     await _ensure_bot_profile_categories(conn)
     await _ensure_waf_setting_panel_public_url(conn)
+    await _ensure_ai_guard_floating_chat_enabled(conn)
+    await _ensure_ai_guard_policy_custom_prompt(conn)
 
 
 async def _ensure_resource_block_page_columns(conn) -> None:
@@ -170,3 +172,22 @@ async def _ensure_waf_setting_panel_public_url(conn) -> None:
         text("ALTER TABLE waf_setting ADD COLUMN panel_public_url VARCHAR(512) NULL")
     )
     log.info("schema patch applied: waf_setting.panel_public_url")
+
+
+async def _ensure_ai_guard_floating_chat_enabled(conn) -> None:
+    if await _column_exists(conn, "ai_guard_setting", "floating_chat_enabled"):
+        return
+    await conn.execute(
+        text(
+            "ALTER TABLE ai_guard_setting "
+            "ADD COLUMN floating_chat_enabled BOOLEAN NOT NULL DEFAULT 1"
+        )
+    )
+    log.info("schema patch applied: ai_guard_setting.floating_chat_enabled")
+
+
+async def _ensure_ai_guard_policy_custom_prompt(conn) -> None:
+    if await _column_exists(conn, "ai_guard_policy", "custom_prompt"):
+        return
+    await conn.execute(text("ALTER TABLE ai_guard_policy ADD COLUMN custom_prompt TEXT NULL"))
+    log.info("schema patch applied: ai_guard_policy.custom_prompt")

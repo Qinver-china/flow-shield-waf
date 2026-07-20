@@ -75,7 +75,7 @@ const deltaPrefix = computed(() => {
   border: 1px solid var(--fs-border);
   box-shadow: var(--fs-shadow-sm);
   border-top: 3px solid var(--accent);
-  transition: box-shadow var(--fs-transition), transform var(--fs-transition);
+  transition: 0.2s;
 }
 
 .stat-card:hover {
@@ -166,5 +166,28 @@ const deltaPrefix = computed(() => {
   border-top: 1px dashed var(--fs-border);
   font-size: 12px;
   color: var(--fs-text-muted);
+}
+
+@media (max-width: 767px) {
+  .stat-card-top {
+  align-items: baseline;
+}
+.stat-card-icon{
+  background: transparent;
+  width: 24px;
+  height: 24px;
+}
+
+.stat-card-lg .stat-card-value {
+  font-size: 20px;
+}
+
+.stat-card-label{
+  font-size: 12px;
+}
+.stat-card-delta{
+  font-size: 11px;
+}
+
 }
 </style>

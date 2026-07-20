@@ -247,7 +247,7 @@ docker compose up -d --build   # 或已部署时：docker compose restart app
 | 规则未查地理 | 仅在日志路径懒加载批量读取 `ngx.var` |
 | 未配置 GeoIP2 | 公网 IP 的国家可回退 `CF-IPCountry`（Cloudflare） |
 
-可在自定义规则中使用 `geo.country`、`geo.region`、`geo.city`、`geo.asn`、`geo.isp`、`geo.ip_type` 及 `geo_in` 操作符。总览大屏「拦截来源国家」仅统计已拦截（`blocked = 1`）请求。
+可在自定义规则中使用 `geo.country`、`geo.region`、`geo.city`、`geo.asn`、`geo.isp` 及 `geo_in` 操作符。总览大屏「拦截来源国家」仅统计已拦截（`blocked = 1`）请求。
 
 ### 接入 CDN 时的客户端 IP
 

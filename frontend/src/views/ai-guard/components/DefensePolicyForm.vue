@@ -38,6 +38,18 @@
       </a-row>
     </fs-form-section>
 
+    <fs-form-section title="AI 分析指引">
+      <a-form-item label="自定义提示词">
+        <a-textarea
+          v-model:value="model.custom_prompt"
+          :rows="5"
+          :maxlength="4000"
+          show-count
+          placeholder="可选。策略触发后，这段说明会一并发给 AI，用于补充业务背景或处置要求。例如：这是支付回调接口，优先识别伪造回调与重放；勿按 UA 封禁官方 SDK；建议先 observe。"
+        />
+      </a-form-item>
+    </fs-form-section>
+
     <fs-form-section title="执行与通知">
       <a-form-item label="规则应用模式">
         <a-select v-model:value="model.apply_mode">

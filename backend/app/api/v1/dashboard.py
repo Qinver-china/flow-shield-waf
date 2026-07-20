@@ -194,12 +194,16 @@ async def feed(
 
         log_rows = await asyncio.wait_for(asyncio.to_thread(_query_logs), timeout=10)
         for ts, client_ip, domain, rule_name, action in log_rows:
+            site_label = (domain or "").strip() or None
+            rule_label = (rule_name or action or "").strip() or None
             items.append(
                 DashboardFeedItemOut(
                     id=f"log-{ts}-{client_ip}",
                     type="block",
                     title=f"拦截 {client_ip or '未知 IP'}",
-                    detail=f"{domain or '-'} · {rule_name or action or '规则命中'}",
+                    detail=None,
+                    site=site_label,
+                    rule=rule_label,
                     severity="danger",
                     created_at=ts if isinstance(ts, datetime) else datetime.utcnow(),
                 )

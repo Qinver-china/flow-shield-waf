@@ -16,6 +16,7 @@ import {
   type LogFilterCondition,
   type LogResourceViewTarget,
   type StatsDimension,
+  withFilterMode,
 } from "./constants";
 import type { LogFilterState } from "./useLogFilterState";
 
@@ -37,6 +38,30 @@ export interface LogDimensionAction {
 
 export function useLogDimensionActions() {
   const router = useRouter();
+
+  function pushFilterActions(
+    actions: LogDimensionAction[],
+    filterConditions: LogFilterCondition[],
+    filterState: LogFilterState,
+  ) {
+    if (!filterConditions.length) return;
+    actions.push({
+      key: "add-filter-include",
+      label: "添加到筛选包含",
+      onClick: () => {
+        filterState.addConditions(filterConditions);
+        message.success("已添加到筛选包含");
+      },
+    });
+    actions.push({
+      key: "add-filter-exclude",
+      label: "添加到筛选排除",
+      onClick: () => {
+        filterState.addConditions(withFilterMode(filterConditions, "exclude"));
+        message.success("已添加到筛选排除");
+      },
+    });
+  }
 
   function openResourceView(
     target: LogResourceViewTarget,
@@ -100,16 +125,7 @@ export function useLogDimensionActions() {
 
     const actions: LogDimensionAction[] = [];
     const filterConditions = buildConditionsFromStatsDimension(dimension, itemKey);
-    if (filterConditions.length) {
-      actions.push({
-        key: "add-filter",
-        label: "添加到筛选",
-        onClick: () => {
-          filterState.addConditions(filterConditions);
-          message.success("已添加到筛选");
-        },
-      });
-    }
+    pushFilterActions(actions, filterConditions, filterState);
 
     const resourceTarget = getResourceViewTarget(dimension, itemKey, label);
     if (resourceTarget) {
@@ -184,16 +200,7 @@ export function useLogDimensionActions() {
       filterConditions = buildConditionsFromStatsDimension(field as StatsDimension, value);
     }
 
-    if (filterConditions.length) {
-      actions.push({
-        key: "add-filter",
-        label: "添加到筛选",
-        onClick: () => {
-          filterState.addConditions(filterConditions);
-          message.success("已添加到筛选");
-        },
-      });
-    }
+    pushFilterActions(actions, filterConditions, filterState);
 
     if (field === "source") {
       const resourceTarget = getResourceViewTarget("source", value, value);
@@ -239,16 +246,7 @@ export function useLogDimensionActions() {
 
     const actions: LogDimensionAction[] = [];
     const filterConditions = buildConditionsFromLogRule(record);
-    if (filterConditions.length) {
-      actions.push({
-        key: "add-filter",
-        label: "添加到筛选",
-        onClick: () => {
-          filterState.addConditions(filterConditions);
-          message.success("已添加到筛选");
-        },
-      });
-    }
+    pushFilterActions(actions, filterConditions, filterState);
 
     appendRuleResourceActions(actions, record);
 

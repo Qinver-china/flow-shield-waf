@@ -80,6 +80,8 @@ def build_analysis_result_email(
         plain_parts.append(
             f"\n已自动创建规则 #{applied_rule_id}（模式：{apply_mode or '—'}）"
         )
+    elif status == "analyzed":
+        plain_parts.append("\n本次分析未建议新建防护规则。")
     elif error_detail:
         plain_parts.append(f"\n错误详情：{error_detail}")
 
@@ -120,6 +122,8 @@ def build_analysis_result_email(
             f"已自动创建规则 #{applied_rule_id}（模式：{apply_mode or '—'}）",
             success=True,
         )
+    elif status == "analyzed":
+        action_block = html_status_message("本次分析未建议新建防护规则。", success=True)
     elif error_detail:
         action_block = html_status_message(f"错误：{error_detail}", danger=True)
 

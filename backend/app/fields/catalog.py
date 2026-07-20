@@ -65,14 +65,6 @@ FIELD_OPTIONS: dict[str, list[dict[str, str]]] = {
     "geo.city": geo_city_field_options(),
     "geo.asn": geo_asn_field_options(),
     "geo.isp": geo_isp_field_options(),
-    "geo.ip_type": [
-        {"value": "residential", "label": "家庭宽带"},
-        {"value": "business", "label": "商业/企业"},
-        {"value": "hosting", "label": "机房/托管"},
-        {"value": "mobile", "label": "移动网络"},
-        {"value": "education", "label": "教育网"},
-        {"value": "government", "label": "政府"},
-    ],
     "ua.family": [
         {"value": "browser", "label": "浏览器"},
         {"value": "bot", "label": "Bot"},
@@ -183,7 +175,6 @@ FIELDS: list[dict] = [
     _f("geo.city", "IP 城市", "网络与地理", STRING),
     _f("geo.asn", "IP ASN", "网络与地理", NUMBER),
     _f("geo.isp", "运营商 ISP", "网络与地理", STRING),
-    _f("geo.ip_type", "IP 类型", "网络与地理", ENUM),
     # url / path
     _f("http.host", "请求域名", "URL 与路径", STRING),
     _f("http.url", "完整 URL", "URL 与路径", STRING),
@@ -315,7 +306,7 @@ def catalog_compact_for_llm() -> dict:
                 "enum": {
                     "use": ["eq", "neq", "in_list"],
                     "avoid": ["equals", "not_equals", "contains", "regex"],
-                    "fields": ["geo.country", "geo.ip_type", "http.method", "net.scheme", "ua.family"],
+                    "fields": ["geo.country", "http.method", "net.scheme", "ua.family"],
                     "example": {
                         "field": "geo.country",
                         "op": "neq",

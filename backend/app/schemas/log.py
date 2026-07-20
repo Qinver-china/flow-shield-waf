@@ -43,7 +43,6 @@ class LogQuery(BaseModel):
     geo_region: str | None = None
     geo_city: str | None = None
     geo_isp: str | None = None
-    geo_ip_type: str | None = None
     geo_asn: int | None = None
     method: str | None = None
     scheme: str | None = None
@@ -52,6 +51,10 @@ class LogQuery(BaseModel):
     request_uri: str | None = None
     uri_query: str | None = None
     uri_ext: str | None = None
+    uri_depth: int | None = None
+    uri_pattern: str | None = None
+    full_url: str | None = None
+    query_count_bucket: str | None = None
     referer_host: str | None = None
     ip_is_private: bool | None = None
     xff_first: str | None = None
@@ -62,6 +65,9 @@ class LogQuery(BaseModel):
     bot_name: str | None = None
     bot_category: str | None = None
     tls_version: str | None = None
+    tls_ja3: str | None = None
+    hour_of_day: int | None = None
+    weekday: int | None = None
     keyword: str | None = None
     filters: str | None = None
     page: int = 1

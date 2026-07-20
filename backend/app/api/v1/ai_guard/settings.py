@@ -23,6 +23,7 @@ def _out(row) -> dict:
         temperature=row.temperature,
         max_tokens=row.max_tokens,
         chat_enabled=row.chat_enabled,
+        floating_chat_enabled=bool(getattr(row, "floating_chat_enabled", True)),
         defense_enabled=row.defense_enabled,
         default_apply_mode=row.default_apply_mode,
         max_logs_per_analysis=row.max_logs_per_analysis,

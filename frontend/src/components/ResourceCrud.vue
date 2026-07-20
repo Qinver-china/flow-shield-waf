@@ -13,8 +13,26 @@
       @reset="resetFilters"
     />
 
+    <slot
+      v-if="$slots.list"
+      name="list"
+      :rows="rows"
+      :loading="loading"
+      :open-view="openView"
+      :open-edit="openEdit"
+      :open-duplicate="openDuplicate"
+      :remove="remove"
+      :toggle-enabled="toggleEnabled"
+      :toggling-id="togglingId"
+      :allow-delete="allowDelete"
+      :name-actions="nameActions"
+      :duplicatable="duplicatable"
+      :pagination="pagination"
+      :on-table-change="onTableChange"
+    />
+
     <a-table
-      v-if="!isMobile"
+      v-else-if="!isMobile"
       :columns="tableColumns"
       :data-source="rows"
       :loading="loading"
@@ -124,6 +142,7 @@
             v-model:current="page"
             :total="total"
             :page-size="pageSize"
+            :size="paginationSize"
             :show-total="(t: number) => `共 ${t} 条`"
             @change="onMobilePageChange"
           />
@@ -215,7 +234,7 @@ import FsFormDrawer, { type FormDrawerMode } from "@/components/FsFormDrawer.vue
 import ResourceJsonImport from "@/components/ResourceJsonImport.vue";
 import TableBatchBar from "@/components/TableBatchBar.vue";
 import BatchEditDrawer from "@/components/BatchEditDrawer.vue";
-import { useBreakpoint } from "@/composables/useBreakpoint";
+import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { useResourceQuickActions } from "@/composables/useResourceQuickActions";
 import { useTableBatch } from "@/composables/useTableBatch";
 import type { BatchConfig } from "@/types/batch";
@@ -256,7 +275,7 @@ function allowDelete(row: Record<string, any>) {
   return props.canDelete ? props.canDelete(row) : true;
 }
 
-const { isMobile } = useBreakpoint();
+const { isMobile, paginationSize } = useResponsivePagination();
 const route = useRoute();
 const router = useRouter();
 const { buildActions } = useResourceQuickActions();
@@ -338,6 +357,7 @@ const pagination = computed(() => ({
   current: page.value,
   pageSize: pageSize.value,
   total: total.value,
+  size: paginationSize.value,
   showTotal: (t: number) => `共 ${t} 条`,
 }));
 

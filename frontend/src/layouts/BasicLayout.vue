@@ -100,7 +100,6 @@
           <span class="header-title">{{ pageTitle }}</span>
         </div>
         <div class="header-right">
-          <dashboard-live-refresh-toggle v-if="isDashboard" />
           <theme-toggle />
             <a-dropdown placement="bottomRight" :trigger="['click']">
               <a-button type="text" class="fs-header-icon-btn" aria-label="用户菜单">
@@ -157,7 +156,6 @@ import {
   UserOutlined,
 } from "@ant-design/icons-vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
-import DashboardLiveRefreshToggle from "@/components/DashboardLiveRefreshToggle.vue";
 import AppLogo from "@/components/AppLogo.vue";
 import FloatingAiChat from "@/components/ai-chat/FloatingAiChat.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
@@ -219,7 +217,6 @@ const menuGroups = [
 
 const selectedKey = computed(() => route.path);
 const pageTitle = computed(() => (route.meta.title as string) || "");
-const isDashboard = computed(() => route.path === "/dashboard");
 
 function onMenu({ key }: { key: string }) {
   drawerOpen.value = false;

@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS waf.waf_logs (
   geo_region LowCardinality(Nullable(String)),
   geo_city LowCardinality(Nullable(String)),
   geo_isp LowCardinality(Nullable(String)),
-  geo_ip_type LowCardinality(Nullable(String)),
   geo_asn Nullable(UInt32),
   method LowCardinality(String),
   scheme LowCardinality(String),

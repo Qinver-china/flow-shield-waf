@@ -138,6 +138,37 @@ code,
   padding-inline-end: 11px;
 }
 
+.ant-pagination .ant-pagination-item,
+.ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  background: var(--fs-bg-muted);
+}
+
+/* Table pagination: PC keeps default bordered size; mobile is borderless mini */
+@media (max-width: 767px) {
+  .ant-pagination .ant-pagination-item,
+  .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+  .ant-pagination .ant-pagination-next .ant-pagination-item-link {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .ant-pagination .ant-pagination-item-active {
+    background: color-mix(in srgb, var(--fs-color-primary) 12%, transparent) !important;
+    font-weight: 600;
+  }
+
+  .ant-pagination .ant-pagination-item-active a {
+    color: var(--fs-color-primary);
+  }
+
+  .ant-pagination .ant-pagination-disabled .ant-pagination-item-link {
+    background: transparent !important;
+    border: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

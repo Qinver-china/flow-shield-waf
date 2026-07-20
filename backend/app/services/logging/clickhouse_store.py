@@ -14,7 +14,7 @@ log = logging.getLogger("waf.clickhouse_store")
 
 _COLUMNS = [
     "ts", "site_id", "domain", "client_ip", "ip_is_private", "xff_first",
-    "geo_country", "geo_region", "geo_city", "geo_isp", "geo_ip_type", "geo_asn",
+    "geo_country", "geo_region", "geo_city", "geo_isp", "geo_asn",
     "method", "scheme", "http_version", "request_uri", "uri_path", "uri_ext", "uri_depth",
     "uri_pattern", "uri_query", "query_count", "referer", "referer_host", "ua", "bot_name", "bot_category",
     "ua_family", "ua_os",
@@ -61,7 +61,6 @@ def _row_from_enriched(e: dict) -> list:
         e.get("geo_region"),
         e.get("geo_city"),
         e.get("geo_isp"),
-        e.get("geo_ip_type"),
         e.get("geo_asn"),
         e.get("method") or "",
         e.get("scheme") or "",

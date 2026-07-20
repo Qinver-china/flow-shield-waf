@@ -4,7 +4,7 @@
       :columns="columns"
       :data-source="rows"
       :loading="loading"
-      :pagination="pagination"
+      :pagination="resolvedPagination"
       row-key="id"
       @change="onTableChange"
     >
@@ -70,6 +70,7 @@ import { api } from "@/api";
 import FsDetailDrawer from "@/components/FsDetailDrawer.vue";
 import FsDetailKv from "@/components/FsDetailKv.vue";
 import FsDetailSection from "@/components/FsDetailSection.vue";
+import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { formatDateTime } from "@/utils/datetime";
 import RuleDraftPreview from "../components/RuleDraftPreview.vue";
 
@@ -80,12 +81,16 @@ const pageSize = ref(20);
 const drawerOpen = ref(false);
 const detail = ref<any>(null);
 
+const { withPaginationSize } = useResponsivePagination();
+
 const pagination = reactive({
   current: 1,
   pageSize: 20,
   total: 0,
   showSizeChanger: true,
 });
+
+const resolvedPagination = computed(() => withPaginationSize(pagination));
 
 const columns = [
   { title: "状态", key: "status", width: 100 },
@@ -117,6 +122,7 @@ const INCIDENT_STATUS_LABELS: Record<string, string> = {
   pending: "待处理",
   analyzing: "分析中",
   suggested: "待应用",
+  analyzed: "仅分析",
   applied: "已应用",
   failed: "失败",
   dismissed: "已忽略",
@@ -130,6 +136,7 @@ function statusColor(s: string) {
   const map: Record<string, string> = {
     pending: "default",
     suggested: "orange",
+    analyzed: "cyan",
     applied: "green",
     failed: "red",
     analyzing: "blue",

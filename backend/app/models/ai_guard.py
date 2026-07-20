@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
 APPLY_MODES = ("suggest_only", "auto_observe", "auto_block")
-INCIDENT_STATUSES = ("pending", "analyzing", "suggested", "applied", "failed", "dismissed")
+INCIDENT_STATUSES = ("pending", "analyzing", "suggested", "analyzed", "applied", "failed", "dismissed")
 MESSAGE_ROLES = ("user", "assistant", "system", "tool")
 
 
@@ -26,6 +26,7 @@ class AiGuardSetting(Base, TimestampMixin):
     temperature: Mapped[float] = mapped_column(Float, default=0.3)
     max_tokens: Mapped[int] = mapped_column(Integer, default=4096)
     chat_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    floating_chat_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     defense_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     default_apply_mode: Mapped[str] = mapped_column(String(24), default="suggest_only")
     max_logs_per_analysis: Mapped[int] = mapped_column(Integer, default=200)
@@ -50,6 +51,7 @@ class AiGuardPolicy(Base, TimestampMixin):
     cooldown_sec: Mapped[int] = mapped_column(Integer, default=300)
     last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    custom_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class AiGuardChatSession(Base, TimestampMixin):

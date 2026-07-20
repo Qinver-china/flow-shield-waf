@@ -5,7 +5,7 @@
         :columns="columns"
         :data-source="rows"
         :loading="loading"
-        :pagination="pagination"
+        :pagination="resolvedPagination"
         row-key="id"
         size="small"
         :scroll="{ x: 1100 }"
@@ -108,8 +108,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { api } from "@/api";
+import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import LogDetailDrawer from "./LogDetailDrawer.vue";
 import LogDimensionActionCell from "./LogDimensionActionCell.vue";
 import { hydrateBotCategoryFilterOptions, modeColor, modeLabel, sourceLabel } from "./constants";
@@ -120,6 +121,8 @@ const props = defineProps<{
   filterState: LogFilterState;
   active: boolean;
 }>();
+
+const { withPaginationSize } = useResponsivePagination();
 
 const columns = [
   { title: "时间", key: "ts", dataIndex: "ts", width: 168 },
@@ -157,6 +160,8 @@ const pagination = ref({
   showTotal: (t: number) => `共 ${t} 条`,
   showSizeChanger: true,
 });
+
+const resolvedPagination = computed(() => withPaginationSize(pagination.value));
 
 let fetchSeq = 0;
 

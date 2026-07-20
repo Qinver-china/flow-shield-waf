@@ -4,7 +4,7 @@
       :columns="columns"
       :data-source="dataSource"
       :loading="loading"
-      :pagination="pagination"
+      :pagination="resolvedPagination"
       :row-selection="rowSelection"
       :row-key="rowKey"
       :size="size"
@@ -41,6 +41,7 @@
 import { computed } from "vue";
 import BatchEditDrawer from "@/components/BatchEditDrawer.vue";
 import TableBatchBar from "@/components/TableBatchBar.vue";
+import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { useTableBatch } from "@/composables/useTableBatch";
 import type { BatchActionKey, BatchConfig } from "@/types/batch";
 
@@ -70,6 +71,9 @@ const emit = defineEmits<{
 }>();
 
 const rows = computed(() => props.dataSource ?? []);
+const { withPaginationSize } = useResponsivePagination();
+
+const resolvedPagination = computed(() => withPaginationSize(props.pagination as any));
 
 const batchConfig = computed<BatchConfig | undefined>(() =>
   props.batch === false ? undefined : props.batch,

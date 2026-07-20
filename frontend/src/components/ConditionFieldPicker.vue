@@ -179,10 +179,10 @@ watch(open, (visible) => {
 
 .cond-field-picker-btn {
   padding: 5px 8px;
-  border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
-  background: var(--fs-bg-surface);
   color: var(--fs-text-primary);
+  border: 1px solid #6a6c6e30;
+  background: #c2c2c20d;
   font-size: 12px;
   line-height: 1.35;
   text-align: left;

@@ -115,6 +115,7 @@ import { DownOutlined } from "@ant-design/icons-vue";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
 import { api } from "@/api";
+import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { formatDateTime } from "@/utils/datetime";
 import {
   localizeStatsItems,
@@ -145,6 +146,7 @@ const props = defineProps<{
 const emit = defineEmits<{ "drill-down": [LogDrillDownFilter] }>();
 
 const { formatSiteId } = useSiteOptions();
+const { paginationSize } = useResponsivePagination();
 const route = useRoute();
 
 function queryValue(query: LocationQuery, key: string) {
@@ -196,6 +198,7 @@ const tablePagination = computed(() => ({
   current: groupPage.value,
   pageSize: groupPageSize.value,
   total: groupItemTotal.value,
+  size: paginationSize.value,
   showTotal: (total: number) => `共 ${total} 项`,
   showSizeChanger: true,
   pageSizeOptions: ["20", "50", "100"],
@@ -569,12 +572,13 @@ onUnmounted(() => {
 }
 
 .dimension-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .dimension-btn {
+  flex: 1 0 calc(30% - 6px);
   appearance: none;
   margin: 0;
   padding: 7px 6px;

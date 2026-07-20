@@ -472,22 +472,36 @@ class AiResourceWriter:
         raise ValueError(f"未知工具: {tool_name}")
 
 
+DEFENSE_INITIAL_WINDOW_MIN = 30
+DEFENSE_INITIAL_MAX_ROWS = 200
+
+_LOG_SELECT = (
+    "request_id, client_ip, method, request_uri, domain, blocked, "
+    "rule_name, mode, geo_country, ua_family, log_type"
+)
+
+
 class LogSampler:
     """Sample recent logs from ClickHouse for defense analysis."""
 
     async def sample(
         self,
         *,
-        window_min: int = 5,
+        window_min: int = DEFENSE_INITIAL_WINDOW_MIN,
         site_id: int | None = None,
-        max_rows: int = 200,
+        max_rows: int = DEFENSE_INITIAL_MAX_ROWS,
+        passed_only: bool = False,
     ) -> tuple[list[dict], dict]:
         return await asyncio.to_thread(
-            self._sample_sync, window_min, site_id, max_rows
+            self._sample_sync, window_min, site_id, max_rows, passed_only
         )
 
     def _sample_sync(
-        self, window_min: int, site_id: int | None, max_rows: int
+        self,
+        window_min: int,
+        site_id: int | None,
+        max_rows: int,
+        passed_only: bool,
     ) -> tuple[list[dict], dict]:
         from app.core.clickhouse import get_clickhouse
 
@@ -499,11 +513,21 @@ class LogSampler:
         where = " AND ".join(clauses)
         client = get_clickhouse()
 
+        if passed_only:
+            passed_rows = list(
+                client.query(
+                    f"SELECT {_LOG_SELECT} FROM waf_logs WHERE {where} AND blocked = 0 "
+                    f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
+                    parameters=params,
+                ).named_results()
+            )
+            rows = [dict(r) for r in passed_rows]
+            meta = self._aggregate(rows, window_min, passed_only=True)
+            return rows, meta
+
         blocked_rows = list(
             client.query(
-                f"SELECT request_id, client_ip, method, request_uri, domain, blocked, "
-                f"rule_name, mode, geo_country, ua_family, log_type "
-                f"FROM waf_logs WHERE {where} AND blocked = 1 "
+                f"SELECT {_LOG_SELECT} FROM waf_logs WHERE {where} AND blocked = 1 "
                 f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
                 parameters=params,
             ).named_results()
@@ -516,26 +540,26 @@ class LogSampler:
             params["limit"] = remaining
             passed_rows = list(
                 client.query(
-                    f"SELECT request_id, client_ip, method, request_uri, domain, blocked, "
-                    f"rule_name, mode, geo_country, ua_family, log_type "
-                    f"FROM waf_logs WHERE {where} AND blocked = 0 "
+                    f"SELECT {_LOG_SELECT} FROM waf_logs WHERE {where} AND blocked = 0 "
                     f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
                     parameters=params,
                 ).named_results()
             )
 
         rows = [dict(r) for r in blocked_rows] + [dict(r) for r in passed_rows]
-        meta = self._aggregate(rows, window_min)
+        meta = self._aggregate(rows, window_min, passed_only=False)
         return rows, meta
 
-    def _aggregate(self, rows: list[dict], window_min: int) -> dict:
+    def _aggregate(
+        self, rows: list[dict], window_min: int, *, passed_only: bool
+    ) -> dict:
         from collections import Counter
 
         ips = Counter(str(r.get("client_ip") or "") for r in rows)
         uris = Counter(str(r.get("request_uri") or r.get("uri") or "")[:120] for r in rows)
         methods = Counter(str(r.get("method") or "") for r in rows)
         blocked = sum(1 for r in rows if r.get("blocked"))
-        return {
+        meta = {
             "window_min": window_min,
             "sampled": len(rows),
             "blocked_count": blocked,
@@ -544,6 +568,14 @@ class LogSampler:
             "top_uris": uris.most_common(10),
             "methods": dict(methods),
         }
+        if passed_only:
+            meta["sample_scope"] = "passed_only"
+            meta["query_hint"] = (
+                "初始样本仅含近 {window} 分钟放行（未被拦截）请求，最多 {max_rows} 条；"
+                "不含已拦截日志。若证据不足，请调用 query_logs / get_log_stats / "
+                "query_log_stats_group 扩大时间范围或按需筛选 blocked=true。"
+            ).format(window=window_min, max_rows=DEFENSE_INITIAL_MAX_ROWS)
+        return meta
 
 
 class AiNotifier:

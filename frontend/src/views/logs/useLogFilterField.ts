@@ -31,6 +31,15 @@ export function useLogFilterFieldBindings(filters: LogDetailFilters) {
       value === undefined ? undefined : value === "true";
   }
 
+  function getNumberFilter(key: string) {
+    return (filters as Record<string, number | undefined>)[key];
+  }
+
+  function setNumberFilter(key: string, value?: number | null) {
+    (filters as Record<string, number | undefined>)[key] =
+      value == null || !Number.isFinite(value) ? undefined : value;
+  }
+
   return {
     getTextFilter,
     setTextFilter,
@@ -38,6 +47,8 @@ export function useLogFilterFieldBindings(filters: LogDetailFilters) {
     setSelectFilter,
     getBoolFilter,
     setBoolFilter,
+    getNumberFilter,
+    setNumberFilter,
   };
 }
 

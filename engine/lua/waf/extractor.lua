@@ -185,8 +185,6 @@ function _M:_resolve(field, arg)
         return geo_lookup.field(self, "asn")
     elseif field == "geo.isp" then
         return geo_lookup.field(self, "isp")
-    elseif field == "geo.ip_type" then
-        return geo_lookup.field(self, "ip_type")
 
     -- request line / method / host
     elseif field == "http.method" then

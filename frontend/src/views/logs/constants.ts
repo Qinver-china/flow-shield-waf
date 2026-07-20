@@ -1,12 +1,16 @@
-import { logStatsDimensionLayout } from "@/constants/logDimensionLayout";
+import { LOG_HIT_CATEGORY, logStatsDimensionLayout } from "@/constants/logDimensionLayout";
 import {
   formatGeoAsn,
   formatGeoCity,
   formatGeoCountry,
   formatGeoIsp,
   formatGeoRegion,
+  geoAsnSelectOptions,
+  geoCitySelectOptions,
   geoCountrySelectOptions,
+  geoRegionSelectOptions,
   GEO_COUNTRY_LABELS as geoCountryLabel,
+  GEO_ISP_SELECT_HINTS,
 } from "@/utils/geoLabels";
 
 export { geoCountryLabel };
@@ -199,11 +203,41 @@ export const logFilterOperators: { value: LogFilterOperator; label: string }[] =
   { value: "like", label: "模糊匹配" },
 ];
 
+export function negateFilterOperator(op: LogFilterOperator): LogFilterOperator {
+  switch (op) {
+    case "eq":
+      return "ne";
+    case "ne":
+      return "eq";
+    case "contains":
+      return "not_contains";
+    case "not_contains":
+      return "contains";
+    case "like":
+      return "not_contains";
+    default:
+      return "ne";
+  }
+}
+
+export function withFilterMode(
+  conditions: LogFilterCondition[],
+  mode: "include" | "exclude",
+): LogFilterCondition[] {
+  if (mode === "include") return conditions;
+  return conditions.map((condition) => ({
+    ...condition,
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    operator: negateFilterOperator(condition.operator),
+  }));
+}
+
 export interface LogFilterCondition {
   id: string;
   field: string;
   operator: LogFilterOperator;
   value: string | string[];
+  arg?: string;
 }
 
 const BOOL_FILTER_KEYS = new Set(["blocked", "ip_is_private"]);
@@ -212,16 +246,34 @@ const MULTI_VALUE_SELECT_KEYS = new Set([
   "mode",
   "log_type",
   "geo_country",
+  "geo_region",
+  "geo_city",
+  "geo_asn",
+  "geo_isp",
   "method",
   "scheme",
   "http_version",
   "bot_category",
+  "ua_family",
+  "query_count_bucket",
+  "cookie_count_bucket",
+  "weekday",
+  "hour_of_day",
+]);
+
+/** 可搜索下拉 + 手输自定义值（与规则条件编辑器一致） */
+const SUGGEST_FILTER_KEYS = new Set([
+  "geo_region",
+  "geo_city",
+  "geo_asn",
+  "geo_isp",
 ]);
 
 export function getOperatorsForField(field: LogFilterFieldDef): LogFilterOperator[] {
   if (field.type === "bool") return ["eq", "ne"];
   if (field.type === "select") return ["eq", "ne"];
   if (field.type === "number" || field.type === "rule_id" || field.type === "site") return ["eq", "ne"];
+  if (field.type === "cookie") return ["eq", "contains", "ne", "not_contains", "like"];
   if (field.key === "keyword") return ["contains", "not_contains", "like"];
   return ["eq", "contains", "ne", "not_contains", "like"];
 }
@@ -232,6 +284,10 @@ export function defaultOperatorForField(field: LogFilterFieldDef): LogFilterOper
 
 export function supportsMultiValue(field: LogFilterFieldDef): boolean {
   return field.type === "select" && MULTI_VALUE_SELECT_KEYS.has(field.key);
+}
+
+export function isSuggestFilterField(field: LogFilterFieldDef): boolean {
+  return field.type === "select" && SUGGEST_FILTER_KEYS.has(field.key);
 }
 
 export function allLogFilterFieldDefs(): LogFilterFieldDef[] {
@@ -249,6 +305,7 @@ export function createFilterCondition(fieldKey?: string): LogFilterCondition {
     field: field.key,
     operator: defaultOperatorForField(field),
     value: supportsMultiValue(field) ? [] : "",
+    arg: field.type === "cookie" ? "" : undefined,
   };
 }
 
@@ -266,6 +323,7 @@ function normalizeConditionValue(field: LogFilterFieldDef, value: string | strin
 export function isConditionComplete(condition: LogFilterCondition): boolean {
   const field = findLogFilterField(condition.field);
   if (!field) return false;
+  if (field.type === "cookie" && !(condition.arg || "").trim()) return false;
   const value = normalizeConditionValue(field, condition.value);
   if (Array.isArray(value)) return value.length > 0;
   return value !== "";
@@ -301,7 +359,11 @@ export function formatConditionLabel(condition: LogFilterCondition): string {
   const valueLabel = Array.isArray(value)
     ? value.map(formatValue).join("、")
     : formatValue(String(value));
-  return `${field.label} ${op} ${valueLabel}`;
+  const argLabel =
+    field.type === "cookie" && condition.arg
+      ? ` (${condition.arg})`
+      : "";
+  return `${field.label}${argLabel} ${op} ${valueLabel}`;
 }
 
 export function conditionsToFiltersJson(conditions: LogFilterCondition[]): string | undefined {
@@ -315,9 +377,10 @@ export function conditionsToFiltersJson(conditions: LogFilterCondition[]): strin
         field: condition.field,
         op: condition.operator,
         value,
+        ...(condition.arg?.trim() ? { arg: condition.arg.trim() } : {}),
       };
     })
-    .filter((item): item is { field: string; op: LogFilterOperator; value: string | string[] } => !!item);
+    .filter((item): item is { field: string; op: LogFilterOperator; value: string | string[]; arg?: string } => !!item);
   return items.length ? JSON.stringify(items) : undefined;
 }
 
@@ -334,7 +397,9 @@ export function conditionsToLogDetailFilters(conditions: LogFilterCondition[]): 
       continue;
     }
     if (field.type === "number") {
-      filters.geo_asn = Number(primary);
+      const n = Number(primary);
+      if (!Number.isFinite(n)) continue;
+      (filters as Record<string, number | undefined>)[field.key] = n;
       continue;
     }
     if (field.type === "rule_id") {
@@ -346,6 +411,11 @@ export function conditionsToLogDetailFilters(conditions: LogFilterCondition[]): 
       continue;
     }
     if (field.type === "select") {
+      if (field.key === "geo_asn") {
+        const n = Number(primary);
+        if (Number.isFinite(n)) filters.geo_asn = n;
+        continue;
+      }
       (filters as Record<string, string | undefined>)[field.key] = primary;
       continue;
     }
@@ -369,12 +439,13 @@ export function logDetailFiltersToConditions(filters: LogDetailFilters): LogFilt
       continue;
     }
     if (field.type === "number") {
-      if (filters.geo_asn === undefined) continue;
+      const value = (filters as Record<string, number | undefined>)[field.key];
+      if (value === undefined) continue;
       conditions.push({
         id: createFilterCondition(field.key).id,
         field: field.key,
         operator: "eq",
-        value: String(filters.geo_asn),
+        value: String(value),
       });
       continue;
     }
@@ -399,6 +470,16 @@ export function logDetailFiltersToConditions(filters: LogDetailFilters): LogFilt
       continue;
     }
     if (field.type === "select") {
+      if (field.key === "geo_asn") {
+        if (filters.geo_asn === undefined) continue;
+        conditions.push({
+          id: createFilterCondition(field.key).id,
+          field: field.key,
+          operator: "eq",
+          value: String(filters.geo_asn),
+        });
+        continue;
+      }
       const value = (filters as Record<string, string | undefined>)[field.key];
       if (!value) continue;
       conditions.push({
@@ -414,7 +495,10 @@ export function logDetailFiltersToConditions(filters: LogDetailFilters): LogFilt
     conditions.push({
       id: createFilterCondition(field.key).id,
       field: field.key,
-      operator: field.key === "keyword" || field.key === "rule_name" || field.key === "ua" ? "contains" : "eq",
+      operator:
+        field.key === "keyword" || field.key === "rule_name" || field.key === "ua"
+          ? "contains"
+          : "eq",
       value: textValue,
     });
   }
@@ -430,13 +514,14 @@ export const trafficWindowLabels: Record<number, string> = {
   3600: "60 分钟",
 };
 
-export type LogFilterFieldType = "text" | "select" | "bool" | "number" | "site" | "rule_id";
+export type LogFilterFieldType = "text" | "select" | "bool" | "number" | "site" | "rule_id" | "cookie";
 
 export interface LogFilterFieldDef {
   key: string;
   label: string;
   type: LogFilterFieldType;
   placeholder?: string;
+  argPlaceholder?: string;
   options?: { value: string; label: string }[];
 }
 
@@ -454,14 +539,15 @@ export const httpMethodOptions = [
 ];
 
 export const schemeOptions = [
-  { value: "http", label: "http" },
-  { value: "https", label: "https" },
+  { value: "http", label: "HTTP" },
+  { value: "https", label: "HTTPS" },
 ];
 
 export const httpVersionOptions = [
   { value: "1.0", label: "HTTP/1.0" },
   { value: "1.1", label: "HTTP/1.1" },
   { value: "2.0", label: "HTTP/2" },
+  { value: "3.0", label: "HTTP/3" },
 ];
 
 export const boolFilterOptions = [
@@ -469,69 +555,149 @@ export const boolFilterOptions = [
   { value: "false", label: "否" },
 ];
 
-export const geoCountryOptions = geoCountrySelectOptions();
-
-export const logDetailFilterGroups: { label: string; fields: LogFilterFieldDef[] }[] = [
-  {
-    label: "防护命中",
-    fields: [
-      { key: "source", label: "防护来源", type: "select", options: selectFromRecord(sourceLabel) },
-      { key: "mode", label: "防护方式", type: "select", options: selectFromRecord(modeLabel) },
-      { key: "log_type", label: "日志类型", type: "select", options: selectFromRecord(logTypeLabel) },
-      { key: "blocked", label: "拦截结果", type: "bool" },
-      { key: "site_id", label: "站点", type: "site" },
-      { key: "rule_id", label: "命中规则", type: "rule_id" },
-      { key: "rule_name", label: "规则名称", type: "text", placeholder: "模糊匹配" },
-      { key: "action", label: "动作", type: "text", placeholder: "action" },
-      { key: "keyword", label: "关键字", type: "text", placeholder: "URL / UA / 域名模糊搜索" },
-    ],
-  },
-  {
-    label: "网络与地理",
-    fields: [
-      { key: "client_ip", label: "客户端 IP", type: "text", placeholder: "精确匹配" },
-      { key: "ip_is_private", label: "IP 是否内网", type: "bool" },
-      { key: "scheme", label: "协议", type: "select", options: schemeOptions },
-      { key: "http_version", label: "HTTP 版本", type: "select", options: httpVersionOptions },
-      { key: "geo_country", label: "IP 国家/地区", type: "select", options: geoCountryOptions },
-      { key: "geo_region", label: "IP 省/州", type: "text", placeholder: "代码，如 GD / VA（展示为中文）" },
-      { key: "geo_city", label: "IP 城市", type: "text", placeholder: "英文名，如 Beijing（展示为中文）" },
-      { key: "geo_asn", label: "IP ASN", type: "number" },
-      { key: "geo_isp", label: "运营商 ISP", type: "text", placeholder: "精确匹配组织名，如 Amazon.com, Inc." },
-      { key: "geo_ip_type", label: "IP 类型", type: "text", placeholder: "如 datacenter / residential" },
-      { key: "xff_first", label: "X-Forwarded-For", type: "text", placeholder: "XFF 首跳 IP" },
-    ],
-  },
-  {
-    label: "URL 与路径",
-    fields: [
-      { key: "domain", label: "请求域名", type: "text", placeholder: "精确匹配" },
-      { key: "request_uri", label: "原始请求行", type: "text", placeholder: "如 /api?id=1" },
-      { key: "uri_path", label: "请求路径", type: "text", placeholder: "精确匹配" },
-      { key: "uri_ext", label: "文件后缀", type: "text", placeholder: "如 php / js" },
-      { key: "uri_query", label: "原始查询串", type: "text", placeholder: "如 id=1&foo=bar" },
-    ],
-  },
-  {
-    label: "HTTP 请求",
-    fields: [
-      { key: "method", label: "请求方法", type: "select", options: httpMethodOptions },
-      { key: "referer_host", label: "Referer", type: "text", placeholder: "Referer 主机名" },
-      { key: "ua", label: "User-Agent", type: "text", placeholder: "模糊匹配" },
-    ],
-  },
-  {
-    label: "客户端识别",
-    fields: [
-      { key: "bot_name", label: "Bot 名称", type: "text", placeholder: "如 Googlebot" },
-      { key: "bot_category", label: "Bot 分类", type: "select", options: [] },
-      { key: "ua_family", label: "UA 类型", type: "text", placeholder: "如 browser / bot" },
-      { key: "ua_os", label: "操作系统", type: "text", placeholder: "精确匹配" },
-      { key: "ua_browser", label: "浏览器", type: "text", placeholder: "精确匹配" },
-      { key: "tls_version", label: "TLS 版本", type: "text", placeholder: "如 TLSv1.3" },
-    ],
-  },
+export const uaFamilyOptions = [
+  { value: "browser", label: "浏览器" },
+  { value: "bot", label: "Bot" },
 ];
+
+export const queryCountBucketOptions = [
+  { value: "0", label: "0" },
+  { value: "1-5", label: "1-5" },
+  { value: "6-20", label: "6-20" },
+  { value: "20+", label: "20+" },
+];
+
+export const weekdayOptions = [
+  { value: "1", label: "周一" },
+  { value: "2", label: "周二" },
+  { value: "3", label: "周三" },
+  { value: "4", label: "周四" },
+  { value: "5", label: "周五" },
+  { value: "6", label: "周六" },
+  { value: "7", label: "周日" },
+];
+
+export const hourOfDayOptions = Array.from({ length: 24 }, (_, hour) => ({
+  value: String(hour),
+  label: `${hour}:00`,
+}));
+
+export const geoCountryOptions = geoCountrySelectOptions();
+export const geoRegionOptions = geoRegionSelectOptions();
+export const geoCityOptions = geoCitySelectOptions();
+export const geoAsnOptions = geoAsnSelectOptions();
+export const geoIspOptions = GEO_ISP_SELECT_HINTS.map((item) => ({
+  value: item.value,
+  label: item.label,
+}));
+
+/** 筛选专用字段：不在统计维度中，追加到对应分组末尾 */
+const LOG_FILTER_GROUP_EXTRAS: Record<string, string[]> = {
+  [LOG_HIT_CATEGORY]: ["rule_name", "action", "keyword"],
+  "HTTP 请求": ["cookie"],
+};
+
+const logFilterFieldRegistry: Record<string, LogFilterFieldDef> = {
+  rule_id: { key: "rule_id", label: "命中规则", type: "rule_id" },
+  source: { key: "source", label: "防护来源", type: "select", options: selectFromRecord(sourceLabel) },
+  mode: { key: "mode", label: "防护方式", type: "select", options: selectFromRecord(modeLabel) },
+  blocked: { key: "blocked", label: "拦截结果", type: "bool" },
+  log_type: { key: "log_type", label: "日志类型", type: "select", options: selectFromRecord(logTypeLabel) },
+  site_id: { key: "site_id", label: "站点", type: "site" },
+  rule_name: { key: "rule_name", label: "规则名称", type: "text", placeholder: "模糊匹配" },
+  action: { key: "action", label: "动作", type: "text", placeholder: "action" },
+  keyword: { key: "keyword", label: "关键字", type: "text", placeholder: "URL / UA / 域名模糊搜索" },
+  client_ip: { key: "client_ip", label: "客户端 IP", type: "text", placeholder: "精确匹配" },
+  ip_is_private: { key: "ip_is_private", label: "IP 是否内网", type: "bool" },
+  scheme: { key: "scheme", label: "协议", type: "select", options: schemeOptions },
+  http_version: { key: "http_version", label: "HTTP 版本", type: "select", options: httpVersionOptions },
+  geo_country: { key: "geo_country", label: "IP 国家/地区", type: "select", options: geoCountryOptions },
+  geo_region: {
+    key: "geo_region",
+    label: "IP 省/州",
+    type: "select",
+    options: geoRegionOptions,
+    placeholder: "选择或输入代码，如 GD",
+  },
+  geo_city: {
+    key: "geo_city",
+    label: "IP 城市",
+    type: "select",
+    options: geoCityOptions,
+    placeholder: "选择或输入英文名",
+  },
+  geo_asn: {
+    key: "geo_asn",
+    label: "IP ASN",
+    type: "select",
+    options: geoAsnOptions,
+    placeholder: "选择或输入 ASN 数字",
+  },
+  geo_isp: {
+    key: "geo_isp",
+    label: "运营商 ISP",
+    type: "select",
+    options: geoIspOptions,
+    placeholder: "选择或输入组织名",
+  },
+  xff_first: { key: "xff_first", label: "X-Forwarded-For", type: "text", placeholder: "XFF 首跳 IP" },
+  domain: { key: "domain", label: "请求域名", type: "text", placeholder: "精确匹配" },
+  full_url: { key: "full_url", label: "完整 URL", type: "text", placeholder: "如 https://example.com/api" },
+  request_uri: { key: "request_uri", label: "原始请求行", type: "text", placeholder: "如 /api?id=1" },
+  uri_path: { key: "uri_path", label: "请求路径", type: "text", placeholder: "精确匹配" },
+  uri_ext: { key: "uri_ext", label: "文件后缀", type: "text", placeholder: "如 php / js" },
+  uri_depth: { key: "uri_depth", label: "路径深度", type: "number", placeholder: "如 3" },
+  uri_pattern: { key: "uri_pattern", label: "路径模式", type: "text", placeholder: "归一化路径" },
+  uri_query: { key: "uri_query", label: "原始查询串", type: "text", placeholder: "如 id=1&foo=bar" },
+  query_count_bucket: {
+    key: "query_count_bucket",
+    label: "查询参数个数",
+    type: "select",
+    options: queryCountBucketOptions,
+  },
+  method: { key: "method", label: "请求方法", type: "select", options: httpMethodOptions },
+  referer_host: { key: "referer_host", label: "Referer", type: "text", placeholder: "Referer 主机名" },
+  ua: { key: "ua", label: "User-Agent", type: "text", placeholder: "模糊匹配" },
+  cookie_name: { key: "cookie_name", label: "Cookie 参数名", type: "text", placeholder: "如 PHPSESSID" },
+  cookie_count_bucket: {
+    key: "cookie_count_bucket",
+    label: "Cookie 个数",
+    type: "select",
+    options: queryCountBucketOptions,
+  },
+  cookie: {
+    key: "cookie",
+    label: "Cookie 参数值",
+    type: "cookie",
+    argPlaceholder: "参数名",
+    placeholder: "参数值",
+  },
+  bot_name: { key: "bot_name", label: "Bot 名称", type: "text", placeholder: "如 Googlebot" },
+  bot_category: { key: "bot_category", label: "Bot 分类", type: "select", options: [] },
+  ua_family: { key: "ua_family", label: "UA 类型", type: "select", options: uaFamilyOptions },
+  ua_os: { key: "ua_os", label: "操作系统", type: "text", placeholder: "精确匹配" },
+  ua_browser: { key: "ua_browser", label: "浏览器", type: "text", placeholder: "精确匹配" },
+  tls_version: { key: "tls_version", label: "TLS 版本", type: "text", placeholder: "如 TLSv1.3" },
+  tls_ja3: { key: "tls_ja3", label: "JA3 指纹", type: "text", placeholder: "精确匹配" },
+  hour_of_day: { key: "hour_of_day", label: "当前小时", type: "select", options: hourOfDayOptions },
+  weekday: { key: "weekday", label: "星期几", type: "select", options: weekdayOptions },
+};
+
+function buildLogDetailFilterGroups(): { label: string; fields: LogFilterFieldDef[] }[] {
+  return logStatsDimensionLayout.map((group) => {
+    const keys = [
+      ...group.items.map((item) => item.key),
+      ...(LOG_FILTER_GROUP_EXTRAS[group.label] || []),
+    ];
+    const fields = keys
+      .map((key) => logFilterFieldRegistry[key])
+      .filter((field): field is LogFilterFieldDef => !!field);
+    return { label: group.label, fields };
+  });
+}
+
+/** 与 `logStatsDimensionLayout` 顺序/分类对齐；防护命中与 HTTP 请求含筛选专用字段 */
+export const logDetailFilterGroups = buildLogDetailFilterGroups();
 
 /** Most-used log detail filters shown in the compact top row. */
 export const logDetailQuickFilterKeys = [
@@ -575,16 +741,21 @@ export function logDetailFiltersUseAdvanced(filters: LogDetailFilters): boolean 
   if (filters.geo_region) return true;
   if (filters.geo_city) return true;
   if (filters.geo_isp) return true;
-  if (filters.geo_ip_type) return true;
   if (filters.geo_asn !== undefined) return true;
   if (filters.method) return true;
   if (filters.scheme) return true;
   if (filters.http_version) return true;
   if (filters.domain) return true;
+  if (filters.full_url) return true;
   if (filters.request_uri) return true;
   if (filters.uri_path) return true;
   if (filters.uri_ext) return true;
+  if (filters.uri_depth !== undefined) return true;
+  if (filters.uri_pattern) return true;
   if (filters.uri_query) return true;
+  if (filters.query_count_bucket) return true;
+  if (filters.cookie_name) return true;
+  if (filters.cookie_count_bucket) return true;
   if (filters.referer_host) return true;
   if (filters.ua) return true;
   if (filters.ua_family) return true;
@@ -593,6 +764,9 @@ export function logDetailFiltersUseAdvanced(filters: LogDetailFilters): boolean 
   if (filters.ua_os) return true;
   if (filters.ua_browser) return true;
   if (filters.tls_version) return true;
+  if (filters.tls_ja3) return true;
+  if (filters.hour_of_day) return true;
+  if (filters.weekday) return true;
   return false;
 }
 
@@ -612,16 +786,21 @@ export type LogDetailFilters = {
   geo_region: string;
   geo_city: string;
   geo_isp: string;
-  geo_ip_type: string;
   geo_asn?: number;
   method?: string;
   scheme?: string;
   http_version?: string;
   domain: string;
+  full_url: string;
   request_uri: string;
   uri_path: string;
   uri_ext: string;
+  uri_depth?: number;
+  uri_pattern: string;
   uri_query: string;
+  query_count_bucket?: string;
+  cookie_name: string;
+  cookie_count_bucket?: string;
   referer_host: string;
   keyword: string;
   ua: string;
@@ -631,6 +810,9 @@ export type LogDetailFilters = {
   ua_os: string;
   ua_browser: string;
   tls_version: string;
+  tls_ja3: string;
+  hour_of_day?: string;
+  weekday?: string;
 };
 
 export function createDefaultLogFilters(): LogDetailFilters {
@@ -650,16 +832,21 @@ export function createDefaultLogFilters(): LogDetailFilters {
     geo_region: "",
     geo_city: "",
     geo_isp: "",
-    geo_ip_type: "",
     geo_asn: undefined,
     method: undefined,
     scheme: undefined,
     http_version: undefined,
     domain: "",
+    full_url: "",
     request_uri: "",
     uri_path: "",
     uri_ext: "",
+    uri_depth: undefined,
+    uri_pattern: "",
     uri_query: "",
+    query_count_bucket: undefined,
+    cookie_name: "",
+    cookie_count_bucket: undefined,
     referer_host: "",
     keyword: "",
     ua: "",
@@ -669,6 +856,9 @@ export function createDefaultLogFilters(): LogDetailFilters {
     ua_os: "",
     ua_browser: "",
     tls_version: "",
+    tls_ja3: "",
+    hour_of_day: undefined,
+    weekday: undefined,
   };
 }
 
@@ -712,12 +902,16 @@ export function buildLogQueryParams(
     geo_region: filters.geo_region || undefined,
     geo_city: filters.geo_city || undefined,
     geo_isp: filters.geo_isp || undefined,
-    geo_ip_type: filters.geo_ip_type || undefined,
     domain: filters.domain || undefined,
+    full_url: filters.full_url || undefined,
     request_uri: filters.request_uri || undefined,
     uri_path: filters.uri_path || undefined,
     uri_ext: filters.uri_ext || undefined,
+    uri_depth: filters.uri_depth,
+    uri_pattern: filters.uri_pattern || undefined,
     uri_query: filters.uri_query || undefined,
+    query_count_bucket: filters.query_count_bucket || undefined,
+    cookie_count_bucket: filters.cookie_count_bucket || undefined,
     referer_host: filters.referer_host || undefined,
     keyword: filters.keyword || undefined,
     ua: filters.ua || undefined,
@@ -727,6 +921,15 @@ export function buildLogQueryParams(
     ua_os: filters.ua_os || undefined,
     ua_browser: filters.ua_browser || undefined,
     tls_version: filters.tls_version || undefined,
+    tls_ja3: filters.tls_ja3 || undefined,
+    hour_of_day:
+      filters.hour_of_day !== undefined && filters.hour_of_day !== ""
+        ? Number(filters.hour_of_day)
+        : undefined,
+    weekday:
+      filters.weekday !== undefined && filters.weekday !== ""
+        ? Number(filters.weekday)
+        : undefined,
   };
   if (range?.start) params.start = range.start;
   if (range?.end) params.end = range.end;
@@ -811,16 +1014,21 @@ const STATS_DIM_FILTER: Partial<Record<StatsDimension, { field: string; operator
   geo_region: { field: "geo_region" },
   geo_city: { field: "geo_city" },
   geo_isp: { field: "geo_isp" },
-  geo_ip_type: { field: "geo_ip_type" },
   geo_asn: { field: "geo_asn" },
   method: { field: "method" },
   scheme: { field: "scheme" },
   http_version: { field: "http_version" },
   domain: { field: "domain" },
+  full_url: { field: "full_url" },
   request_uri: { field: "request_uri" },
   uri_path: { field: "uri_path" },
   uri_ext: { field: "uri_ext" },
+  uri_depth: { field: "uri_depth" },
+  uri_pattern: { field: "uri_pattern" },
   uri_query: { field: "uri_query" },
+  query_count_bucket: { field: "query_count_bucket" },
+  cookie_name: { field: "cookie_name" },
+  cookie_count_bucket: { field: "cookie_count_bucket" },
   referer_host: { field: "referer_host" },
   ua: { field: "ua", operator: "contains" },
   ua_family: { field: "ua_family" },
@@ -829,7 +1037,9 @@ const STATS_DIM_FILTER: Partial<Record<StatsDimension, { field: string; operator
   ua_os: { field: "ua_os" },
   ua_browser: { field: "ua_browser" },
   tls_version: { field: "tls_version" },
-  full_url: { field: "keyword", operator: "contains" },
+  tls_ja3: { field: "tls_ja3" },
+  hour_of_day: { field: "hour_of_day" },
+  weekday: { field: "weekday" },
 };
 
 export function buildConditionsFromStatsDimension(
@@ -866,12 +1076,15 @@ export function buildConditionsFromStatsDimension(
   const field = findLogFilterField(mapping.field);
   if (!field) return [];
 
+  const operator = mapping.operator || defaultOperatorForField(field);
+  const value = supportsMultiValue(field) ? [key] : key;
+
   return [
     {
       ...createFilterCondition(mapping.field),
       field: mapping.field,
-      operator: mapping.operator || defaultOperatorForField(field),
-      value: key,
+      operator,
+      value,
     },
   ];
 }
@@ -1031,9 +1244,6 @@ export function applyStatsDrillDownToFilters(
     case "geo_isp":
       filters.geo_isp = key;
       break;
-    case "geo_ip_type":
-      filters.geo_ip_type = key;
-      break;
     case "geo_asn":
       filters.geo_asn = Number(key);
       break;
@@ -1054,6 +1264,21 @@ export function applyStatsDrillDownToFilters(
       break;
     case "uri_ext":
       filters.uri_ext = key;
+      break;
+    case "uri_depth":
+      filters.uri_depth = Number(key);
+      break;
+    case "uri_pattern":
+      filters.uri_pattern = key;
+      break;
+    case "query_count_bucket":
+      filters.query_count_bucket = key;
+      break;
+    case "cookie_name":
+      filters.cookie_name = key;
+      break;
+    case "cookie_count_bucket":
+      filters.cookie_count_bucket = key;
       break;
     case "referer_host":
       filters.referer_host = key;
@@ -1079,8 +1304,17 @@ export function applyStatsDrillDownToFilters(
     case "tls_version":
       filters.tls_version = key;
       break;
+    case "tls_ja3":
+      filters.tls_ja3 = key;
+      break;
+    case "hour_of_day":
+      filters.hour_of_day = key;
+      break;
+    case "weekday":
+      filters.weekday = key;
+      break;
     case "full_url":
-      filters.keyword = key;
+      filters.full_url = key;
       break;
     default:
       break;

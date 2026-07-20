@@ -80,13 +80,9 @@
                   :key="condition.id"
                   class="filter-editor-row"
                 >
-                  <a-select
-                    v-model:value="condition.field"
-                    
+                  <log-filter-field-picker
+                    v-model="condition.field"
                     class="field-select"
-                    show-search
-                    option-filter-prop="label"
-                    :options="fieldOptions"
                     @change="onFieldChange(condition)"
                   />
                   <a-select
@@ -96,8 +92,23 @@
                     :options="operatorOptions(condition.field)"
                   />
                   <div class="value-input">
+                    <template v-if="currentField(condition)?.type === 'cookie'">
+                      <a-input
+                        :value="condition.arg || ''"
+                        allow-clear
+                        class="cookie-arg-input"
+                        :placeholder="currentField(condition)?.argPlaceholder || 'Cookie 参数名'"
+                        @update:value="setArgValue(condition, $event)"
+                      />
+                      <a-input
+                        :value="stringValue(condition)"
+                        allow-clear
+                        :placeholder="currentField(condition)?.placeholder || '参数值'"
+                        @update:value="setStringValue(condition, $event)"
+                      />
+                    </template>
                     <site-single-select
-                      v-if="currentField(condition)?.type === 'site'"
+                      v-else-if="currentField(condition)?.type === 'site'"
                       :value="siteValue(condition)"
                       @update:value="setSiteValue(condition, $event)"
                     />
@@ -113,10 +124,10 @@
                     <a-input-number
                       v-else-if="currentField(condition)?.type === 'number'"
                       :value="numberValue(condition)"
-                      :min="1"
+                      :min="0"
                       
                       style="width: 100%"
-                      placeholder="输入 ASN"
+                      :placeholder="currentField(condition)?.placeholder || '输入数值'"
                       @update:value="setNumberValue(condition, $event)"
                     />
                     <a-select
@@ -132,13 +143,25 @@
                     <a-select
                       v-else-if="currentField(condition)?.type === 'select' && supportsMulti(condition)"
                       :value="arrayValue(condition)"
-                      mode="multiple"
+                      mode="tags"
                       allow-clear
+                      show-search
+                      option-filter-prop="label"
                       
                       style="width: 100%"
                       placeholder="选择或输入"
                       :options="currentField(condition)?.options || []"
                       @update:value="setArrayValue(condition, $event)"
+                    />
+                    <a-auto-complete
+                      v-else-if="currentField(condition) && isSuggestFilterField(currentField(condition)!)"
+                      :value="stringValue(condition)"
+                      allow-clear
+                      style="width: 100%"
+                      :placeholder="currentField(condition)?.placeholder || '选择或输入'"
+                      :options="(currentField(condition)?.options || []).map((o) => ({ value: o.value, label: o.label }))"
+                      option-filter-prop="label"
+                      @update:value="setStringValue(condition, $event)"
                     />
                     <a-select
                       v-else-if="currentField(condition)?.type === 'select'"
@@ -207,11 +230,12 @@ import type { Dayjs } from "dayjs";
 import { DeleteOutlined, FilterOutlined } from "@ant-design/icons-vue";
 import SiteSingleSelect from "@/components/SiteSingleSelect.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
+import LogFilterFieldPicker from "./LogFilterFieldPicker.vue";
 import {
   defaultOperatorForField,
   findLogFilterField,
   getOperatorsForField,
-  logDetailFilterGroups,
+  isSuggestFilterField,
   supportsMultiValue,
   timePresets,
   type LogFilterCondition,
@@ -233,15 +257,6 @@ const presetOptions = computed(() => [
   ...quickTimePresets.map((item) => ({ value: item.key, label: item.label })),
   { value: "custom", label: "自定义" },
 ]);
-
-const fieldOptions = computed(() =>
-  logDetailFilterGroups.flatMap((group) =>
-    group.fields.map((field) => ({
-      value: field.key,
-      label: `${group.label} / ${field.label}`,
-    })),
-  ),
-);
 
 function onPresetChange(event: { target: { value: TimePreset } }) {
   props.filterState.setPreset(event.target.value);
@@ -309,6 +324,7 @@ function onFieldChange(condition: LogFilterCondition) {
   if (!field) return;
   condition.operator = defaultOperatorForField(field);
   condition.value = supportsMultiValue(field) ? [] : "";
+  condition.arg = field.type === "cookie" ? "" : undefined;
 }
 
 function supportsMulti(condition: LogFilterCondition) {
@@ -322,6 +338,10 @@ function stringValue(condition: LogFilterCondition) {
 
 function setStringValue(condition: LogFilterCondition, value?: string) {
   condition.value = value ?? "";
+}
+
+function setArgValue(condition: LogFilterCondition, value?: string) {
+  condition.arg = value ?? "";
 }
 
 function arrayValue(condition: LogFilterCondition) {
@@ -530,11 +550,22 @@ function boolOptions(condition: LogFilterCondition) {
 .filter-tag {
   margin: 0;
   max-width: 100%;
+  padding: 3px 6px;
 }
 
 .add-filter-btn,
 .clear-filter-btn {
   padding-inline: 0;
+}
+
+.value-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cookie-arg-input {
+  width: 100%;
 }
 
 .filter-editor {

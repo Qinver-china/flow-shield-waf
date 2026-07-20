@@ -106,6 +106,7 @@ const defaultForm = () => ({
   channel_ids: [] as number[],
   cooldown_sec: 300,
   remark: "",
+  custom_prompt: "",
 });
 
 const form = ref(defaultForm());

@@ -67,6 +67,7 @@ async def create_policy(
         ).scalar_one()
         if cnt != len(body.channel_ids):
             raise HTTPException(status_code=400, detail="部分通知通道不存在")
+    custom_prompt = (body.custom_prompt or "").strip() or None
     row = AiGuardPolicy(
         name=body.name,
         enabled=body.enabled,
@@ -78,6 +79,7 @@ async def create_policy(
         condition_filter=body.condition_filter,
         cooldown_sec=body.cooldown_sec,
         remark=body.remark,
+        custom_prompt=custom_prompt,
     )
     db.add(row)
     await db.commit()
@@ -118,6 +120,8 @@ async def update_policy(
         ).scalar_one()
         if cnt != len(data["channel_ids"]):
             raise HTTPException(status_code=400, detail="部分通知通道不存在")
+    if "custom_prompt" in data:
+        data["custom_prompt"] = (data.get("custom_prompt") or "").strip() or None
     for k, v in data.items():
         setattr(row, k, v)
     await db.commit()

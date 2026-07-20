@@ -17,6 +17,26 @@
     detail-actions
     duplicatable
   >
+    <template #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate }">
+      <a-spin :spinning="loading || (metricsLoading && !Object.keys(metricsMap).length)">
+        <a-empty v-if="!rows.length" description="暂无站点，点击右上角新增" />
+        <div v-else class="site-card-grid">
+          <site-card
+            v-for="site in rows"
+            :key="site.id"
+            :site="site"
+            :metrics="metricsMap[String(site.id)]"
+            :toggling="togglingId === site.id"
+            :more-actions="cardMoreActions(site, { openEdit, openDuplicate, remove, allowDelete, canDuplicate, nameActions })"
+            @view="openView(site)"
+            @edit="openEdit(site)"
+            @logs="goSiteLogs(site)"
+            @toggle-enabled="(enabled) => toggleEnabled(site, enabled)"
+          />
+        </div>
+      </a-spin>
+    </template>
+
     <template #form="{ record, readonly, mode, enabledLoading, onEnabledPersist }">
       <div class="site-form">
         <fs-form-section title="域名配置">
@@ -205,16 +225,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import OriginHostInput from "@/components/OriginHostInput.vue";
+import SiteCard, { type SiteCardMetrics } from "@/components/SiteCard.vue";
 import { enabledFilterOptions } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
-import { CLIENT_IP_SOURCE_OPTIONS, clientIpSourceLabel } from "@/constants/clientIpSource";
+import { CLIENT_IP_SOURCE_OPTIONS } from "@/constants/clientIpSource";
+import { useLogNavigation } from "@/composables/useLogNavigation";
+import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
 import { api } from "@/api";
 import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
@@ -227,8 +250,12 @@ interface CertOption {
 }
 
 const router = useRouter();
+const { goToLogs } = useLogNavigation();
 const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const certOptions = ref<CertOption[]>([]);
+const metricsLoading = ref(false);
+const metricsMap = reactive<Record<string, SiteCardMetrics>>({});
+let metricsTimer: ReturnType<typeof setInterval> | null = null;
 
 const protocolOptions = [
   { value: "follow", label: "跟随协议" },
@@ -261,13 +288,6 @@ const columns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
   { title: "域名", dataIndex: "domains_display", sorter: true },
   { title: "源站", dataIndex: "origin_display" },
-  {
-    title: "客户端 IP",
-    dataIndex: "client_ip_source",
-    width: 180,
-    customRender: ({ text }: { text: string }) => clientIpSourceLabel(text),
-  },
-  { title: "证书", dataIndex: "certificate_name", width: 140 },
   { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
 ];
 
@@ -332,6 +352,22 @@ async function loadCertOptions() {
   certOptions.value = resp.data;
 }
 
+async function loadMetrics() {
+  metricsLoading.value = true;
+  try {
+    const resp = await api.get<{ items: Record<string, SiteCardMetrics> }>("/api/v1/sites/metrics");
+    const items = resp.data.items || {};
+    for (const key of Object.keys(metricsMap)) {
+      if (!(key in items)) delete metricsMap[key];
+    }
+    Object.assign(metricsMap, items);
+  } catch {
+    // 指标失败不影响站点列表本身
+  } finally {
+    metricsLoading.value = false;
+  }
+}
+
 function goCertificates() {
   router.push("/certificates");
 }
@@ -342,9 +378,67 @@ function certName(id: number | null) {
   return cert ? (cert.domains ? `${cert.name}（${cert.domains}）` : cert.name) : `#${id}`;
 }
 
-onMounted(loadCertOptions);
+function goSiteLogs(site: Record<string, any>) {
+  goToLogs({ tab: "detail", preset: "24h", site_id: Number(site.id) });
+}
+
+function cardMoreActions(
+  site: Record<string, any>,
+  ctx: {
+    openEdit: (row: any) => void;
+    openDuplicate: (row: any) => void;
+    remove: (id: number) => void;
+    allowDelete: (row: any) => boolean;
+    canDuplicate: boolean;
+    nameActions: (row: any) => ResourceQuickAction[];
+  },
+) {
+  const actions = ctx.nameActions(site).filter(
+    (a) => a.key !== "edit" && a.key !== "logs-hit" && a.key !== "logs-stats",
+  );
+  if (!actions.length && ctx.canDuplicate) {
+    actions.push({
+      key: "duplicate",
+      label: "复制",
+      onClick: () => ctx.openDuplicate(site),
+    });
+  }
+  if (ctx.allowDelete(site) && !actions.some((a) => a.key === "delete")) {
+    actions.push({
+      key: "delete",
+      label: "删除",
+      danger: true,
+      divided: true,
+      confirm: "确认删除该站点？",
+      onClick: () => ctx.remove(site.id),
+    });
+  }
+  return actions;
+}
+
+onMounted(() => {
+  void loadCertOptions();
+  void loadMetrics();
+  metricsTimer = setInterval(() => {
+    void loadMetrics();
+  }, 30_000);
+});
+
+onUnmounted(() => {
+  if (metricsTimer) clearInterval(metricsTimer);
+});
 </script>
 
 <style scoped>
-/* layout handled by form-surfaces.css */
+.site-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 767px) {
+  .site-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

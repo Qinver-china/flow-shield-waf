@@ -17,6 +17,7 @@ class AiGuardSettingOut(BaseModel):
     temperature: float = 0.3
     max_tokens: int = 4096
     chat_enabled: bool = True
+    floating_chat_enabled: bool = True
     defense_enabled: bool = True
     default_apply_mode: ApplyMode = "suggest_only"
     max_logs_per_analysis: int = 200
@@ -32,6 +33,7 @@ class AiGuardSettingUpdate(BaseModel):
     temperature: float | None = Field(default=None, ge=0, le=2)
     max_tokens: int | None = Field(default=None, ge=256, le=128000)
     chat_enabled: bool | None = None
+    floating_chat_enabled: bool | None = None
     defense_enabled: bool | None = None
     default_apply_mode: ApplyMode | None = None
     max_logs_per_analysis: int | None = Field(default=None, ge=10, le=2000)
@@ -50,6 +52,7 @@ class AiGuardPolicyBase(BaseModel):
     condition_filter: dict[str, Any] | None = None
     cooldown_sec: int = 300
     remark: str | None = None
+    custom_prompt: str | None = Field(default=None, max_length=4000)
 
 
 class AiGuardPolicyCreate(AiGuardPolicyBase):
@@ -67,6 +70,7 @@ class AiGuardPolicyUpdate(BaseModel):
     condition_filter: dict[str, Any] | None = None
     cooldown_sec: int | None = None
     remark: str | None = None
+    custom_prompt: str | None = Field(default=None, max_length=4000)
 
 
 class AiGuardPolicyOut(AiGuardPolicyBase):

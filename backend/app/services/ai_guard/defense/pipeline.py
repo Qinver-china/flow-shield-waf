@@ -10,7 +10,12 @@ from app.models.ai_guard import AiGuardPolicy
 from app.services.ai_guard.config import AiGuardRuntimeConfig, load_runtime_config
 from app.services.ai_guard.defense.applier import apply_rule_draft, check_rule_conflicts
 from app.services.ai_guard.defense.rule_generator import analyze_and_suggest
-from app.services.ai_guard.ports import log_sampler, notifier
+from app.services.ai_guard.ports import (
+    DEFENSE_INITIAL_MAX_ROWS,
+    DEFENSE_INITIAL_WINDOW_MIN,
+    log_sampler,
+    notifier,
+)
 from app.services.analytics.incident_store import IncidentRecord, IncidentStore
 
 log = logging.getLogger("waf.ai_guard.pipeline")
@@ -67,9 +72,10 @@ async def run_defense_for_policy(
 
     try:
         rows, meta = await log_sampler.sample(
-            window_min=window_min,
+            window_min=DEFENSE_INITIAL_WINDOW_MIN,
             site_id=site_id,
-            max_rows=cfg.max_logs_per_analysis,
+            max_rows=min(cfg.max_logs_per_analysis, DEFENSE_INITIAL_MAX_ROWS),
+            passed_only=True,
         )
         incident.log_sample_meta = meta
 
@@ -92,38 +98,49 @@ async def run_defense_for_policy(
             incident = await _incidents.upsert(incident)
 
         analysis = await analyze_and_suggest(
-            db, cfg, log_rows=rows, log_meta=meta, site_id=site_id
+            db,
+            cfg,
+            log_rows=rows,
+            log_meta=meta,
+            site_id=site_id,
+            custom_prompt=policy.custom_prompt,
+            trigger_snapshot=trigger_snapshot,
         )
         report = analysis.model_dump()
         report["blocked_ratio"] = meta.get("blocked_count", 0) / max(meta.get("sampled", 1), 1)
         incident.analysis_report = report
-        incident.suggested_rule = analysis.suggested_rule.model_dump()
-
-        conflicts = await check_rule_conflicts(db, incident.suggested_rule)
-        if conflicts:
-            report["conflict_warnings"] = conflicts
-            incident.analysis_report = report
 
         rule_id = None
-        effective_mode = apply_mode
-        try:
-            rule_id, effective_mode = await apply_rule_draft(
-                db,
-                incident.suggested_rule,
-                apply_mode=apply_mode,
-                config=cfg,
-                analysis=report,
-            )
-        except ValueError as exc:
-            report["apply_error"] = str(exc)
-            incident.analysis_report = report
-            log.warning("ai guard rule apply validation failed: %s", exc)
+        if analysis.create_rule and analysis.suggested_rule:
+            incident.suggested_rule = analysis.suggested_rule.model_dump()
+            conflicts = await check_rule_conflicts(db, incident.suggested_rule)
+            if conflicts:
+                report["conflict_warnings"] = conflicts
+                incident.analysis_report = report
 
-        if rule_id:
-            incident.applied_rule_id = rule_id
-            incident.status = "applied"
+            rule_id = None
+            effective_mode = apply_mode
+            try:
+                rule_id, effective_mode = await apply_rule_draft(
+                    db,
+                    incident.suggested_rule,
+                    apply_mode=apply_mode,
+                    config=cfg,
+                    analysis=report,
+                )
+            except ValueError as exc:
+                report["apply_error"] = str(exc)
+                incident.analysis_report = report
+                log.warning("ai guard rule apply validation failed: %s", exc)
+
+            if rule_id:
+                incident.applied_rule_id = rule_id
+                incident.status = "applied"
+            else:
+                incident.status = "suggested"
         else:
-            incident.status = "suggested"
+            incident.suggested_rule = None
+            incident.status = "analyzed"
 
         if "result" in notify_on:
             from app.services.ai_guard.incident_email import build_analysis_result_email

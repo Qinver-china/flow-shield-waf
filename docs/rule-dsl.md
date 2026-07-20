@@ -94,7 +94,6 @@
 | geo.city | IP 城市 | string |
 | geo.asn | IP ASN | number |
 | geo.isp | 运营商 ISP | string |
-| geo.ip_type | IP 类型 | enum |
 
 ### 请求行
 

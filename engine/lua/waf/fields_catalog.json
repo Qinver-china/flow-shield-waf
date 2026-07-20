@@ -188,18 +188,6 @@
       ]
     },
     {
-      "key": "geo.ip_type",
-      "label": "IP 类型",
-      "category": "网络与地理",
-      "value_type": "enum",
-      "requires_arg": false,
-      "operators": [
-        "eq",
-        "neq",
-        "in_list"
-      ]
-    },
-    {
       "key": "http.method",
       "label": "请求方法",
       "category": "HTTP 请求",

@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, onMounted, watch } from "vue";
 import { CloseOutlined } from "@ant-design/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import AiChatPanel from "@/components/ai-chat/AiChatPanel.vue";
@@ -68,12 +68,22 @@ const { isMobile } = useBreakpoint();
 const isOnAiGuardPage = computed(
   () => route.path === "/ai-guard" || route.path.startsWith("/ai-guard/"),
 );
-const showFab = computed(() => !floating.open && !isOnAiGuardPage.value);
-const showFloatPanel = computed(() => floating.open && !isOnAiGuardPage.value);
+const showFab = computed(
+  () => floating.fabEnabled && !floating.open && !isOnAiGuardPage.value,
+);
+const showFloatPanel = computed(
+  () => floating.fabEnabled && floating.open && !isOnAiGuardPage.value,
+);
 
 watch(isOnAiGuardPage, (onPage) => {
   if (onPage && floating.open) {
     floating.hide();
+  }
+});
+
+onMounted(() => {
+  if (!floating.fabPreferenceLoaded) {
+    void floating.fetchFabPreference();
   }
 });
 

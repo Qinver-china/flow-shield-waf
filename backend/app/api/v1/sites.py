@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,15 +14,27 @@ from app.api.listing import (
     get_list_query,
     order_by_fields,
 )
+from app.constants.logging_settings import DEFAULT_AUTO_THRESHOLDS
+from app.constants.response_pages import DEFAULT_BLOCK_PAGE_HTML, DEFAULT_BLOCK_PAGE_STATUS, DEFAULT_CAPTCHA_FOOTER_HTML
+from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC
 from app.core.db import get_db
+from app.core.redis import get_redis
 from app.models import Certificate, Site, User
 from app.schemas.common import ok
 from app.schemas.site import SiteCreate, SiteOption, SiteOut, SiteUpdate
-from app.constants.response_pages import DEFAULT_BLOCK_PAGE_HTML, DEFAULT_BLOCK_PAGE_STATUS, DEFAULT_CAPTCHA_FOOTER_HTML
-from app.services import nginx_conf, rule_sync
+from app.services import nginx_conf, rule_sync, waf_settings
+from app.constants.traffic_windows import TRAFFIC_WINDOW_LABELS
+from app.services.logging.query_clickhouse import stats_sites_24h_compare
+from app.services.traffic_intel.windows import label as traffic_window_label
 from app.services.site_domains import apply_domains_to_site, ensure_domains_available
+from app.services.traffic_intel.constants import DEFAULT_SPIKE_RATIO, REDIS_SNAPSHOT_KEY
+from app.services.traffic_intel.store.baseline_mysql import BaselineStore
+from app.services.traffic_intel.timezone import get_traffic_timezone
+from app.services.traffic_intel.windows import is_baseline_stable
 
 router = APIRouter()
+
+SITE_CARD_TRAFFIC_WINDOWS_SEC = (300, 1800, 3600)
 
 
 async def _sync(db: AsyncSession) -> None:
@@ -106,6 +121,126 @@ async def site_options(
         await db.execute(select(Site).order_by(Site.name.asc(), Site.id.asc()))
     ).scalars().all()
     return ok([SiteOption.model_validate(r).model_dump() for r in rows])
+
+
+@router.get("/metrics")
+async def sites_metrics(
+    hours: int = Query(24, ge=1, le=168),
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Card metrics for site list: 24h security stats + live traffic windows."""
+    site_ids = [
+        int(r)
+        for r in (
+            await db.execute(select(Site.id).order_by(Site.id.asc()))
+        ).scalars().all()
+    ]
+
+    stats_map = await stats_sites_24h_compare(hours=hours)
+    logging_cfg = await waf_settings.get_logging_settings(db)
+    thresholds = {
+        int(t["window_sec"]): int(t["max_requests"])
+        for t in logging_cfg.get("logging_auto_thresholds") or DEFAULT_AUTO_THRESHOLDS
+    }
+
+    snapshot_raw = await get_redis().get(REDIS_SNAPSHOT_KEY)
+    sites_snap: dict = {}
+    if snapshot_raw:
+        try:
+            raw = snapshot_raw.decode("utf-8") if isinstance(snapshot_raw, bytes) else snapshot_raw
+            data = json.loads(raw)
+            sites_snap = data.get("sites") or {}
+        except (json.JSONDecodeError, TypeError, ValueError):
+            sites_snap = {}
+
+    timezone_name = await get_traffic_timezone(db)
+    baselines = BaselineStore()
+    as_of = datetime.utcnow()
+
+    items: dict[str, dict] = {}
+    for site_id in site_ids:
+        stat = stats_map.get(site_id) or {
+            "requests": 0,
+            "blocked": 0,
+            "unique_ips": 0,
+            "requests_delta_pct": None,
+            "blocked_delta_pct": None,
+            "unique_ips_delta_pct": None,
+        }
+        site_windows = (sites_snap.get(str(site_id)) or {}).get("windows") or []
+        by_sec: dict[int, dict] = {}
+        for w in site_windows:
+            try:
+                by_sec[int(w.get("sec", 0))] = w
+            except (TypeError, ValueError):
+                continue
+
+        traffic_windows = []
+        site_anomaly = False
+        for sec in SITE_CARD_TRAFFIC_WINDOWS_SEC:
+            w = by_sec.get(sec) or {}
+            current = int(w.get("requests") or 0)
+            qps = float(w.get("qps") or 0)
+            baseline_avg = None
+            baseline_warmup = False
+            deviation_ratio = None
+            is_anomaly = False
+            if sec in TRAFFIC_BASELINE_WINDOWS_SEC:
+                baseline = await baselines.get(
+                    db,
+                    site_id=site_id,
+                    window_sec=sec,
+                    as_of=as_of,
+                    timezone_name=timezone_name,
+                )
+                if baseline is not None and baseline.avg_requests is not None:
+                    baseline_avg = round(float(baseline.avg_requests), 1)
+                    baseline_warmup = not is_baseline_stable(sec, baseline.sample_count)
+                    if baseline.avg_requests > 0:
+                        deviation_ratio = round(current / float(baseline.avg_requests), 3)
+                        threshold = baseline.avg_requests * (1 + DEFAULT_SPIKE_RATIO)
+                        is_anomaly = (
+                            not baseline_warmup
+                            and current > threshold
+                        )
+            if is_anomaly:
+                site_anomaly = True
+            traffic_windows.append(
+                {
+                    "window_sec": sec,
+                    "label": traffic_window_label(sec) or TRAFFIC_WINDOW_LABELS.get(sec, f"{sec} 秒"),
+                    "requests": current,
+                    "qps": qps,
+                    "threshold": (
+                        w.get("threshold")
+                        if w.get("threshold") is not None
+                        else thresholds.get(sec)
+                    ),
+                    "baseline_avg": baseline_avg,
+                    "baseline_warmup": baseline_warmup,
+                    "deviation_ratio": deviation_ratio,
+                    "is_anomaly": is_anomaly,
+                }
+            )
+
+        requests = int(stat["requests"] or 0)
+        blocked = int(stat["blocked"] or 0)
+        items[str(site_id)] = {
+            "requests_24h": requests,
+            "requests_24h_delta_pct": stat.get("requests_delta_pct"),
+            "blocked_24h": blocked,
+            "blocked_24h_delta_pct": stat.get("blocked_delta_pct"),
+            "unique_ips_24h": int(stat.get("unique_ips") or 0),
+            "unique_ips_24h_delta_pct": stat.get("unique_ips_delta_pct"),
+            "block_rate": round(blocked * 100 / requests, 1) if requests else 0.0,
+            "traffic_windows": traffic_windows,
+            "anomaly": site_anomaly,
+            # legacy alias
+            "hits_24h": requests,
+        }
+
+    return ok({"hours": hours, "items": items})
 
 
 @router.get("/{site_id}")

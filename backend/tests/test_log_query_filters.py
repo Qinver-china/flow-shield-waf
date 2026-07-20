@@ -17,7 +17,6 @@ def test_where_clause_supports_extended_filters():
         geo_region="California",
         geo_city="Los Angeles",
         geo_isp="Example ISP",
-        geo_ip_type="datacenter",
         geo_asn=13335,
         ua="curl",
         ua_family="Bot",
@@ -35,7 +34,6 @@ def test_where_clause_supports_extended_filters():
     assert "waf_logs.geo_region = {geo_region:String}" in where
     assert "waf_logs.geo_city = {geo_city:String}" in where
     assert "waf_logs.geo_isp = {geo_isp:String}" in where
-    assert "waf_logs.geo_ip_type = {geo_ip_type:String}" in where
     assert "waf_logs.geo_asn = {geo_asn:UInt32}" in where
     assert "positionCaseInsensitive(waf_logs.ua, {ua:String}) > 0" in where
     assert "waf_logs.ua_family = {ua_family:String}" in where
@@ -52,3 +50,21 @@ def test_where_clause_json_blocked_filter_uses_qualified_column():
     where, params = _where_clause(q, start, end)
     assert "waf_logs.blocked = {f_blocked_0:UInt8}" in where
     assert params["f_blocked_0"] == 1
+
+
+def test_where_clause_json_cookie_filters():
+    start = datetime(2026, 1, 1, 0, 0, 0)
+    end = datetime(2026, 1, 2, 0, 0, 0)
+    q = LogQuery(
+        filters='[{"field":"cookie_name","op":"eq","value":"PHPSESSID"},'
+        '{"field":"cookie","op":"contains","arg":"theme_mode","value":"dark"},'
+        '{"field":"cookie_count_bucket","op":"eq","value":"6-20"}]'
+    )
+    where, params = _where_clause(q, start, end)
+    assert "JSONHas(waf_logs.payload, 'cookies', {f_cookie_name_0:String})" in where
+    assert "JSONExtractString(waf_logs.payload, 'cookies', {f_cookie_arg_10:String})" in where
+    assert "positionCaseInsensitive(JSONExtractString(waf_logs.payload, 'cookies', {f_cookie_arg_10:String}), {f_cookie_val_10:String}) > 0" in where
+    assert "multiIf(" in where and "cookie_count_bucket" not in where
+    assert params["f_cookie_name_0"] == "PHPSESSID"
+    assert params["f_cookie_arg_10"] == "theme_mode"
+    assert params["f_cookie_val_10"] == "dark"

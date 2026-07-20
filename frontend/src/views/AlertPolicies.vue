@@ -74,7 +74,7 @@
         :loading="logsLoading"
         row-key="id"
         size="small"
-        :pagination="{ pageSize: 10 }"
+        :pagination="logsPagination"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.dataIndex === 'created_at'">
@@ -211,11 +211,14 @@ import FsFormSection from "@/components/FsFormSection.vue";
 import PageShell from "@/components/PageShell.vue";
 import SiteSingleSelect from "@/components/SiteSingleSelect.vue";
 import { commonBatchEditFields } from "@/constants/batch";
+import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import { formatDateTime } from "@/utils/datetime";
 import type { BatchConfig } from "@/types/batch";
 
 const { formatSiteId } = useSiteOptions();
+const { withPaginationSize } = useResponsivePagination();
+const logsPagination = computed(() => withPaginationSize({ pageSize: 10 }));
 
 const columns = [
   { title: "名称", dataIndex: "name", key: "name" },

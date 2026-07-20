@@ -663,8 +663,65 @@ export function geoCountrySelectOptions(): { value: string; label: string }[] {
     .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
 }
 
+const GEO_REGION_CODE_OVERLAP = new Set(["HI", "NM", "SC", "SD"]);
+
+/** 省/州下拉：中国大陆 + 不与中国码冲突的美国州 */
+export function geoRegionSelectOptions(): { value: string; label: string }[] {
+  const items = Object.entries(GEO_CN_REGION_LABELS).map(([code, name]) => ({
+    value: code,
+    label: `${name} (${code})`,
+  }));
+  for (const [code, name] of Object.entries(GEO_US_REGION_LABELS)) {
+    if (code in GEO_CN_REGION_LABELS || GEO_REGION_CODE_OVERLAP.has(code)) continue;
+    items.push({ value: code, label: `${name} (${code})` });
+  }
+  return items.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+}
+
 export function geoCnRegionSelectOptions(): { value: string; label: string }[] {
   return Object.entries(GEO_CN_REGION_LABELS)
     .map(([code, name]) => ({ value: code, label: `${name} (${code})` }))
+    .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+}
+
+const GEO_CITY_CANONICAL: Record<string, string> = {
+  "xi'an": "Xi'an",
+  "são paulo": "São Paulo",
+  "sao paulo": "Sao Paulo",
+  "ho chi minh city": "Ho Chi Minh City",
+  "kuala lumpur": "Kuala Lumpur",
+  "new york": "New York",
+  "los angeles": "Los Angeles",
+  "san francisco": "San Francisco",
+  "san jose": "San Jose",
+  "las vegas": "Las Vegas",
+  "new delhi": "New Delhi",
+  "abu dhabi": "Abu Dhabi",
+  "saint petersburg": "Saint Petersburg",
+  "rio de janeiro": "Rio de Janeiro",
+  "mexico city": "Mexico City",
+  "hong kong": "Hong Kong",
+  "new taipei": "New Taipei",
+};
+
+function cityCanonicalEn(enLower: string): string {
+  return GEO_CITY_CANONICAL[enLower] || enLower.split(" ").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+
+export function geoCitySelectOptions(): { value: string; label: string }[] {
+  const seen = new Set<string>();
+  const items: { value: string; label: string }[] = [];
+  for (const [enLower, zh] of Object.entries(GEO_CITY_LABELS)) {
+    const value = cityCanonicalEn(enLower);
+    if (seen.has(value)) continue;
+    seen.add(value);
+    items.push({ value, label: `${zh} (${value})` });
+  }
+  return items.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+}
+
+export function geoAsnSelectOptions(): { value: string; label: string }[] {
+  return Object.entries(GEO_ASN_LABELS)
+    .map(([asn, name]) => ({ value: String(asn), label: `${name} (${asn})` }))
     .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
 }

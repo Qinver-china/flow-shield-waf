@@ -48,6 +48,9 @@ def ensure_clickhouse_columns() -> None:
                 f"ALTER TABLE waf_logs ADD COLUMN IF NOT EXISTS {col} {col_type}"
             )
             log.info("clickhouse column ensured: waf_logs.%s", col)
+        if "geo_ip_type" in col_names:
+            client.command("ALTER TABLE waf_logs DROP COLUMN IF EXISTS geo_ip_type")
+            log.info("clickhouse column dropped: waf_logs.geo_ip_type")
     except Exception:  # noqa: BLE001
         log.exception("clickhouse column patch failed")
 

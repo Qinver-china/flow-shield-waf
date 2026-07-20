@@ -178,24 +178,12 @@ DEFAULT_RULES: list[dict[str, Any]] = [
     },
     # --- Anti-PCDN ---
     {
-        "name": f"{BUILTIN_PREFIX}反 PCDN - 机房 IP 拉取静态资源",
-        "priority": 70,
-        "mode": "observe",
-        "conditions": _and(
-            _leaf("geo.ip_type", "eq", value="hosting"),
-            _static_file_condition(),
-        ),
-    },
-    {
         "name": f"{BUILTIN_PREFIX}反 PCDN - HLS 分片高频拉流",
         "priority": 71,
         "mode": "observe",
-        "conditions": _and(
-            _or(
-                _leaf("http.uri.ext", "in_list", value=["m3u8", "ts"]),
-                _leaf("http.uri.path", "regex", value=r"(?i)\.(m3u8|ts)(\?|$)"),
-            ),
-            _leaf("geo.ip_type", "eq", value="hosting"),
+        "conditions": _or(
+            _leaf("http.uri.ext", "in_list", value=["m3u8", "ts"]),
+            _leaf("http.uri.path", "regex", value=r"(?i)\.(m3u8|ts)(\?|$)"),
         ),
     },
     {
@@ -318,19 +306,6 @@ DEFAULT_RATE_LIMITS: list[dict[str, Any]] = [
         "mode": "observe",
         "conditions": _static_file_condition(),
         "remark": "同一 IP 对同一路径静态资源高频刷新（刷 CDN/PCDN 常见）",
-    },
-    {
-        "name": f"{BUILTIN_PREFIX}CC 防护 - 机房 IP 动态页",
-        "priority": 56,
-        "keys": [{"field": "ip.src"}],
-        "window": 60,
-        "threshold": 60,
-        "mode": "observe",
-        "conditions": _and(
-            _leaf("geo.ip_type", "eq", value="hosting"),
-            _dynamic_page_condition(),
-        ),
-        "remark": "数据中心 IP 访问动态页面更严格限速",
     },
     {
         "name": f"{BUILTIN_PREFIX}CC 防护 - 全站兜底",

@@ -445,3 +445,78 @@ WRITE_TOOLS = frozenset({
     "create_whitelist_entry",
     "create_exception",
 })
+
+DEFENSE_READ_TOOL_NAMES = frozenset({
+    "query_logs",
+    "get_log_stats",
+    "query_log_stats_group",
+    "list_rules",
+})
+
+_SUBMIT_ANALYSIS_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "submit_analysis",
+        "description": (
+            "提交最终分析结论。分析完成后必须调用此工具。"
+            "若判断无需新建防护规则，设 create_rule=false 并省略 suggested_rule。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "攻击或异常概述"},
+                "attack_indicators": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "攻击/异常请求共性",
+                },
+                "benign_indicators": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "可能误报的正常流量特征",
+                },
+                "confidence": {
+                    "type": "number",
+                    "description": "置信度 0-1",
+                },
+                "create_rule": {
+                    "type": "boolean",
+                    "description": "是否建议创建防护规则；false 表示仅记录分析、不建规则",
+                },
+                "suggested_rule": {
+                    "type": "object",
+                    "description": "create_rule=true 时必填",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "mode": {
+                            "type": "string",
+                            "enum": ["observe", "block", "captcha", "js_challenge", "slide_captcha"],
+                        },
+                        "priority": {"type": "integer"},
+                        "site_ids": {"type": "array", "items": {"type": "integer"}},
+                        "enabled": {"type": "boolean"},
+                        "conditions": _CONDITION_SCHEMA,
+                    },
+                    "required": ["name", "mode", "conditions"],
+                },
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "request_id": {"type": "string"},
+                            "note": {"type": "string"},
+                        },
+                    },
+                },
+            },
+            "required": ["summary", "confidence", "create_rule"],
+        },
+    },
+}
+
+DEFENSE_TOOL_DEFINITIONS: list[dict] = [
+    tool
+    for tool in TOOL_DEFINITIONS
+    if tool.get("function", {}).get("name") in DEFENSE_READ_TOOL_NAMES
+] + [_SUBMIT_ANALYSIS_TOOL]

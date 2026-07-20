@@ -21,6 +21,8 @@ class DashboardFeedItemOut(BaseModel):
     type: str
     title: str
     detail: str | None = None
+    site: str | None = None
+    rule: str | None = None
     severity: str = "info"
     created_at: datetime
 

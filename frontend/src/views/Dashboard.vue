@@ -1,35 +1,39 @@
 <template>
   <div class="dashboard-page fs-page">
-    <div class="page-hero fs-card">
-      <div>
-        <h2 class="hero-title">安全总览</h2>
-        <p class="hero-desc">24 小时防护态势</p>
+    <div class="page-hero">
+      <div class="hero-main">
+        <div class="hero-heading">
+          <span class="hero-icon" aria-hidden="true">
+            <dashboard-outlined />
+          </span>
+          <div class="hero-text">
+            <div class="hero-title-row">
+              <h2 class="hero-title">安全总览</h2>
+              <span class="hero-desc">24 小时防护态势</span>
+            </div>
+            <div class="hero-health">
+              <div class="health-item" v-for="item in healthItems" :key="item.key">
+                <span class="health-dot" :class="item.status" />
+                <span class="health-text">
+                  {{ item.label }} {{ item.status === "ok" ? "正常" : "异常" }}
+                </span>
+              </div>
+              <a-tag
+                v-if="feed.pending_ai_incidents > 0"
+                color="orange"
+                class="health-ai-link"
+                @click="goAiGuard"
+              >
+                {{ feed.pending_ai_incidents }} 条 AI 分析待处理
+              </a-tag>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="hero-tags">
-        <a-tag color="processing">
-          <clock-circle-outlined />
-          <span style="margin-left: 4px">{{ statsWindowLabel }}</span>
-        </a-tag>
-        <a-tag v-if="health.rule_sync?.version" color="default">
-          配置版本 v{{ health.rule_sync.version }}
-        </a-tag>
+      <div class="hero-actions">
+        <div class="hero-time">{{ statsWindowLabel }}</div>
+        <dashboard-live-refresh-toggle />
       </div>
-    </div>
-
-    <div class="health-bar fs-card">
-      <div class="health-item" v-for="item in healthItems" :key="item.key">
-        <span class="health-dot" :class="item.status" />
-        <span class="health-label">{{ item.label }}</span>
-        <span class="health-status">{{ item.status === "ok" ? "正常" : "异常" }}</span>
-      </div>
-      <a-tag
-        v-if="feed.pending_ai_incidents > 0"
-        color="orange"
-        class="health-ai health-ai-link"
-        @click="goAiGuard"
-      >
-        {{ feed.pending_ai_incidents }} 条 AI 分析待处理
-      </a-tag>
     </div>
 
     <h3 class="fs-section-title"><appstore-outlined /> 防护配置</h3>
@@ -170,7 +174,7 @@
     </a-row>
 
     <a-row :gutter="[12, 12]">
-      <a-col :xs="24" :lg="8">
+      <a-col :xs="24" :lg="6">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><alert-outlined /> Top 命中规则</span>
@@ -181,12 +185,12 @@
             :pagination="false"
             :row-key="(record: { id?: number; name: string }) => String(record.id ?? record.name)"
             size="small"
-            :scroll="{ x: 280 }"
+            :scroll="{ x: 180 }"
             :custom-row="ruleTableRow"
           />
         </a-card>
       </a-col>
-      <a-col :xs="24" :lg="8">
+      <a-col :xs="24" :lg="6">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><aim-outlined /> Top 攻击 IP</span>
@@ -197,33 +201,39 @@
             :pagination="false"
             row-key="ip"
             size="small"
-            :scroll="{ x: 280 }"
+            :scroll="{ x: 180 }"
             :custom-row="ipTableRow"
           />
         </a-card>
       </a-col>
-      <a-col :xs="24" :lg="8">
+      <a-col :xs="24" :lg="12">
         <a-card class="panel-card feed-card" :bordered="false">
           <template #title>
             <span class="panel-title"><bell-outlined /> 最新动态</span>
           </template>
           <div class="feed-list-body">
-            <a-list :data-source="feed.items" :loading="feedLoading" size="small" :locale="{ emptyText: '暂无动态' }">
-              <template #renderItem="{ item }">
-                <a-list-item class="feed-item" @click="onFeedClick(item)">
-                  <a-list-item-meta>
-                    <template #title>
-                      <a-tag :color="feedTagColor(item.severity)" size="small">{{ feedTypeLabel(item.type) }}</a-tag>
-                      {{ item.title }}
-                    </template>
-                    <template #description>
-                      <div class="feed-detail">{{ item.detail }}</div>
-                      <div class="feed-time">{{ formatFeedTime(item.created_at) }}</div>
-                    </template>
-                  </a-list-item-meta>
-                </a-list-item>
-              </template>
-            </a-list>
+            <a-spin :spinning="feedLoading">
+              <a-empty v-if="!feed.items.length && !feedLoading" description="暂无动态" />
+              <ul v-else class="feed-timeline">
+                <li
+                  v-for="item in feed.items"
+                  :key="item.id"
+                  class="feed-timeline-item"
+                  :class="`feed-timeline-item--${feedTone(item)}`"
+                  @click="onFeedClick(item)"
+                >
+                  <span class="feed-timeline-dot" aria-hidden="true" />
+                  <div class="feed-timeline-main">
+                    <div class="feed-timeline-top">
+                      <span class="feed-timeline-tag">{{ feedTypeLabel(item.type) }}</span>
+                      <span class="feed-timeline-title">{{ item.title }}</span>
+                      <span class="feed-timeline-time">{{ formatFeedTime(item.created_at) }}</span>
+                    </div>
+                    <div v-if="feedMeta(item)" class="feed-timeline-meta">{{ feedMeta(item) }}</div>
+                  </div>
+                </li>
+              </ul>
+            </a-spin>
           </div>
         </a-card>
       </a-col>
@@ -241,8 +251,8 @@ import {
   BarChartOutlined,
   BellOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined,
   ClusterOutlined,
+  DashboardOutlined,
   DisconnectOutlined,
   FileTextOutlined,
   GlobalOutlined,
@@ -260,13 +270,14 @@ import { storeToRefs } from "pinia";
 import { api } from "@/api";
 import StatCard from "@/components/StatCard.vue";
 import SiteSingleSelect from "@/components/SiteSingleSelect.vue";
+import DashboardLiveRefreshToggle from "@/components/DashboardLiveRefreshToggle.vue";
 import { useLogNavigation } from "@/composables/useLogNavigation";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import { useDashboardLiveRefresh } from "@/composables/useDashboardLiveRefresh";
 import { echartsThemeName } from "@/composables/useEchartsTheme";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
-import { formatDateTimeShort, formatWindowRange } from "@/utils/datetime";
+import { formatClockTime, formatDateTime, formatDateTimeShort } from "@/utils/datetime";
 import { trafficWindowLabels } from "@/views/logs/constants";
 
 interface CountPair {
@@ -398,10 +409,9 @@ function enabledSub(item: CountPair) {
 }
 
 const healthItems = computed(() => [
-  { key: "database", label: "SQLite", status: health.database },
+  { key: "database", label: "MySQL", status: health.database },
   { key: "redis", label: "Redis", status: health.redis },
   { key: "clickhouse", label: "ClickHouse", status: health.clickhouse },
-  { key: "rule_sync", label: "规则同步", status: health.rule_sync?.status || "ok" },
 ]);
 
 const resourceCards = computed(() => [
@@ -425,7 +435,7 @@ const securityCards = computed(() => [
 const statsWindowLabel = computed(() => {
   void timezoneTick.value;
   void liveClockTick.value;
-  return formatWindowRange(24, dashboardWindowEndAt.value);
+  return formatClockTime(dashboardWindowEndAt.value);
 });
 
 const ruleCols = [
@@ -476,10 +486,10 @@ function formatTrendTime(value: string) {
   return formatDateTimeShort(value);
 }
 
-function feedTagColor(severity: string) {
-  if (severity === "danger") return "red";
-  if (severity === "warning") return "orange";
-  return "blue";
+function feedTone(item: { type?: string; severity?: string }) {
+  if (item.type === "block" || item.severity === "danger") return "danger";
+  if (item.type === "alert" || item.severity === "warning") return "alert";
+  return "info";
 }
 
 function feedTypeLabel(type: string) {
@@ -488,9 +498,17 @@ function feedTypeLabel(type: string) {
   return type;
 }
 
+function feedMeta(item: { site?: string | null; rule?: string | null; detail?: string | null }) {
+  const parts: string[] = [];
+  if (item.site) parts.push(`站点：${item.site}`);
+  if (item.rule) parts.push(`规则：${item.rule}`);
+  if (!parts.length && item.detail) return String(item.detail);
+  return parts.join("  ");
+}
+
 function formatFeedTime(value: string) {
   void timezoneTick.value;
-  return formatDateTimeShort(value);
+  return formatDateTime(value, "MM-DD HH:mm:ss");
 }
 
 function onResourceCardClick(key: string) {
@@ -862,10 +880,49 @@ onUnmounted(() => {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
-  padding: 18px 20px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--fs-color-primary) 8%, var(--fs-bg-surface)) 0%, var(--fs-bg-surface) 100%);
+  padding: 4px 0 8px;
+  background: transparent;
+}
+
+.hero-main {
+  min-width: 0;
+}
+
+.hero-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hero-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  font-size: 22px;
+  color: var(--fs-color-primary);
+  background: color-mix(in srgb, var(--fs-color-primary) 6%, var(--fs-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--fs-color-primary) 22%, transparent);
+}
+
+.hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.hero-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 10px;
 }
 
 .hero-title {
@@ -873,32 +930,43 @@ onUnmounted(() => {
   font-size: 22px;
   font-weight: 700;
   color: var(--fs-text-primary);
+  line-height: 1.2;
 }
 
 .hero-desc {
-  margin: 6px 0 0;
   color: var(--fs-text-secondary);
   font-size: 13px;
+  line-height: 1.2;
 }
 
-.hero-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.health-bar {
+.hero-health {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
+  gap: 8px 14px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-top: 4px;
+}
+
+.hero-time {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fs-text-secondary);
+  line-height: 1;
 }
 
 .health-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 13px;
 }
 
@@ -918,21 +986,13 @@ onUnmounted(() => {
   background: var(--fs-color-danger);
 }
 
-.health-label {
+.health-text {
   color: var(--fs-text-secondary);
-}
-
-.health-status {
-  font-weight: 600;
-  color: var(--fs-text-primary);
-}
-
-.health-ai {
-  margin-left: auto;
 }
 
 .health-ai-link {
   cursor: pointer;
+  margin-inline-end: 0;
 }
 
 .panel-card-clickable {
@@ -960,16 +1020,6 @@ onUnmounted(() => {
   background: var(--fs-bg-muted) !important;
 }
 
-.feed-item {
-  cursor: pointer;
-  border-radius: var(--fs-radius-sm);
-  transition: background var(--fs-transition);
-}
-
-.feed-item:hover {
-  background: var(--fs-bg-muted);
-}
-
 .panel-card {
   border-radius: var(--fs-radius-md);
   box-shadow: var(--fs-shadow-sm);
@@ -984,7 +1034,11 @@ onUnmounted(() => {
 }
 
 .traffic-site-filter {
-  width: min(240px, 42vw);
+  width: 150px !important;
+}
+
+.traffic-metrics-panel :deep(.ant-card-head) {
+  padding: 0 16px;
 }
 
 .traffic-metrics-panel :deep(.ant-card-body) {
@@ -1059,12 +1113,6 @@ onUnmounted(() => {
   height: 320px;
 }
 
-.feed-time {
-  font-size: 11px;
-  color: var(--fs-text-muted);
-  margin-top: 2px;
-}
-
 .feed-card :deep(.ant-card-body) {
   padding-top: 8px;
   padding-bottom: 12px;
@@ -1077,30 +1125,160 @@ onUnmounted(() => {
   padding-right: 4px;
 }
 
-.feed-list-body :deep(.ant-list-item) {
-  padding-inline: 0;
+.feed-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 4px 2px;
 }
 
-.feed-detail {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.feed-timeline-item {
+  --feed-tone: var(--fs-color-info);
+  --feed-tone-bg: color-mix(in srgb, var(--fs-color-info) 12%, transparent);
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 12px 4px 12px 0;
+  cursor: pointer;
+  transition: background var(--fs-transition);
+}
+
+.feed-timeline-item:last-child {
+  border-bottom: none;
+}
+
+.feed-timeline-item:hover {
+  background: color-mix(in srgb, var(--fs-bg-muted) 80%, transparent);
+}
+
+.feed-timeline-item--alert {
+  --feed-tone: var(--fs-color-info);
+  --feed-tone-bg: color-mix(in srgb, var(--fs-color-info) 12%, transparent);
+}
+
+.feed-timeline-item--danger {
+  --feed-tone: var(--fs-color-danger);
+  --feed-tone-bg: color-mix(in srgb, var(--fs-color-danger) 12%, transparent);
+}
+
+.feed-timeline-item--info {
+  --feed-tone: var(--fs-color-primary);
+  --feed-tone-bg: color-mix(in srgb, var(--fs-color-primary) 12%, transparent);
+}
+
+.feed-timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--fs-border);
+}
+
+.feed-timeline-item:first-child::before {
+  top: 18px;
+}
+
+.feed-timeline-item:last-child::before {
+  bottom: calc(100% - 18px);
+}
+
+.feed-timeline-dot {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--feed-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--feed-tone) 16%, var(--fs-bg-surface));
+}
+
+.feed-timeline-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-timeline-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.feed-timeline-tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--feed-tone);
+  background: var(--feed-tone-bg);
+}
+
+.feed-timeline-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--fs-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.feed-timeline-time {
+  flex-shrink: 0;
+  margin-left: 4px;
+  color: var(--fs-text-muted);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.feed-timeline-meta {
+  margin-top: 4px;
+  padding-left: 0;
+  color: var(--fs-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
   word-break: break-word;
 }
 
 @media (max-width: 767px) {
+  .feed-timeline-top {
+    flex-wrap: wrap;
+  }
+
+  .feed-timeline-time {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 767px) {
   .page-hero {
-    padding: 14px 16px;
+    padding: 0 0 4px;
   }
 
   .hero-title {
     font-size: 18px;
   }
 
-  .health-ai {
+  .hero-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .hero-actions {
     margin-left: 0;
-    width: 100%;
+    align-items: flex-start;
   }
 
   .chart-box,

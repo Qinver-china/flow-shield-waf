@@ -51,7 +51,6 @@ export const logStatsDimensionLayout = [
       { key: "geo_city", label: "IP 城市", desc: "geo.city" },
       { key: "geo_asn", label: "IP ASN", desc: "geo.asn" },
       { key: "geo_isp", label: "运营商 ISP", desc: "geo.isp" },
-      { key: "geo_ip_type", label: "IP 类型", desc: "geo.ip_type" },
       { key: "xff_first", label: "X-Forwarded-For", desc: "http.xff 首跳" },
     ],
   },
@@ -75,6 +74,8 @@ export const logStatsDimensionLayout = [
       { key: "method", label: "请求方法", desc: "http.method" },
       { key: "referer_host", label: "Referer", desc: "http.referer 主机名" },
       { key: "ua", label: "User-Agent", desc: "http.ua" },
+      { key: "cookie_name", label: "Cookie 参数名", desc: "http.cookie 键" },
+      { key: "cookie_count_bucket", label: "Cookie 个数", desc: "http.cookie.count 分段" },
     ],
   },
   {

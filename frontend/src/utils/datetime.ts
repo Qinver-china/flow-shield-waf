@@ -52,13 +52,23 @@ export function formatDateTimeShort(value?: string | null): string {
   return formatDateTime(value, "MM-DD HH:mm");
 }
 
+/** Clock time in app timezone, e.g. `15:04:05`. */
+export function formatClockTime(end?: ConfigType | number): string {
+  const endTz = end == null
+    ? nowInAppTz()
+    : typeof end === "number"
+    ? dayjs(end).tz(appTimezone)
+    : toAppTz(end);
+  return endTz.format("HH:mm:ss");
+}
+
 /** Rolling window label in app timezone, e.g. `2026-07-17 15:00 ~ 2026-07-18 15:00`. */
 export function formatWindowRange(hours: number, end?: ConfigType | number): string {
   const endTz = end == null
     ? nowInAppTz()
     : typeof end === "number"
-      ? dayjs(end).tz(appTimezone)
-      : toAppTz(end);
+    ? dayjs(end).tz(appTimezone)
+    : toAppTz(end);
   const startTz = endTz.subtract(hours, "hour");
   const fmt = "YYYY-MM-DD HH:mm:ss";
   return `${startTz.format(fmt)} ~ ${endTz.format(fmt)}`;

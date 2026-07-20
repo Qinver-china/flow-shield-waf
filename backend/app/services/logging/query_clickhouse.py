@@ -33,10 +33,11 @@ TREND_GRANULARITIES = {
 STATS_DIMENSIONS = frozenset({
     "rule_id", "client_ip", "source", "mode", "site_id", "domain", "geo_country",
     "method", "blocked", "log_type", "ip_is_private", "xff_first", "geo_region",
-    "geo_city", "geo_isp", "geo_ip_type", "geo_asn", "scheme", "http_version",
+    "geo_city", "geo_isp", "geo_asn", "scheme", "http_version",
     "uri_path", "uri_ext", "uri_depth", "uri_pattern", "request_uri", "uri_query",
     "full_url", "referer_host",
-    "query_count_bucket", "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
+    "query_count_bucket", "cookie_name", "cookie_count_bucket",
+    "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
     "bot_category", "tls_version",
     "tls_ja3", "hour_of_day", "weekday",
 })
@@ -57,7 +58,6 @@ _DIM_COLUMN = {
     "geo_region": "geo_region",
     "geo_city": "geo_city",
     "geo_isp": "geo_isp",
-    "geo_ip_type": "geo_ip_type",
     "geo_asn": "geo_asn",
     "scheme": "scheme",
     "http_version": "http_version",
@@ -241,6 +241,18 @@ def _dimension_groups_inner_sql(dimension: str, where: str) -> str:
             f"SELECT concat(scheme, '://', domain, request_uri) AS full_url FROM waf_logs "
             f"WHERE {where} AND domain != '' AND request_uri != '' GROUP BY full_url"
         )
+    if dimension == "cookie_name":
+        return (
+            f"SELECT name FROM waf_logs ARRAY JOIN "
+            f"JSONExtractKeys(JSONExtractRaw(payload, 'cookies')) AS name "
+            f"WHERE {where} AND JSONHas(payload, 'cookies') GROUP BY name"
+        )
+    if dimension == "cookie_count_bucket":
+        return (
+            f"SELECT multiIf({_COOKIE_COUNT_EXPR} = 0, '0', {_COOKIE_COUNT_EXPR} <= 5, '1-5', "
+            f"{_COOKIE_COUNT_EXPR} <= 20, '6-20', '20+') AS bucket "
+            f"FROM waf_logs WHERE {where} GROUP BY bucket"
+        )
     col = _DIM_COLUMN.get(dimension, dimension)
     return f"SELECT {col} FROM waf_logs WHERE {where} GROUP BY {col}"
 
@@ -256,16 +268,39 @@ def _count_dimension_groups(client, dimension: str, where: str, params: dict) ->
 
 _FILTER_FIELDS = frozenset({
     "log_type", "source", "site_id", "client_ip", "rule_id", "rule_name", "action", "mode",
-    "blocked", "domain", "geo_country", "geo_region", "geo_city", "geo_isp", "geo_ip_type",
-    "geo_asn", "method", "scheme", "http_version", "uri_path", "uri_ext", "request_uri",
-    "uri_query", "referer_host",
+    "blocked", "domain", "geo_country", "geo_region", "geo_city", "geo_isp",
+    "geo_asn", "method", "scheme", "http_version", "uri_path", "uri_ext", "uri_depth",
+    "uri_pattern", "request_uri", "uri_query", "full_url", "query_count_bucket", "referer_host",
     "ip_is_private", "xff_first", "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
-    "bot_category", "tls_version", "keyword",
+    "bot_category", "tls_version", "tls_ja3", "hour_of_day", "weekday", "keyword",
+    "cookie", "cookie_name", "cookie_count_bucket",
 })
 
-_INT_FILTER_FIELDS = frozenset({"site_id", "rule_id", "geo_asn"})
+_INT_FILTER_FIELDS = frozenset({"site_id", "rule_id", "geo_asn", "uri_depth"})
 _BOOL_FILTER_FIELDS = frozenset({"blocked", "ip_is_private"})
 _FUZZY_FILTER_FIELDS = frozenset({"rule_name", "ua", "keyword"})
+
+_COOKIE_COUNT_EXPR = (
+    "if(JSONHas(waf_logs.payload, 'cookies'), "
+    "length(JSONExtractKeys(JSONExtractRaw(waf_logs.payload, 'cookies'))), 0)"
+)
+
+# Computed expressions (not plain columns) used by stats dimensions / filters
+_EXPR_STRING_FILTERS: dict[str, str] = {
+    "full_url": "concat(waf_logs.scheme, '://', waf_logs.domain, waf_logs.request_uri)",
+    "query_count_bucket": (
+        "multiIf(waf_logs.query_count = 0, '0', waf_logs.query_count <= 5, '1-5', "
+        "waf_logs.query_count <= 20, '6-20', '20+')"
+    ),
+    "cookie_count_bucket": (
+        f"multiIf({_COOKIE_COUNT_EXPR} = 0, '0', {_COOKIE_COUNT_EXPR} <= 5, '1-5', "
+        f"{_COOKIE_COUNT_EXPR} <= 20, '6-20', '20+')"
+    ),
+}
+_EXPR_INT_FILTERS: dict[str, str] = {
+    "hour_of_day": "toHour(waf_logs.ts)",
+    "weekday": "toDayOfWeek(waf_logs.ts)",
+}
 _LOG_TABLE = "waf_logs"
 
 
@@ -289,20 +324,31 @@ def _parse_filter_conditions(raw: str | None) -> list[dict]:
         field = item.get("field")
         op = item.get("op")
         value = item.get("value")
+        arg = item.get("arg")
         if field not in _FILTER_FIELDS or op not in {"eq", "ne", "contains", "not_contains", "like"}:
             continue
+        if field == "cookie":
+            arg_text = str(arg or "").strip()
+            if not arg_text:
+                continue
         if value is None:
             continue
         if isinstance(value, list):
             values = [str(v).strip() for v in value if str(v).strip()]
             if not values:
                 continue
-            conditions.append({"field": field, "op": op, "value": values})
+            cond = {"field": field, "op": op, "value": values}
+            if field == "cookie":
+                cond["arg"] = str(arg).strip()
+            conditions.append(cond)
             continue
         text = str(value).strip()
         if not text:
             continue
-        conditions.append({"field": field, "op": op, "value": text})
+        cond = {"field": field, "op": op, "value": text}
+        if field == "cookie":
+            cond["arg"] = str(arg).strip()
+        conditions.append(cond)
     return conditions
 
 
@@ -319,8 +365,48 @@ def _append_condition_sql(
     op: str,
     value: str | list[str],
     idx: int,
+    arg: str | None = None,
 ) -> None:
     values = value if isinstance(value, list) else [value]
+    if field == "cookie_name":
+        subparts = []
+        for vidx, raw in enumerate(values):
+            pname = _param_name("cookie_name", idx * 10 + vidx)
+            expr = f"JSONHas({_col('payload')}, 'cookies', {{{pname}:String}})"
+            if op == "ne":
+                subparts.append(f"NOT {expr}")
+            else:
+                subparts.append(expr)
+            params[pname] = raw
+        if subparts:
+            joiner = " OR " if op in {"eq", "contains", "like"} and len(subparts) > 1 else " AND "
+            parts.append(subparts[0] if len(subparts) == 1 else f"({joiner.join(subparts)})")
+        return
+
+    if field == "cookie":
+        cookie_arg = (arg or "").strip()
+        if not cookie_arg:
+            return
+        subparts = []
+        for vidx, raw in enumerate(values):
+            aname = _param_name("cookie_arg", idx * 10 + vidx)
+            pname = _param_name("cookie_val", idx * 10 + vidx)
+            val_expr = f"JSONExtractString({_col('payload')}, 'cookies', {{{aname}:String}})"
+            if op == "eq":
+                subparts.append(f"{val_expr} = {{{pname}:String}}")
+            elif op == "ne":
+                subparts.append(f"{val_expr} != {{{pname}:String}}")
+            elif op == "not_contains":
+                subparts.append(f"positionCaseInsensitive({val_expr}, {{{pname}:String}}) = 0")
+            else:
+                subparts.append(f"positionCaseInsensitive({val_expr}, {{{pname}:String}}) > 0")
+            params[aname] = cookie_arg
+            params[pname] = raw
+        if subparts:
+            joiner = " OR " if op in {"eq", "contains", "like"} and len(subparts) > 1 else " AND "
+            parts.append(subparts[0] if len(subparts) == 1 else f"({joiner.join(subparts)})")
+        return
+
     if field == "keyword":
         subparts: list[str] = []
         for vidx, raw in enumerate(values):
@@ -359,6 +445,18 @@ def _append_condition_sql(
                 subparts.append(f"{col} = {{{pname}:UInt8}}")
             params[pname] = 1 if bool_val else 0
             continue
+        if field in _EXPR_INT_FILTERS:
+            try:
+                int_val = int(raw)
+            except ValueError:
+                continue
+            expr = _EXPR_INT_FILTERS[field]
+            if op == "ne":
+                subparts.append(f"{expr} != {{{pname}:UInt32}}")
+            else:
+                subparts.append(f"{expr} = {{{pname}:UInt32}}")
+            params[pname] = int_val
+            continue
         if field in _INT_FILTER_FIELDS:
             try:
                 int_val = int(raw)
@@ -370,6 +468,21 @@ def _append_condition_sql(
             else:
                 subparts.append(f"{col} = {{{pname}:UInt32}}")
             params[pname] = int_val
+            continue
+        if field in _EXPR_STRING_FILTERS:
+            expr = _EXPR_STRING_FILTERS[field]
+            if op == "eq":
+                subparts.append(f"{expr} = {{{pname}:String}}")
+                params[pname] = raw
+            elif op == "ne":
+                subparts.append(f"{expr} != {{{pname}:String}}")
+                params[pname] = raw
+            elif op == "not_contains":
+                subparts.append(f"positionCaseInsensitive({expr}, {{{pname}:String}}) = 0")
+                params[pname] = raw
+            else:  # contains / like
+                subparts.append(f"positionCaseInsensitive({expr}, {{{pname}:String}}) > 0")
+                params[pname] = raw
             continue
 
         col = _col(field)
@@ -405,6 +518,7 @@ def _append_json_filters(parts: list[str], params: dict, raw: str | None) -> Non
             op=condition["op"],
             value=condition["value"],
             idx=idx,
+            arg=condition.get("arg"),
         )
 
 
@@ -455,9 +569,6 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
     if q.geo_isp:
         parts.append(f"{_col('geo_isp')} = {{geo_isp:String}}")
         params["geo_isp"] = q.geo_isp
-    if q.geo_ip_type:
-        parts.append(f"{_col('geo_ip_type')} = {{geo_ip_type:String}}")
-        params["geo_ip_type"] = q.geo_ip_type
     if q.geo_asn is not None:
         parts.append(f"{_col('geo_asn')} = {{geo_asn:UInt32}}")
         params["geo_asn"] = q.geo_asn
@@ -482,6 +593,24 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
     if q.uri_ext:
         parts.append(f"{_col('uri_ext')} = {{uri_ext:String}}")
         params["uri_ext"] = q.uri_ext
+    if q.uri_depth is not None:
+        parts.append(f"{_col('uri_depth')} = {{uri_depth:UInt32}}")
+        params["uri_depth"] = q.uri_depth
+    if q.uri_pattern:
+        parts.append(f"{_col('uri_pattern')} = {{uri_pattern:String}}")
+        params["uri_pattern"] = q.uri_pattern
+    if q.full_url:
+        parts.append(
+            f"concat({_col('scheme')}, '://', {_col('domain')}, {_col('request_uri')}) "
+            f"= {{full_url:String}}"
+        )
+        params["full_url"] = q.full_url
+    if q.query_count_bucket:
+        parts.append(
+            "multiIf(waf_logs.query_count = 0, '0', waf_logs.query_count <= 5, '1-5', "
+            "waf_logs.query_count <= 20, '6-20', '20+') = {query_count_bucket:String}"
+        )
+        params["query_count_bucket"] = q.query_count_bucket
     if q.referer_host:
         parts.append(f"{_col('referer_host')} = {{referer_host:String}}")
         params["referer_host"] = q.referer_host
@@ -512,6 +641,15 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
     if q.tls_version:
         parts.append(f"{_col('tls_version')} = {{tls_version:String}}")
         params["tls_version"] = q.tls_version
+    if q.tls_ja3:
+        parts.append(f"{_col('tls_ja3')} = {{tls_ja3:String}}")
+        params["tls_ja3"] = q.tls_ja3
+    if q.hour_of_day is not None:
+        parts.append(f"toHour({_col('ts')}) = {{hour_of_day:UInt32}}")
+        params["hour_of_day"] = q.hour_of_day
+    if q.weekday is not None:
+        parts.append(f"toDayOfWeek({_col('ts')}) = {{weekday:UInt32}}")
+        params["weekday"] = q.weekday
     if q.keyword:
         parts.append(
             f"(positionCaseInsensitive({_col('request_uri')}, {{kw:String}}) > 0 "
@@ -741,6 +879,85 @@ async def stats_overview(
     return raw
 
 
+async def stats_hits_by_sites(*, hours: int = 24) -> dict[int, dict[str, int]]:
+    """Aggregate 24h hit/block counts grouped by site_id."""
+    data = await stats_sites_24h_compare(hours=hours)
+    return {
+        site_id: {
+            "hits": row["requests"],
+            "blocked": row["blocked"],
+        }
+        for site_id, row in data.items()
+    }
+
+
+def _delta_pct(current: int, previous: int) -> float | None:
+    if previous <= 0:
+        return None if current <= 0 else 100.0
+    return round(((current - previous) / previous) * 100, 1)
+
+
+async def stats_sites_24h_compare(*, hours: int = 24) -> dict[int, dict[str, int | float | None]]:
+    """Per-site current vs previous window stats for site cards."""
+    start_ts, end_ts = _window(None, None, hours)
+    prev_end = start_ts
+    prev_start = prev_end - (end_ts - start_ts)
+
+    def _fetch() -> dict[int, dict[str, int | float | None]]:
+        client = get_clickhouse()
+        rows = client.query(
+            f"""
+            SELECT
+              site_id,
+              countIf(ts >= {{cur_start:DateTime64(3)}}) AS requests,
+              countIf(ts >= {{cur_start:DateTime64(3)}} AND {_col('blocked')} = 1) AS blocked,
+              uniqExactIf(client_ip, ts >= {{cur_start:DateTime64(3)}} AND client_ip != '') AS unique_ips,
+              countIf(ts >= {{prev_start:DateTime64(3)}} AND ts < {{cur_start:DateTime64(3)}}) AS requests_prev,
+              countIf(ts >= {{prev_start:DateTime64(3)}} AND ts < {{cur_start:DateTime64(3)}} AND {_col('blocked')} = 1) AS blocked_prev,
+              uniqExactIf(
+                client_ip,
+                ts >= {{prev_start:DateTime64(3)}} AND ts < {{cur_start:DateTime64(3)}} AND client_ip != ''
+              ) AS unique_ips_prev
+            FROM waf_logs
+            WHERE ts >= {{prev_start:DateTime64(3)}} AND site_id IS NOT NULL
+            GROUP BY site_id
+            """,
+            parameters={
+                "cur_start": start_ts,
+                "prev_start": prev_start,
+            },
+        ).result_rows
+        out: dict[int, dict[str, int | float | None]] = {}
+        for (
+            site_id,
+            requests,
+            blocked,
+            unique_ips,
+            requests_prev,
+            blocked_prev,
+            unique_ips_prev,
+        ) in rows:
+            if site_id is None:
+                continue
+            req = int(requests or 0)
+            blk = int(blocked or 0)
+            ips = int(unique_ips or 0)
+            req_prev = int(requests_prev or 0)
+            blk_prev = int(blocked_prev or 0)
+            ips_prev = int(unique_ips_prev or 0)
+            out[int(site_id)] = {
+                "requests": req,
+                "blocked": blk,
+                "unique_ips": ips,
+                "requests_delta_pct": _delta_pct(req, req_prev),
+                "blocked_delta_pct": _delta_pct(blk, blk_prev),
+                "unique_ips_delta_pct": _delta_pct(ips, ips_prev),
+            }
+        return out
+
+    return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=15)
+
+
 async def stats_by_dimension(
     *,
     dimension: str,
@@ -827,6 +1044,29 @@ async def stats_by_dimension(
         ).result_rows
         items = [
             LogStatsGroupItem(key=str(b), label=str(b), count=int(c)) for b, c in rows
+        ]
+    elif dimension == "cookie_count_bucket":
+        rows = client.query(
+            f"SELECT multiIf({_COOKIE_COUNT_EXPR} = 0, '0', {_COOKIE_COUNT_EXPR} <= 5, '1-5', "
+            f"{_COOKIE_COUNT_EXPR} <= 20, '6-20', '20+') AS bucket, count() AS c "
+            f"FROM waf_logs WHERE {where} GROUP BY bucket ORDER BY c DESC {page_clause}",
+            parameters=params,
+        ).result_rows
+        items = [
+            LogStatsGroupItem(key=str(b), label=str(b), count=int(c)) for b, c in rows
+        ]
+    elif dimension == "cookie_name":
+        rows = client.query(
+            f"SELECT name, count() AS c FROM waf_logs "
+            f"ARRAY JOIN JSONExtractKeys(JSONExtractRaw(payload, 'cookies')) AS name "
+            f"WHERE {where} AND JSONHas(payload, 'cookies') "
+            f"GROUP BY name ORDER BY c DESC {page_clause}",
+            parameters=params,
+        ).result_rows
+        items = [
+            LogStatsGroupItem(key=str(name), label=str(name), count=int(c))
+            for name, c in rows
+            if name
         ]
     elif dimension == "hour_of_day":
         rows = client.query(

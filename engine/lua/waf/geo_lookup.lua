@@ -13,7 +13,6 @@ local FIELDS = {
     { name = "city", entry = "geo_city", trace = "geo.city", var = "geoip2_city" },
     { name = "asn", entry = "geo_asn", trace = "geo.asn", var = "geoip2_asn", tonumber = true },
     { name = "isp", entry = "geo_isp", trace = "geo.isp", var = "geoip2_isp" },
-    { name = "ip_type", entry = "geo_ip_type", trace = "geo.ip_type", var = "geoip2_ip_type" },
 }
 
 local TRACE_BY_NAME = {}

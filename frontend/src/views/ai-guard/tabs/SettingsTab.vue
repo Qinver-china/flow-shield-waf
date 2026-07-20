@@ -44,6 +44,10 @@
       <a-form-item label="启用智能聊天">
         <a-switch v-model:checked="form.chat_enabled" />
       </a-form-item>
+      <a-form-item label="显示悬浮 AI 助手">
+        <a-switch v-model:checked="form.floating_chat_enabled" />
+        <div class="hint">关闭后，各页面右下角将不再显示 AI 圆形按钮与悬浮聊天窗口。</div>
+      </a-form-item>
       <a-form-item label="启用自动化防护">
         <a-switch v-model:checked="form.defense_enabled" />
       </a-form-item>
@@ -81,7 +85,9 @@
 import { message } from "ant-design-vue";
 import { onMounted, reactive, ref } from "vue";
 import { api } from "@/api";
+import { useFloatingAiChatStore } from "@/stores/floatingAiChat";
 
+const floatingAi = useFloatingAiChatStore();
 const loading = ref(false);
 const saving = ref(false);
 const testing = ref(false);
@@ -97,6 +103,7 @@ const form = reactive({
   temperature: 0.3,
   max_tokens: 4096,
   chat_enabled: true,
+  floating_chat_enabled: true,
   defense_enabled: true,
   default_apply_mode: "suggest_only",
   max_logs_per_analysis: 200,
@@ -110,6 +117,8 @@ async function load() {
     const res = await api.get("/api/v1/ai-guard/settings");
     Object.assign(form, res.data);
     form.api_key = "";
+    form.floating_chat_enabled = res.data.floating_chat_enabled !== false;
+    floatingAi.setFabEnabled(form.floating_chat_enabled);
   } finally {
     loading.value = false;
   }
@@ -144,6 +153,7 @@ async function save() {
     if (!payload.api_key) delete payload.api_key;
     delete payload.api_key_set;
     await api.put("/api/v1/ai-guard/settings", payload);
+    floatingAi.setFabEnabled(form.floating_chat_enabled);
     message.success("已保存");
     await load();
   } finally {

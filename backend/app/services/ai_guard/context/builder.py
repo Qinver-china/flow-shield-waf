@@ -57,6 +57,8 @@ def _defense_knowledge() -> dict:
             for item in TRIGGER_TYPES
         ],
         "rule_generation_notes": [
+            "多轮分析：初始仅近 30 分钟放行日志；不足时用 query_logs 等工具扩大范围",
+            "完成后调用 submit_analysis；create_rule=false 表示不建规则",
             "suggested_rule.conditions 必须使用 field_catalog 中的合法 key 与该字段 operators",
             "enum 字段（如 geo.country）用 eq/neq/in_list，不要用 equals/not_equals",
             "流量条件写 traffic.global/traffic.site + op=compare，禁止 traffic.global.request_count",
