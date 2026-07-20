@@ -1,6 +1,6 @@
 import { Modal, message } from "ant-design-vue";
 import dayjs from "dayjs";
-import { computed, h, onMounted, ref } from "vue";
+import { computed, h, onMounted, ref, watch } from "vue";
 import type { Conversation } from "ant-design-x-vue";
 import type { BubbleDataType } from "ant-design-x-vue";
 import type { ConversationsProps, PromptProps } from "ant-design-x-vue";
@@ -69,7 +69,15 @@ function unwrapApiData<T>(res: ApiResp<T> | T): T {
   return res as T;
 }
 
-export function useAiGuardChat(options?: { autoLoadSessions?: boolean }) {
+export interface UseAiGuardChatOptions {
+  autoLoadSessions?: boolean;
+  /** 打开时自动恢复最近会话（悬浮窗） */
+  restoreLatestSession?: boolean;
+  getPreferredSessionId?: () => number | null;
+  onSessionIdChange?: (id: number | null) => void;
+}
+
+export function useAiGuardChat(options?: UseAiGuardChatOptions) {
   const sessions = ref<ChatSessionRow[]>([]);
   const sessionsLoading = ref(false);
   const sessionId = ref<number | null>(null);
@@ -221,6 +229,18 @@ export function useAiGuardChat(options?: { autoLoadSessions?: boolean }) {
     );
     pendingAction.value = pending?.pending_action || null;
     pendingMessageId.value = pending?.id ?? null;
+  }
+
+  async function restorePreferredSession() {
+    if (sessionId.value != null || sending.value) return;
+    const preferred = options?.getPreferredSessionId?.() ?? null;
+    const target =
+      preferred != null && sessions.value.some((s) => s.id === preferred)
+        ? preferred
+        : (sessions.value[0]?.id ?? null);
+    if (target != null) {
+      await openSession(target);
+    }
   }
 
   function newSession() {
@@ -466,9 +486,18 @@ export function useAiGuardChat(options?: { autoLoadSessions?: boolean }) {
     }
   }
 
+  if (options?.onSessionIdChange) {
+    watch(sessionId, (id) => options.onSessionIdChange?.(id));
+  }
+
   if (options?.autoLoadSessions !== false) {
     onMounted(() => {
-      void loadSessions();
+      void (async () => {
+        await loadSessions();
+        if (options?.restoreLatestSession) {
+          await restorePreferredSession();
+        }
+      })();
     });
   }
 

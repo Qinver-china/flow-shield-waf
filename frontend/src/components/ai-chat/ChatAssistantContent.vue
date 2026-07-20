@@ -56,10 +56,6 @@ withDefaults(
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--fs-bg-muted) 50%, transparent);
-  border: 1px solid color-mix(in srgb, var(--fs-border) 80%, transparent);
 }
 
 .chat-assistant-step {

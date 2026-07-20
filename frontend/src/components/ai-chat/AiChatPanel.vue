@@ -143,6 +143,7 @@
 
         <div class="ai-chat-sender-wrap">
           <prompts
+            v-if="!messages.length"
             class="ai-chat-sender-prompts"
             :items="senderPrompts"
             wrap
@@ -162,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, onMounted, ref } from "vue";
+import { h, ref } from "vue";
 import {
   MenuFoldOutlined,
   PlusOutlined,
@@ -181,6 +182,7 @@ import ChatMarkdownContent from "@/components/ai-chat/ChatMarkdownContent.vue";
 import PendingActionCard from "@/views/ai-guard/components/PendingActionCard.vue";
 import { useAiGuardChat } from "@/composables/useAiGuardChat";
 import { BRAND } from "@/constants/brand";
+import { useFloatingAiChatStore } from "@/stores/floatingAiChat";
 
 const props = withDefaults(
   defineProps<{
@@ -198,6 +200,7 @@ const props = withDefaults(
 );
 
 const siderVisible = ref(!props.collapsibleSider);
+const floatingStore = props.collapsibleSider ? useFloatingAiChatStore() : null;
 
 const welcomeIcon = () =>
   h("img", {
@@ -228,7 +231,14 @@ const {
   onActionDone,
   onPromptClick,
   clearPending,
-} = useAiGuardChat({ autoLoadSessions: props.autoLoadSessions });
+} = useAiGuardChat({
+  autoLoadSessions: props.autoLoadSessions,
+  restoreLatestSession: props.collapsibleSider,
+  getPreferredSessionId: () => floatingStore?.lastSessionId ?? null,
+  onSessionIdChange: (id) => {
+    floatingStore?.setLastSessionId(id);
+  },
+});
 
 function onNewSession() {
   newSession();
@@ -243,12 +253,6 @@ function onConversationSelect(key: string) {
     siderVisible.value = false;
   }
 }
-
-onMounted(() => {
-  if (props.collapsibleSider) {
-    newSession();
-  }
-});
 </script>
 
 <style scoped>
@@ -528,9 +532,8 @@ onMounted(() => {
 }
 
 .ai-chat-msg--user .ai-chat-msg-bubble {
-  background: color-mix(in srgb, var(--fs-color-primary) 12%, var(--fs-bg-surface));
-  border: 1px solid color-mix(in srgb, var(--fs-color-primary) 22%, var(--fs-border));
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  background: color-mix(in srgb, var(--fs-color-primary) 4%, var(--fs-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--fs-color-primary) 2%, var(--fs-border));
 }
 
 .ai-chat-msg--assistant .ai-chat-msg-bubble {

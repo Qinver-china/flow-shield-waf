@@ -17,7 +17,11 @@
     </transition>
 
     <transition name="ai-panel-slide">
-      <div v-if="floating.open" class="ai-float-panel" :class="{ 'ai-float-panel--mobile': isMobile }">
+      <div
+        v-show="floating.open"
+        class="ai-float-panel"
+        :class="{ 'ai-float-panel--mobile': isMobile }"
+      >
         <div class="ai-float-header">
           <div class="ai-float-title">
             <span class="ai-float-title-icon">
@@ -34,7 +38,6 @@
         </div>
         <div class="ai-float-body">
           <ai-chat-panel
-            :key="floating.panelKey"
             compact
             collapsible-sider
             :auto-load-sessions="true"
