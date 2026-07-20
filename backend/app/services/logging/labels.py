@@ -60,9 +60,203 @@ GEO_COUNTRY_LABELS: dict[str, str] = {
     "SE": "瑞典",
     "CH": "瑞士",
     "AE": "阿联酋",
+    "TR": "土耳其",
+    "PL": "波兰",
+    "UA": "乌克兰",
+    "MX": "墨西哥",
+    "AR": "阿根廷",
+    "ZA": "南非",
+    "NZ": "新西兰",
+    "IE": "爱尔兰",
+    "BE": "比利时",
+    "AT": "奥地利",
+    "PT": "葡萄牙",
+    "FI": "芬兰",
+    "NO": "挪威",
+    "DK": "丹麦",
+    "CZ": "捷克",
+    "RO": "罗马尼亚",
+    "HU": "匈牙利",
+    "IL": "以色列",
+    "SA": "沙特阿拉伯",
+    "PK": "巴基斯坦",
+    "BD": "孟加拉国",
+    "NG": "尼日利亚",
+    "EG": "埃及",
+    "KZ": "哈萨克斯坦",
+    "UZ": "乌兹别克斯坦",
+    "MM": "缅甸",
+    "KH": "柬埔寨",
+    "LA": "老挝",
+    "NP": "尼泊尔",
+    "LK": "斯里兰卡",
+    "IQ": "伊拉克",
+    "IR": "伊朗",
     "UNKNOWN": "未知",
     "XX": "未知",
 }
+
+GEO_CN_REGION_LABELS: dict[str, str] = {
+    "BJ": "北京",
+    "TJ": "天津",
+    "HE": "河北",
+    "SX": "山西",
+    "NM": "内蒙古",
+    "LN": "辽宁",
+    "JL": "吉林",
+    "HL": "黑龙江",
+    "SH": "上海",
+    "JS": "江苏",
+    "ZJ": "浙江",
+    "AH": "安徽",
+    "FJ": "福建",
+    "JX": "江西",
+    "SD": "山东",
+    "HA": "河南",
+    "HB": "湖北",
+    "HN": "湖南",
+    "GD": "广东",
+    "GX": "广西",
+    "HI": "海南",
+    "CQ": "重庆",
+    "SC": "四川",
+    "GZ": "贵州",
+    "YN": "云南",
+    "XZ": "西藏",
+    "SN": "陕西",
+    "GS": "甘肃",
+    "QH": "青海",
+    "NX": "宁夏",
+    "XJ": "新疆",
+}
+
+
+def format_geo_country(code: str | None) -> str:
+    c = (code or "").strip().upper()
+    if not c:
+        return ""
+    name = GEO_COUNTRY_LABELS.get(c)
+    return f"{name} ({c})" if name else c
+
+
+# Common MaxMind ASN org-name keywords → Chinese labels (case-insensitive substring).
+# Matching still uses the raw organization string; this is display-only.
+GEO_ISP_LABELS: list[tuple[str, str]] = [
+    ("china mobile international", "中国移动国际"),
+    ("chinanet", "中国电信"),
+    ("china telecom", "中国电信"),
+    ("china-telecom", "中国电信"),
+    ("china unicom", "中国联通"),
+    ("chinaunicom", "中国联通"),
+    ("china-unicom", "中国联通"),
+    ("china mobile", "中国移动"),
+    ("chinamobile", "中国移动"),
+    ("cmnet", "中国移动"),
+    ("cmcc", "中国移动"),
+    ("cernet", "教育网 CERNET"),
+    ("cstnet", "中科院 CSTNET"),
+    ("drpeng", "鹏博士"),
+    ("wasu", "华数"),
+    ("gehua", "歌华有线"),
+    ("alibaba", "阿里云"),
+    ("aliyun", "阿里云"),
+    ("taobao", "阿里云"),
+    ("tencent", "腾讯云"),
+    ("huawei", "华为云"),
+    ("baidu", "百度云"),
+    ("bytedance", "字节跳动"),
+    ("byteplus", "火山引擎"),
+    ("volcengine", "火山引擎"),
+    ("jd.com", "京东云"),
+    ("jingdong", "京东云"),
+    ("kingsoft", "金山云"),
+    ("ucloud", "UCloud"),
+    ("qingcloud", "青云"),
+    ("hkt", "香港电讯"),
+    ("pccw", "电讯盈科"),
+    ("chunghwa", "中华电信"),
+    ("far eastone", "远传电信"),
+    ("taiwan mobile", "台湾大哥大"),
+    ("amazon", "亚马逊 AWS"),
+    ("google", "谷歌云"),
+    ("microsoft", "微软 Azure"),
+    ("azure", "微软 Azure"),
+    ("cloudflare", "Cloudflare"),
+    ("akamai", "Akamai"),
+    ("fastly", "Fastly"),
+    ("digitalocean", "DigitalOcean"),
+    ("linode", "Linode"),
+    ("vultr", "Vultr"),
+    ("ovh", "OVH"),
+    ("hetzner", "Hetzner"),
+    ("oracle", "甲骨文云"),
+    ("softlayer", "IBM SoftLayer"),
+    ("ibm", "IBM 云"),
+    ("leaseweb", "Leaseweb"),
+    ("contabo", "Contabo"),
+    ("m247", "M247"),
+    ("cogent", "Cogent"),
+    ("lumen", "Lumen"),
+    ("level 3", "Level3"),
+    ("level3", "Level3"),
+    ("meta platforms", "Meta"),
+    ("facebook", "Meta"),
+    ("apple", "Apple"),
+    ("github", "GitHub"),
+]
+
+# Filter / rule hints: value ≈ common MaxMind organization fragments
+GEO_ISP_SELECT_HINTS: list[dict[str, str]] = [
+    {"value": "China Telecom", "label": "中国电信 (China Telecom)"},
+    {"value": "China Unicom", "label": "中国联通 (China Unicom)"},
+    {"value": "China Mobile", "label": "中国移动 (China Mobile)"},
+    {"value": "CERNET", "label": "教育网 (CERNET)"},
+    {"value": "Alibaba", "label": "阿里云 (Alibaba)"},
+    {"value": "Tencent", "label": "腾讯云 (Tencent)"},
+    {"value": "Huawei", "label": "华为云 (Huawei)"},
+    {"value": "Amazon.com, Inc.", "label": "亚马逊 AWS (Amazon.com, Inc.)"},
+    {"value": "GOOGLE", "label": "谷歌云 (GOOGLE)"},
+    {"value": "MICROSOFT-CORP-MSN-AS-BLOCK", "label": "微软 Azure (Microsoft)"},
+    {"value": "CLOUDFLARENET", "label": "Cloudflare (CLOUDFLARENET)"},
+    {"value": "AKAMAI", "label": "Akamai"},
+    {"value": "DIGITALOCEAN", "label": "DigitalOcean"},
+    {"value": "Hetzner Online GmbH", "label": "Hetzner"},
+    {"value": "OVH SAS", "label": "OVH"},
+]
+
+
+def format_geo_isp(isp: str | None) -> str:
+    raw = (isp or "").strip()
+    if not raw:
+        return ""
+    lower = raw.lower()
+    for match, label in GEO_ISP_LABELS:
+        if match in lower:
+            return f"{label} ({raw})"
+    return raw
+
+
+def geo_country_field_options() -> list[dict[str, str]]:
+    items = [
+        {"value": code, "label": f"{name} ({code})"}
+        for code, name in GEO_COUNTRY_LABELS.items()
+        if code not in ("UNKNOWN", "XX")
+    ]
+    items.sort(key=lambda x: x["label"])
+    return items
+
+
+def geo_cn_region_field_options() -> list[dict[str, str]]:
+    items = [
+        {"value": code, "label": f"{name} ({code})"}
+        for code, name in GEO_CN_REGION_LABELS.items()
+    ]
+    items.sort(key=lambda x: x["label"])
+    return items
+
+
+def geo_isp_field_options() -> list[dict[str, str]]:
+    return list(GEO_ISP_SELECT_HINTS)
 
 
 def _lookup(mapping: dict[str, str], value: str | None) -> str | None:
@@ -109,7 +303,9 @@ def format_dimension_label(
         return "已拦截" if key == "true" else "已放行"
     if dimension == "geo_country":
         code = (key or raw_label or "").upper()
-        return GEO_COUNTRY_LABELS.get(code, raw_label or code)
+        return format_geo_country(code) or raw_label or code
+    if dimension == "geo_isp":
+        return format_geo_isp(key or raw_label) or raw_label or key
     if dimension == "ua":
         return raw_label or key
     if dimension == "full_url":

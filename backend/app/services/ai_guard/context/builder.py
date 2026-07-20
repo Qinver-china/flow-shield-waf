@@ -14,13 +14,6 @@ from app.services.ai_guard.log_query import log_query_catalog_for_llm
 from app.services.bot_catalog import category_options
 from app.services.site_domains import site_domain_list
 
-_STATIC_EXTENSIONS = [
-    "css", "js", "mjs", "map",
-    "jpg", "jpeg", "png", "gif", "webp", "svg", "ico", "avif", "bmp",
-    "woff", "woff2", "ttf", "eot", "otf",
-    "mp4", "webm", "mp3", "m4a", "ogg",
-]
-
 _DYNAMIC_EXTENSIONS = ["php", "php5", "phtml", "asp", "aspx", "jsp", "jspx", "cgi", "pl", "do", "action", "api"]
 
 
@@ -64,9 +57,11 @@ def _defense_knowledge() -> dict:
             for item in TRIGGER_TYPES
         ],
         "rule_generation_notes": [
-            "suggested_rule.conditions 必须使用 field_catalog 中的合法 key",
+            "suggested_rule.conditions 必须使用 field_catalog 中的合法 key 与该字段 operators",
+            "enum 字段（如 geo.country）用 eq/neq/in_list，不要用 equals/not_equals",
             "流量条件写 traffic.global/traffic.site + op=compare，禁止 traffic.global.request_count",
             "CC/频率攻击应建议 create_rate_limit，不要用 traffic 字段",
+            "访问控制封禁（国家/IP）应建议 create_blacklist_entry，不要用 create_rule",
             "建议先 mode=observe，高置信度再 block",
         ],
     }
@@ -77,6 +72,7 @@ def knowledge_for_defense(field_catalog: dict | None = None) -> dict:
     catalog = field_catalog or catalog_compact_for_llm()
     return {
         "condition_format": catalog.get("condition_format"),
+        "operator_selection": catalog.get("operator_selection"),
         "traffic_value": catalog.get("traffic_value"),
         "fields": catalog.get("fields"),
         "operators_by_type": catalog.get("operators_by_type"),
@@ -107,9 +103,41 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
         "field_catalog": field_catalog,
         "modes": list(MODES),
         "policy_types": {
-            "custom_rule": "按单次请求特征匹配（URI、Header、Body、Bot、流量等），不含频率统计",
-            "rate_limit": "CC / 限速：在时间窗口内统计 keys 维度请求次数，超限后执行 mode",
-            "whitelist": "白名单放行，list_type 固定 white",
+            "blacklist": {
+                "tool": "create_blacklist_entry",
+                "label": "黑名单",
+                "when": "用户明确要黑名单/封禁访问/禁止某 IP、国家、地区等来源访问",
+                "effect": "命中即拒绝访问（访问控制），不是自定义特征规则",
+                "do_not_use": "create_rule",
+            },
+            "whitelist": {
+                "tool": "create_whitelist_entry",
+                "label": "白名单",
+                "when": "用户要白名单/放行/信任某来源",
+                "effect": "命中放行",
+                "do_not_use": "create_exception（例外是跳过防护，不是放行语义）",
+            },
+            "exception": {
+                "tool": "create_exception",
+                "label": "防护例外",
+                "when": "用户要防护例外/跳过 WAF/避免误拦（如编辑器、回调）",
+                "effect": "匹配请求跳过全部或指定防护（scope=all|rules|ratelimit）",
+                "do_not_use": "create_whitelist_entry",
+            },
+            "custom_rule": {
+                "tool": "create_rule",
+                "label": "自定义规则",
+                "when": "用户要自定义规则/观察规则/按 URI·Header·Body·Bot·流量等特征匹配",
+                "effect": "按条件匹配并执行 mode（observe/block/验证码等），不含频率统计",
+                "do_not_use": "create_blacklist_entry（黑名单没有 observe；封禁访问控制用黑名单）",
+            },
+            "rate_limit": {
+                "tool": "create_rate_limit",
+                "label": "CC / 限速",
+                "when": "用户要 CC、限速、频率限制",
+                "effect": "时间窗口内按 keys 计数，超限执行 mode",
+                "do_not_use": "create_rule + traffic 字段模拟限速",
+            },
         },
         "resource_fields": {
             "rule": _rule_resource_fields(),
@@ -121,6 +149,13 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                     "custom_block_page_enabled", "block_page_status_code", "block_page_html",
                 ],
             },
+            "blacklist": {
+                "required": ["name", "conditions"],
+                "optional": [
+                    "site_ids", "enabled", "remark",
+                    "custom_block_page_enabled", "block_page_status_code", "block_page_html",
+                ],
+            },
             "whitelist": {
                 "required": ["name", "conditions"],
                 "optional": [
@@ -128,18 +163,71 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                     "custom_block_page_enabled", "block_page_status_code", "block_page_html",
                 ],
             },
+            "exception": {
+                "required": ["name", "conditions"],
+                "optional": [
+                    "scope (all|rules|ratelimit，默认 all)",
+                    "site_ids", "enabled", "remark",
+                ],
+                "notes": [
+                    "scope=all 时必须至少一条匹配条件",
+                    "scope=rules 仅跳过自定义规则；scope=ratelimit 仅跳过限速",
+                ],
+            },
         },
         "tools_available": [
             "list_sites", "list_rules", "list_rate_limits",
             "query_logs", "get_log_stats", "query_log_stats_group",
-            "create_site", "create_rule", "create_rate_limit", "create_whitelist_entry",
+            "create_site", "create_rule", "create_rate_limit",
+            "create_blacklist_entry", "create_whitelist_entry", "create_exception",
             "preview_rule", "preview_rate_limit",
         ],
         "log_query": log_query_catalog_for_llm(),
         "defense": _defense_knowledge(),
         "examples": {
+            "blacklist_block_overseas": {
+                "description": "黑名单：禁止海外访问（国家不等于 CN）",
+                "tool": "create_blacklist_entry",
+                "payload": {
+                    "name": "禁止海外访问",
+                    "enabled": True,
+                    "conditions": {
+                        "logic": "and",
+                        "conditions": [
+                            {"field": "geo.country", "op": "neq", "value": "CN"},
+                        ],
+                    },
+                },
+            },
+            "whitelist_office_ip": {
+                "description": "白名单：放行办公网段",
+                "tool": "create_whitelist_entry",
+                "payload": {
+                    "name": "办公网放行",
+                    "conditions": {
+                        "logic": "and",
+                        "conditions": [
+                            {"field": "ip.src", "op": "in_cidr", "value": "10.0.0.0/8"},
+                        ],
+                    },
+                },
+            },
+            "exception_skip_rules_for_editor": {
+                "description": "防护例外：后台编辑器跳过自定义规则，避免富文本误拦",
+                "tool": "create_exception",
+                "payload": {
+                    "name": "后台编辑器例外",
+                    "scope": "rules",
+                    "conditions": {
+                        "logic": "and",
+                        "conditions": [
+                            {"field": "http.uri.path", "op": "starts_with", "value": "/wp-admin"},
+                        ],
+                    },
+                },
+            },
             "xss_observe_script_tag": {
-                "description": "XSS 观察规则：查询串含 script 标签（高置信度特征）",
+                "description": "自定义规则：XSS 观察（查询串含 script 标签）",
                 "tool": "create_rule",
                 "payload": {
                     "name": "XSS-观察-script标签-查询串",
@@ -155,7 +243,7 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                 },
             },
             "bot_block_unknown": {
-                "description": "拦截未知 Bot（已知搜索引擎等除外）",
+                "description": "自定义规则：拦截未知 Bot",
                 "tool": "create_rule",
                 "payload": {
                     "name": "拦截未知 Bot",
@@ -170,7 +258,7 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                 },
             },
             "traffic_spike": {
-                "description": "全站请求量突增观察（5 分钟窗口，高于基线 200%）",
+                "description": "自定义规则：全站请求量突增观察（5 分钟，高于基线 200%）",
                 "tool": "create_rule",
                 "payload": {
                     "name": "全站流量突增-观察",
@@ -185,51 +273,6 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                                     "window_sec": 300,
                                     "compare": "baseline_gt",
                                     "percent": 200,
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-            "traffic_absolute": {
-                "description": "全站 5 分钟绝对请求量超过 5000",
-                "tool": "create_rule",
-                "payload": {
-                    "name": "全站高流量-观察",
-                    "mode": "observe",
-                    "conditions": {
-                        "logic": "and",
-                        "conditions": [
-                            {
-                                "field": "traffic.global",
-                                "op": "compare",
-                                "value": {
-                                    "window_sec": 300,
-                                    "compare": "abs_gt",
-                                    "threshold": 5000,
-                                },
-                            },
-                        ],
-                    },
-                },
-            },
-            "site_qps_spike": {
-                "description": "单站点 QPS 超过 100",
-                "tool": "create_rule",
-                "payload": {
-                    "name": "站点高 QPS-观察",
-                    "mode": "observe",
-                    "site_ids": [1],
-                    "conditions": {
-                        "logic": "and",
-                        "conditions": [
-                            {
-                                "field": "traffic.site",
-                                "op": "compare",
-                                "value": {
-                                    "window_sec": 60,
-                                    "compare": "qps_gt",
-                                    "threshold": 100,
                                 },
                             },
                         ],
@@ -282,17 +325,14 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
             },
         },
         "hints": [
-            "conditions 必须使用 {logic: and|or, conditions: [...]} 树结构，不要用 all/any",
-            "单字段匹配写叶子节点 {field, op, value[, arg]}；多条件用 logic 分组",
-            "field 必须严格使用 field_catalog.fields 中的 key，禁止自造如 traffic.global.request_count",
-            "流量条件：field=traffic.global|traffic.site，op=compare，value 含 window_sec/compare/threshold|percent",
-            "CC / 频率限制必须用 create_rate_limit；traffic.global/site 仅用于特征规则，不是 CC",
-            "site_ids 为空或省略表示全站策略；知识上下文中已有 sites 列表时无需再 list_sites",
-            "写操作（create_*）会进入待确认，用户批准后才会落库；先用 preview_rule 校验",
-            "防 XSS/SQLi 等建议先 mode=observe，确认无误报后再 block",
-            "自定义拦截页：custom_block_page_enabled=true 时可设 block_page_status_code 与 block_page_html",
-            "查日志：用 query_logs / get_log_stats / query_log_stats_group；筛选字段见 log_query",
-            "AI 防护策略触发类型与应用模式见 defense 节",
+            "先根据用户意图在 policy_types 中选型，再调用对应工具；禁止用 create_rule 代替黑名单/白名单/例外",
+            "conditions 必须使用 {logic: and|or, conditions: [...]}，不要用 all/any",
+            "field 必须严格使用 field_catalog.fields 中的 key；op 必须在该字段 operators 内",
+            "enum 字段（geo.country 等）用 eq/neq/in_list；禁止写 not_equals/equals/contains",
+            "流量条件：field=traffic.global|traffic.site，op=compare；CC 必须用 create_rate_limit",
+            "site_ids 为空或省略表示全站；写操作会进入待确认，用户批准后才落库",
+            "防 XSS/SQLi 等自定义规则建议先 mode=observe",
+            "查日志用 query_logs / get_log_stats / query_log_stats_group",
         ],
         "sites": [
             {

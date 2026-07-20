@@ -35,12 +35,34 @@ def _applies_site(item: dict[str, Any], site_id: int | None) -> bool:
     return any(int(sid) == int(site_id) for sid in site_ids)
 
 
+def item_categories(item: dict[str, Any]) -> list[str]:
+    """Normalize profile categories; accept legacy single `category`."""
+    raw = item.get("categories")
+    out: list[str] = []
+    seen: set[str] = set()
+    if isinstance(raw, list):
+        for value in raw:
+            if not isinstance(value, str):
+                continue
+            slug = value.strip()
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            out.append(slug)
+    if out:
+        return out
+    legacy = item.get("category")
+    if isinstance(legacy, str) and legacy.strip():
+        return [legacy.strip()]
+    return [RESERVED_CATEGORY_OTHER]
+
+
 def identify_bot(
     ua: str | None,
     site_id: int | None,
     bots: list[dict[str, Any]] | None,
 ) -> dict[str, Any] | None:
-    """Return {name, category} when UA matches an enabled bot profile."""
+    """Return {name, categories, category} when UA matches a bot profile."""
     if not ua or not bots:
         return None
     for item in bots:
@@ -51,9 +73,11 @@ def identify_bot(
         patterns = item.get("ua_patterns") or []
         for pattern in patterns:
             if isinstance(pattern, str) and match_ua_pattern(ua, pattern):
+                categories = item_categories(item)
                 return {
                     "name": item.get("name"),
-                    "category": item.get("category"),
+                    "categories": categories,
+                    "category": categories[0],
                 }
     return None
 
@@ -69,18 +93,37 @@ def normalize_category_slug(
     return slug
 
 
+def normalize_categories(
+    slugs: list[str] | None,
+    known_values: set[str] | frozenset[str] | None = None,
+) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for slug in slugs or []:
+        normalized = normalize_category_slug(slug, known_values)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(normalized)
+    return out or [RESERVED_CATEGORY_OTHER]
+
+
 def resolve_bot_dimensions(
     ua: str | None,
     site_id: int | None,
     bots: list[dict[str, Any]] | None,
     known_categories: set[str] | frozenset[str] | None = None,
 ) -> tuple[str | None, str | None]:
-    """Return (bot_name, bot_category) for log enrichment."""
+    """Return (bot_name, bot_category) for log enrichment.
+
+    Logs keep a single primary category (first) for ClickHouse compatibility;
+    rule matching uses the full categories list in the engine.
+    """
     bot_match = identify_bot(ua, site_id, bots)
     if bot_match:
         name = bot_match.get("name")
-        category = normalize_category_slug(bot_match.get("category"), known_categories)
-        return name, category
+        categories = normalize_categories(bot_match.get("categories"), known_categories)
+        return name, categories[0]
 
     is_crawler, crawler_name = is_crawler_ua(ua)
     if is_crawler or is_bot_ua_heuristic(ua):

@@ -11,9 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.fields import field_map, validate_condition
-from app.models import IpList, RateLimit, Rule, Site
+from app.models import Exception_, IpList, RateLimit, Rule, Site
+from app.models.exception import SCOPES
 from app.models.notification import NotificationChannel
 from app.models.rule import MODES
+from app.schemas.exception import ExceptionCreate
 from app.schemas.ip_list import IpListCreate
 from app.schemas.rate_limit import RateLimitCreate
 from app.schemas.rule import RuleCreate
@@ -302,12 +304,21 @@ class AiResourceWriter:
         return {"id": rule.id, "name": rule.name, "mode": rule.mode}
 
     async def create_whitelist_entry(self, db: AsyncSession, payload: dict) -> dict:
+        return await self.create_ip_list_entry(db, payload, list_type="white")
+
+    async def create_blacklist_entry(self, db: AsyncSession, payload: dict) -> dict:
+        return await self.create_ip_list_entry(db, payload, list_type="black")
+
+    async def create_ip_list_entry(
+        self, db: AsyncSession, payload: dict, *, list_type: str
+    ) -> dict:
+        if list_type not in ("white", "black"):
+            raise ValueError(f"无效的名单类型: {list_type}")
         payload = dict(payload)
-        payload["list_type"] = "white"
-        conditions = validate_condition(payload.get("conditions"))
+        conditions = validate_condition(payload.get("conditions"), allow_empty=False)
         data = apply_site_scope(
             {
-                "list_type": "white",
+                "list_type": list_type,
                 "name": payload["name"],
                 "site_ids": payload.get("site_ids"),
                 "enabled": payload.get("enabled", True),
@@ -316,13 +327,40 @@ class AiResourceWriter:
                 **_block_page_payload(payload),
             }
         )
-        IpListCreate.model_validate({**data, "list_type": "white"})
+        IpListCreate.model_validate({**data, "list_type": list_type})
         row = IpList(**data)
         db.add(row)
         await db.commit()
         await db.refresh(row)
         await rule_sync.publish(db)
-        return {"id": row.id, "name": row.name}
+        return {"id": row.id, "name": row.name, "list_type": list_type}
+
+    async def create_exception(self, db: AsyncSession, payload: dict) -> dict:
+        scope = payload.get("scope") or "all"
+        if scope not in SCOPES:
+            raise ValueError(f"无效的例外范围: {scope}")
+        require_conditions = scope == "all"
+        conditions = validate_condition(
+            payload.get("conditions"),
+            allow_empty=not require_conditions,
+        )
+        data = apply_site_scope(
+            {
+                "name": payload["name"],
+                "scope": scope,
+                "site_ids": payload.get("site_ids"),
+                "enabled": payload.get("enabled", True),
+                "conditions": conditions,
+                "remark": payload.get("remark"),
+            }
+        )
+        ExceptionCreate.model_validate(data)
+        row = Exception_(**data)
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+        await rule_sync.publish(db)
+        return {"id": row.id, "name": row.name, "scope": row.scope}
 
     async def delete_rule(self, db: AsyncSession, rule_id: int) -> None:
         rule = await db.get(Rule, rule_id)
@@ -332,6 +370,37 @@ class AiResourceWriter:
         await db.commit()
         await rule_sync.publish(db)
 
+    async def preview_ip_list(self, payload: dict, *, list_type: str) -> dict:
+        conditions = validate_condition(payload.get("conditions"), allow_empty=False)
+        IpListCreate.model_validate(
+            {
+                **payload,
+                "list_type": list_type,
+                "name": payload.get("name") or "preview",
+                "conditions": conditions,
+            }
+        )
+        return {"valid": True, "conditions": conditions, "list_type": list_type}
+
+    async def preview_exception(self, payload: dict) -> dict:
+        scope = payload.get("scope") or "all"
+        if scope not in SCOPES:
+            raise ValueError(f"无效的例外范围: {scope}")
+        require_conditions = scope == "all"
+        conditions = validate_condition(
+            payload.get("conditions"),
+            allow_empty=not require_conditions,
+        )
+        ExceptionCreate.model_validate(
+            {
+                **payload,
+                "name": payload.get("name") or "preview",
+                "scope": scope,
+                "conditions": conditions,
+            }
+        )
+        return {"valid": True, "conditions": conditions, "scope": scope}
+
     async def validate_tool_arguments(self, tool_name: str, arguments: dict) -> dict:
         """Validate tool payloads without persisting (for pending confirmations)."""
         if tool_name == "create_site":
@@ -339,12 +408,12 @@ class AiResourceWriter:
             return {"valid": True}
         if tool_name == "create_rule":
             return await self.preview_rule(arguments)
+        if tool_name == "create_blacklist_entry":
+            return await self.preview_ip_list(arguments, list_type="black")
         if tool_name == "create_whitelist_entry":
-            payload = dict(arguments)
-            payload["list_type"] = "white"
-            conditions = validate_condition(payload.get("conditions"))
-            IpListCreate.model_validate({**payload, "conditions": conditions})
-            return {"valid": True, "conditions": conditions}
+            return await self.preview_ip_list(arguments, list_type="white")
+        if tool_name == "create_exception":
+            return await self.preview_exception(arguments)
         if tool_name == "create_rate_limit":
             return await self.preview_rate_limit(arguments)
         return {"valid": True}
@@ -394,8 +463,12 @@ class AiResourceWriter:
             return await self.create_rule(db, arguments)
         if tool_name == "create_rate_limit":
             return await self.create_rate_limit(db, arguments)
+        if tool_name == "create_blacklist_entry":
+            return await self.create_blacklist_entry(db, arguments)
         if tool_name == "create_whitelist_entry":
             return await self.create_whitelist_entry(db, arguments)
+        if tool_name == "create_exception":
+            return await self.create_exception(db, arguments)
         raise ValueError(f"未知工具: {tool_name}")
 
 

@@ -1,4 +1,12 @@
 import { logStatsDimensionLayout } from "@/constants/logDimensionLayout";
+import {
+  formatGeoCountry,
+  formatGeoIsp,
+  geoCountrySelectOptions,
+  GEO_COUNTRY_LABELS as geoCountryLabel,
+} from "@/utils/geoLabels";
+
+export { geoCountryLabel };
 
 export const modeLabel: Record<string, string> = {
   observe: "观察",
@@ -40,38 +48,6 @@ export const logTypeLabel: Record<string, string> = {
   audit: "审计",
 };
 
-export const geoCountryLabel: Record<string, string> = {
-  CN: "中国",
-  US: "美国",
-  HK: "中国香港",
-  TW: "中国台湾",
-  MO: "中国澳门",
-  JP: "日本",
-  KR: "韩国",
-  SG: "新加坡",
-  GB: "英国",
-  DE: "德国",
-  FR: "法国",
-  RU: "俄罗斯",
-  IN: "印度",
-  AU: "澳大利亚",
-  CA: "加拿大",
-  NL: "荷兰",
-  VN: "越南",
-  TH: "泰国",
-  MY: "马来西亚",
-  ID: "印度尼西亚",
-  PH: "菲律宾",
-  BR: "巴西",
-  IT: "意大利",
-  ES: "西班牙",
-  SE: "瑞典",
-  CH: "瑞士",
-  AE: "阿联酋",
-  UNKNOWN: "未知",
-  XX: "未知",
-};
-
 export function formatStatsValueLabel(
   dimension: StatsDimension,
   key: string,
@@ -96,9 +72,10 @@ export function formatStatsValueLabel(
     case "blocked":
       return key === "true" ? "已拦截" : "已放行";
     case "geo_country": {
-      const code = (key || label).toUpperCase();
-      return geoCountryLabel[code] || label;
+      return formatGeoCountry(key || label) || label;
     }
+    case "geo_isp":
+      return formatGeoIsp(key || label) || label;
     case "ua":
     case "full_url":
     case "request_uri":
@@ -294,6 +271,9 @@ export function formatConditionLabel(condition: LogFilterCondition): string {
     if (field.type === "select" && field.options) {
       return field.options.find((item) => item.value === raw)?.label || raw;
     }
+    if (field.key === "geo_isp") {
+      return formatGeoIsp(raw) || raw;
+    }
     if (field.type === "bool") {
       if (raw === "true") return field.key === "blocked" ? "已拦截" : "是";
       if (raw === "false") return field.key === "blocked" ? "已放行" : "否";
@@ -471,7 +451,7 @@ export const boolFilterOptions = [
   { value: "false", label: "否" },
 ];
 
-export const geoCountryOptions = selectFromRecord(geoCountryLabel);
+export const geoCountryOptions = geoCountrySelectOptions();
 
 export const logDetailFilterGroups: { label: string; fields: LogFilterFieldDef[] }[] = [
   {
@@ -496,10 +476,10 @@ export const logDetailFilterGroups: { label: string; fields: LogFilterFieldDef[]
       { key: "scheme", label: "协议", type: "select", options: schemeOptions },
       { key: "http_version", label: "HTTP 版本", type: "select", options: httpVersionOptions },
       { key: "geo_country", label: "IP 国家/地区", type: "select", options: geoCountryOptions },
-      { key: "geo_region", label: "IP 省/州", type: "text", placeholder: "精确匹配" },
-      { key: "geo_city", label: "IP 城市", type: "text", placeholder: "精确匹配" },
+      { key: "geo_region", label: "IP 省/州", type: "text", placeholder: "代码，如 GD / VA" },
+      { key: "geo_city", label: "IP 城市", type: "text", placeholder: "英文名，如 Beijing" },
       { key: "geo_asn", label: "IP ASN", type: "number" },
-      { key: "geo_isp", label: "运营商 ISP", type: "text", placeholder: "精确匹配" },
+      { key: "geo_isp", label: "运营商 ISP", type: "text", placeholder: "精确匹配组织名，如 Amazon.com, Inc." },
       { key: "geo_ip_type", label: "IP 类型", type: "text", placeholder: "如 datacenter / residential" },
       { key: "xff_first", label: "X-Forwarded-For", type: "text", placeholder: "XFF 首跳 IP" },
     ],

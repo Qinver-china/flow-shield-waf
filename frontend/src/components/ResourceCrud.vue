@@ -34,10 +34,12 @@
             <a-divider type="vertical" />
             <a @click="openDuplicate(record)">复制</a>
           </template>
-          <a-divider type="vertical" />
-          <a-popconfirm title="确认删除?" @confirm="remove(record.id)">
-            <a class="danger">删除</a>
-          </a-popconfirm>
+          <template v-if="allowDelete(record)">
+            <a-divider type="vertical" />
+            <a-popconfirm title="确认删除?" @confirm="remove(record.id)">
+              <a class="danger">删除</a>
+            </a-popconfirm>
+          </template>
         </template>
         <template v-else-if="nameField && column.dataIndex === nameField">
           <resource-name-cell
@@ -109,7 +111,7 @@
               <template #overlay>
                 <a-menu :selectable="false">
                   <a-menu-item v-if="duplicatable" @click="openDuplicate(row)">复制</a-menu-item>
-                  <a-menu-item danger>
+                  <a-menu-item v-if="allowDelete(row)" danger>
                     <a-popconfirm title="确认删除?" @confirm="remove(row.id)">删除</a-popconfirm>
                   </a-menu-item>
                 </a-menu>
@@ -175,7 +177,7 @@
       <template v-if="drawerMode === 'view' && detailActions" #view-actions>
         <a-button type="primary" @click="switchToEdit">编辑</a-button>
         <a-button v-if="duplicatable" @click="switchToDuplicate">复制</a-button>
-        <a-popconfirm title="确认删除?" @confirm="deleteCurrent">
+        <a-popconfirm v-if="allowDelete(record)" title="确认删除?" @confirm="deleteCurrent">
           <a-button danger>删除</a-button>
         </a-popconfirm>
       </template>
@@ -245,9 +247,14 @@ const props = withDefaults(
       row: Record<string, any>,
       mode: FormDrawerMode,
     ) => Record<string, any>;
+    canDelete?: (row: Record<string, any>) => boolean;
   }>(),
   { duplicatable: false, detailActions: false, embedded: false, showViewJson: true, createLabel: "新增", showCreate: true },
 );
+
+function allowDelete(row: Record<string, any>) {
+  return props.canDelete ? props.canDelete(row) : true;
+}
 
 const { isMobile } = useBreakpoint();
 const route = useRoute();
@@ -540,7 +547,7 @@ function nameActions(row: Record<string, any>) {
     {
       openEdit: () => openEdit(row),
       openDuplicate: props.duplicatable ? () => openDuplicate(row) : undefined,
-      remove: () => remove(row.id),
+      remove: allowDelete(row) ? () => remove(row.id) : undefined,
     },
     { duplicatable: props.duplicatable },
   );

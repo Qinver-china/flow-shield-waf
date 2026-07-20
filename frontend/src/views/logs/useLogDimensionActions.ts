@@ -1,5 +1,6 @@
 import { message } from "ant-design-vue";
 import { useRouter } from "vue-router";
+import { copyText } from "@/utils/clipboard";
 import {
   buildConditionsFromLogRule,
   buildConditionsFromStatsDimension,
@@ -212,7 +213,7 @@ export function useLogDimensionActions() {
         divided: actions.length > 0,
         onClick: async () => {
           try {
-            await navigator.clipboard.writeText(value);
+            await copyText(value);
             message.success("已复制");
           } catch {
             message.error("复制失败");

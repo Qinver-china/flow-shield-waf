@@ -329,7 +329,7 @@ function _M:_resolve(field, arg)
     elseif field == "bot.category" then
         local bot_mod = require "waf.bot"
         local sync = require "waf.sync"
-        return bot_mod.resolve_category(sync.get(), self, self.cache.site_id)
+        return bot_mod.resolve_categories(sync.get(), self, self.cache.site_id)
     elseif field == "bot.is_known" then
         local bot_mod = require "waf.bot"
         local sync = require "waf.sync"

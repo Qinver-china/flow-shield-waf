@@ -27,6 +27,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_site_force_https(conn)
     await _ensure_resource_block_page_columns(conn)
     await _drop_legacy_bot_columns(conn)
+    await _ensure_bot_profile_categories(conn)
     await _ensure_waf_setting_panel_public_url(conn)
 
 
@@ -121,6 +122,45 @@ async def _ensure_waf_setting_ratelimit_fail_open(conn) -> None:
         )
     )
     log.info("schema patch applied: waf_setting.ratelimit_fail_open")
+
+
+async def _ensure_bot_profile_categories(conn) -> None:
+    """Migrate bot_profile.category (string) -> categories (JSON array)."""
+    has_categories = await _column_exists(conn, "bot_profile", "categories")
+    has_category = await _column_exists(conn, "bot_profile", "category")
+    if not has_categories:
+        await conn.execute(text("ALTER TABLE bot_profile ADD COLUMN categories JSON"))
+        log.info("schema patch applied: bot_profile.categories")
+        has_categories = True
+    if has_categories and has_category:
+        await conn.execute(
+            text(
+                "UPDATE bot_profile "
+                "SET categories = json_array(category) "
+                "WHERE (categories IS NULL OR categories = '' OR categories = 'null' OR categories = '[]') "
+                "AND category IS NOT NULL AND category != ''"
+            )
+        )
+        await conn.execute(
+            text(
+                "UPDATE bot_profile "
+                "SET categories = json_array('other') "
+                "WHERE categories IS NULL OR categories = '' OR categories = 'null' OR categories = '[]'"
+            )
+        )
+        try:
+            await conn.execute(text("ALTER TABLE bot_profile DROP COLUMN category"))
+            log.info("schema patch applied: dropped bot_profile.category")
+        except Exception:  # noqa: BLE001
+            log.warning("could not drop legacy column bot_profile.category")
+    elif has_categories:
+        await conn.execute(
+            text(
+                "UPDATE bot_profile "
+                "SET categories = json_array('other') "
+                "WHERE categories IS NULL OR categories = '' OR categories = 'null' OR categories = '[]'"
+            )
+        )
 
 
 async def _ensure_waf_setting_panel_public_url(conn) -> None:

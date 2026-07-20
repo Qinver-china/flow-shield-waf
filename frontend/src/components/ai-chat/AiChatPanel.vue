@@ -101,17 +101,40 @@
               class="ai-chat-msg"
               :class="`ai-chat-msg--${item.role}`"
             >
-              <div class="ai-chat-msg-bubble">
-                <a-spin v-if="item.loading" size="small" />
-                <chat-assistant-content
-                  v-else-if="item.role === 'assistant'"
-                  :content="String(item.content || '')"
-                  :steps="item.steps"
+              <div class="ai-chat-msg-stack">
+                <div class="ai-chat-msg-bubble">
+                  <a-spin v-if="item.loading" size="small" />
+                  <chat-assistant-content
+                    v-else-if="item.role === 'assistant'"
+                    :content="String(item.content || '')"
+                    :steps="item.steps"
+                  />
+                  <chat-markdown-content
+                    v-else
+                    :content="String(item.content || '')"
+                  />
+                </div>
+
+                <pending-action-card
+                  v-if="item.action_status === 'pending' && item.pending_action"
+                  class="ai-chat-pending"
+                  :action="item.pending_action"
+                  :message-id="item.messageId"
+                  @confirmed="onActionDone"
+                  @cancelled="clearPending"
                 />
-                <chat-markdown-content
-                  v-else
-                  :content="String(item.content || '')"
-                />
+                <div
+                  v-else-if="item.action_status === 'executed'"
+                  class="ai-chat-action-result ai-chat-action-result--executed"
+                >
+                  已确认执行该操作
+                </div>
+                <div
+                  v-else-if="item.action_status === 'cancelled'"
+                  class="ai-chat-action-result ai-chat-action-result--cancelled"
+                >
+                  已取消执行该操作
+                </div>
               </div>
             </div>
           </div>
@@ -130,15 +153,6 @@
               />
             </div>
           </div>
-
-          <pending-action-card
-            v-if="pendingAction"
-            class="ai-chat-pending"
-            :action="pendingAction"
-            :message-id="pendingMessageId"
-            @confirmed="onActionDone"
-            @cancelled="clearPending"
-          />
         </div>
 
         <div class="ai-chat-sender-wrap">
@@ -230,8 +244,6 @@ const {
   input,
   sending,
   messages,
-  pendingAction,
-  pendingMessageId,
   conversationItems,
   activeConversationKey,
   bubbleItems,
@@ -550,7 +562,6 @@ function onConversationSelect(key: string) {
 .ai-chat-bubbles {
   max-width: 860px;
   margin: 0 auto;
-  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -570,8 +581,20 @@ function onConversationSelect(key: string) {
   justify-content: flex-start;
 }
 
-.ai-chat-msg-bubble {
+.ai-chat-msg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   max-width: min(88%, 720px);
+  min-width: 0;
+  width: 100%;
+}
+
+.ai-chat-msg--user .ai-chat-msg-stack {
+  width: auto;
+}
+
+.ai-chat-msg-bubble {
   padding: 10px 14px;
   border-radius: 12px;
   line-height: 1.6;
@@ -653,8 +676,27 @@ function onConversationSelect(key: string) {
 }
 
 .ai-chat-pending {
-  max-width: 860px;
-  margin: 12px auto 0;
+  width: 100%;
+}
+
+.ai-chat-action-result {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+.ai-chat-action-result--executed {
+  color: #389e0d;
+  background: color-mix(in srgb, #52c41a 10%, var(--fs-bg-surface));
+  border-color: color-mix(in srgb, #52c41a 28%, var(--fs-border));
+}
+
+.ai-chat-action-result--cancelled {
+  color: var(--fs-text-secondary);
+  background: color-mix(in srgb, var(--fs-bg-muted) 70%, var(--fs-bg-surface));
+  border-color: var(--fs-border);
 }
 
 .ai-chat-sender-wrap {

@@ -4,13 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from app.api.deps import Pagination, get_current_user
-from app.api.listing import ListQuery, apply_enabled_filter, get_list_query, order_by_fields
+from app.api.listing import ListQuery, get_list_query, order_by_fields
 from app.core.db import get_db
 from app.models import BotProfile, User
 from app.schemas.bot import BotProfileCreate, BotProfileOut, BotProfileUpdate
 from app.schemas.common import ok
 from app.services import rule_sync
-from app.services.bot_catalog import ensure_category_exists, normalize_patterns
+from app.services.bot_catalog import ensure_categories_exist, normalize_patterns
 from app.services.reference_validation import ensure_site_ids_exist
 from app.services.site_scope import apply_site_scope, enrich_row
 
@@ -43,9 +43,8 @@ def _apply_category_filter(stmt: Select, categories: list[str] | None) -> Select
     values = [c.strip() for c in categories if c and c.strip()]
     if not values:
         return stmt
-    if len(values) == 1:
-        return stmt.where(BotProfile.category == values[0])
-    return stmt.where(BotProfile.category.in_(values))
+    clauses = [cast(BotProfile.categories, String).like(f'%"{v}"%') for v in values]
+    return stmt.where(or_(*clauses))
 
 
 @router.get("/vendored")
@@ -83,8 +82,6 @@ async def list_bots(
     count = select(func.count(BotProfile.id))
     cond = _apply_bot_q(cond, query.q)
     count = _apply_bot_q(count, query.q)
-    cond = apply_enabled_filter(cond, BotProfile.enabled, query.enabled)
-    count = apply_enabled_filter(count, BotProfile.enabled, query.enabled)
     cond = _apply_category_filter(cond, category)
     count = _apply_category_filter(count, category)
     total = (await db.execute(count)).scalar_one()
@@ -95,7 +92,6 @@ async def list_bots(
         {
             "name": BotProfile.name,
             "id": BotProfile.id,
-            "category": BotProfile.category,
         },
         BotProfile.id,
     )
@@ -128,15 +124,15 @@ async def create_bot(
 ):
     await ensure_site_ids_exist(db, body.site_ids)
     try:
-        await ensure_category_exists(db, body.category)
+        categories = await ensure_categories_exist(db, body.categories)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     data = apply_site_scope(body.model_dump())
     row = BotProfile(
         name=data["name"],
-        category=data["category"],
+        categories=categories,
         ua_patterns=data["ua_patterns"],
-        enabled=data["enabled"],
+        enabled=True,
         site_ids=data.get("site_ids"),
         verify_dns_suffix=data.get("verify_dns_suffix"),
         remark=data.get("remark"),
@@ -160,16 +156,12 @@ async def update_bot(
     if row is None:
         raise HTTPException(status_code=404, detail="Bot 不存在")
     data = body.model_dump(exclude_unset=True)
-    if row.is_builtin:
-        for key in ("name", "ua_patterns", "verify_dns_suffix"):
-            if key in data:
-                raise HTTPException(status_code=400, detail=f"内置 Bot 不允许修改 {key}")
     if "site_ids" in data:
         await ensure_site_ids_exist(db, data["site_ids"])
         data = apply_site_scope(data)
-    if "category" in data:
+    if "categories" in data:
         try:
-            await ensure_category_exists(db, data["category"])
+            data["categories"] = await ensure_categories_exist(db, data["categories"])
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     if "ua_patterns" in data:
@@ -191,8 +183,6 @@ async def delete_bot(
     row = await db.get(BotProfile, bot_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Bot 不存在")
-    if row.is_builtin:
-        raise HTTPException(status_code=400, detail="内置 Bot 不可删除，可禁用或调整分类")
     await db.delete(row)
     await db.commit()
     await rule_sync.publish(db)

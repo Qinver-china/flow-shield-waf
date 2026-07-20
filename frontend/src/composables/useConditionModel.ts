@@ -1,3 +1,5 @@
+import { formatGeoIsp } from "@/utils/geoLabels";
+
 export interface Field {
   key: string;
   label: string;
@@ -198,6 +200,18 @@ export function hasOptions(fieldMap: Record<string, Field>, fieldKey?: string) {
   return !!fieldKey && optionsFor(fieldMap, fieldKey).length > 0;
 }
 
+export function isStringField(fieldMap: Record<string, Field>, fieldKey?: string) {
+  return !!fieldKey && fieldMap[fieldKey]?.value_type === "string";
+}
+
+/** AutoComplete options: value is matched/stored; label is shown in dropdown. */
+export function autoCompleteOptions(fieldMap: Record<string, Field>, fieldKey?: string) {
+  return optionsFor(fieldMap, fieldKey).map((opt) => ({
+    value: opt.value,
+    label: opt.label,
+  }));
+}
+
 export function isIpGroupOp(op?: string) {
   return !!op && IP_GROUP_OPS.includes(op);
 }
@@ -283,7 +297,11 @@ export function formatOptionLabel(
   value: string,
 ) {
   const opt = optionsFor(fieldMap, fieldKey).find((o) => o.value === String(value));
-  return opt?.label || value;
+  if (opt?.label) return opt.label;
+  if (fieldKey === "geo.isp") {
+    return formatGeoIsp(value) || value;
+  }
+  return value;
 }
 
 export function displayLeafValue(

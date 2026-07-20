@@ -65,6 +65,7 @@ import FsDetailSection from "@/components/FsDetailSection.vue";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import { modeColor, modeLabel, sourceLabel } from "./constants";
 import { formatTs } from "./useLogTimeRange";
+import { formatGeoLocation } from "@/utils/geoLabels";
 
 const { formatSiteId } = useSiteOptions();
 
@@ -123,7 +124,17 @@ const summaryItems = computed(() => {
     { label: "模式", value: modeLabel[d.mode] || d.mode || "-", tag: true, tagColor: modeColor[d.mode] || "default" },
     { label: "请求域名", value: d.domain || "-" },
     { label: "客户端 IP", value: d.client_ip || "-" },
-    { label: "地理位置", value: d.geo_country || "（未查询）" },
+    {
+      label: "地理位置",
+      value:
+        formatGeoLocation({
+          country: d.geo_country,
+          region: d.geo_region,
+          city: d.geo_city,
+          isp: d.geo_isp,
+          asn: d.geo_asn,
+        }) || "（未查询）",
+    },
     { label: "请求方法", value: d.method || "-" },
     { label: "原始请求行", value: d.request_uri || d.uri || "-" },
     { label: "请求路径", value: d.uri_path || "-" },

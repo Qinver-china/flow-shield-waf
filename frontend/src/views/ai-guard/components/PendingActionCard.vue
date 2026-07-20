@@ -1,5 +1,5 @@
 <template>
-  <a-card size="small" title="待确认操作" style="margin: 12px 0">
+  <a-card size="small" title="待确认操作" class="pending-action-card">
     <p>AI 建议执行以下操作，确认后将写入系统：</p>
     <a-alert
       v-if="validationError"
@@ -53,7 +53,14 @@ const validationError = computed(() => {
 
 const ruleConditions = computed(() => {
   const args = (props.action.arguments || {}) as Record<string, unknown>;
-  if (props.action.tool === "create_rule" && args.conditions) {
+  const toolsWithConditions = new Set([
+    "create_rule",
+    "create_rate_limit",
+    "create_blacklist_entry",
+    "create_whitelist_entry",
+    "create_exception",
+  ]);
+  if (toolsWithConditions.has(String(props.action.tool)) && args.conditions) {
     return args.conditions as Record<string, unknown>;
   }
   return null;
@@ -75,6 +82,10 @@ async function confirm(approved: boolean) {
 </script>
 
 <style scoped>
+.pending-action-card {
+  margin: 0;
+}
+
 .payload {
   background: #fafafa;
   padding: 8px;

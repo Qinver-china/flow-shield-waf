@@ -243,7 +243,12 @@ TOOL_DEFINITIONS: list[dict] = [
         "type": "function",
         "function": {
             "name": "create_rule",
-            "description": "创建自定义防护规则（URI/Header/Body/Bot/流量/TLS 等特征匹配，不含 CC 限速；需用户确认后才会写入）",
+            "description": (
+                "创建自定义防护规则（URI/Header/Body/Bot/流量/TLS 等特征匹配，"
+                "可选 observe/block/验证码；不含 CC 限速，也不是黑/白名单。"
+                "用户要黑名单请用 create_blacklist_entry；要白名单用 create_whitelist_entry；"
+                "要防护例外用 create_exception。需用户确认后才会写入）"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -312,8 +317,12 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "create_whitelist_entry",
-            "description": "创建白名单条目（需用户确认后才会写入）",
+            "name": "create_blacklist_entry",
+            "description": (
+                "创建黑名单条目（访问控制：命中即拒绝）。"
+                "适用于禁止某 IP/国家/地区等访问；不要用 create_rule 代替。"
+                "需用户确认后才会写入"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -323,6 +332,59 @@ TOOL_DEFINITIONS: list[dict] = [
                     "remark": {"type": "string"},
                     "enabled": {"type": "boolean"},
                     **_BLOCK_PAGE_PROPERTIES,
+                },
+                "required": ["name", "conditions"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_whitelist_entry",
+            "description": (
+                "创建白名单条目（访问控制：命中放行）。"
+                "不要与防护例外混淆；例外请用 create_exception。"
+                "需用户确认后才会写入"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "site_ids": {"type": "array", "items": {"type": "integer"}},
+                    "conditions": _CONDITION_SCHEMA,
+                    "remark": {"type": "string"},
+                    "enabled": {"type": "boolean"},
+                    **_BLOCK_PAGE_PROPERTIES,
+                },
+                "required": ["name", "conditions"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_exception",
+            "description": (
+                "创建防护例外（匹配请求跳过全部或指定防护）。"
+                "scope=all 跳过全部防护；rules 仅跳过自定义规则；ratelimit 仅跳过限速。"
+                "不要用白名单代替例外。需用户确认后才会写入"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "scope": {
+                        "type": "string",
+                        "enum": ["all", "rules", "ratelimit"],
+                        "description": "例外范围，默认 all",
+                    },
+                    "site_ids": {"type": "array", "items": {"type": "integer"}},
+                    "conditions": {
+                        **_CONDITION_SCHEMA,
+                        "description": "匹配条件；scope=all 时必填且不能为空",
+                    },
+                    "remark": {"type": "string"},
+                    "enabled": {"type": "boolean"},
                 },
                 "required": ["name", "conditions"],
             },
@@ -379,5 +441,7 @@ WRITE_TOOLS = frozenset({
     "create_site",
     "create_rule",
     "create_rate_limit",
+    "create_blacklist_entry",
     "create_whitelist_entry",
+    "create_exception",
 })

@@ -2,7 +2,6 @@ import { Modal, message } from "ant-design-vue";
 import dayjs from "dayjs";
 import { computed, h, onMounted, ref, watch } from "vue";
 import type { Conversation } from "ant-design-x-vue";
-import type { BubbleDataType } from "ant-design-x-vue";
 import type { ConversationsProps, PromptProps } from "ant-design-x-vue";
 import { api, type ApiResp } from "@/api";
 import ChatAssistantContent from "@/components/ai-chat/ChatAssistantContent.vue";
@@ -77,7 +76,11 @@ export interface UseAiGuardChatOptions {
   onSessionIdChange?: (id: number | null) => void;
 }
 
-export function useAiGuardChat(options?: UseAiGuardChatOptions) {
+/**
+ * Shared chat state for the AI Guard page panel and the floating popup.
+ * Both UIs must see the same sessions/messages without a page refresh.
+ */
+function createAiGuardChat(options?: UseAiGuardChatOptions) {
   const sessions = ref<ChatSessionRow[]>([]);
   const sessionsLoading = ref(false);
   const sessionId = ref<number | null>(null);
@@ -101,8 +104,8 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
     sessionId.value == null ? undefined : String(sessionId.value),
   );
 
-  const bubbleItems = computed<BubbleDataType[]>(() => {
-    const items: BubbleDataType[] = messages.value.map((msg, index) => {
+  const bubbleItems = computed(() =>
+    messages.value.map((msg, index) => {
       const key = msg.id != null ? String(msg.id) : `local-${index}`;
       const isStreaming =
         sending.value && streamingAssistantKey.value === key && msg.role === "assistant";
@@ -110,14 +113,16 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
       const hasContent = Boolean(msg.content?.trim());
       return {
         key,
+        messageId: msg.id ?? null,
         role: msg.role,
         content: msg.content,
         steps: msg.steps,
+        pending_action: msg.pending_action ?? null,
+        action_status: msg.action_status ?? null,
         loading: isStreaming && !hasSteps && !hasContent,
       };
-    });
-    return items;
-  });
+    }),
+  );
 
   const renderAssistant = (content: string, steps?: ChatStreamStep[]) =>
     h(ChatAssistantContent, {
@@ -128,13 +133,13 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
   const renderUser = (content: string) =>
     h(ChatMarkdownContent, { content: String(content || "") });
 
-  const bubbleRoles = (bubbleData: BubbleDataType) => {
+  const bubbleRoles = (bubbleData: { role?: string; steps?: ChatStreamStep[] }) => {
     if (bubbleData.role === "assistant") {
       return {
         placement: "start" as const,
         variant: "filled" as const,
         messageRender: (content: string) =>
-          renderAssistant(content, bubbleData.steps as ChatStreamStep[] | undefined),
+          renderAssistant(content, bubbleData.steps),
       };
     }
     return {
@@ -192,7 +197,11 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
         },
         {
           key: "whitelist",
-          description: "帮我设计一条后台编辑器白名单，避免富文本误拦截",
+          description: "帮我创建一条办公网白名单，放行内网 IP",
+        },
+        {
+          key: "exception",
+          description: "为后台编辑器创建防护例外，避免富文本误拦截",
         },
       ],
     },
@@ -200,9 +209,9 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
 
   const senderPrompts: PromptProps[] = [
     { key: "logs", description: "查询拦截日志", icon: undefined },
-    { key: "rule", description: "生成防护规则", icon: undefined },
+    { key: "blacklist", description: "创建黑名单", icon: undefined },
+    { key: "rule", description: "生成自定义规则", icon: undefined },
     { key: "cc", description: "CC 限速策略", icon: undefined },
-    { key: "help", description: "排查误拦截", icon: undefined },
   ];
 
   async function loadSessions() {
@@ -364,9 +373,14 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
       assistantMsg.id = Number(parsed.message_id);
       streamingAssistantKey.value = String(parsed.message_id);
       if (parsed.pending_action) {
-        pendingAction.value = parsed.pending_action as Record<string, unknown>;
+        const action = parsed.pending_action as Record<string, unknown>;
+        assistantMsg.pending_action = action;
+        assistantMsg.action_status = "pending";
+        pendingAction.value = action;
         pendingMessageId.value = Number(parsed.message_id);
       } else {
+        assistantMsg.pending_action = null;
+        assistantMsg.action_status = null;
         pendingAction.value = null;
         pendingMessageId.value = null;
       }
@@ -468,15 +482,21 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
     }
   }
 
-  function onActionDone() {
-    pendingAction.value = null;
-    if (sessionId.value) void loadMessages(sessionId.value);
-    message.success("操作已处理");
+  async function onActionDone() {
+    await resolvePendingAction(true);
   }
 
-  function clearPending() {
+  async function clearPending() {
+    await resolvePendingAction(false);
+  }
+
+  async function resolvePendingAction(approved: boolean) {
     pendingAction.value = null;
     pendingMessageId.value = null;
+    if (sessionId.value != null) {
+      await loadMessages(sessionId.value);
+    }
+    message.success(approved ? "已确认执行" : "已取消执行");
   }
 
   function onPromptClick(info: { data: PromptProps }) {
@@ -490,15 +510,19 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
     watch(sessionId, (id) => options.onSessionIdChange?.(id));
   }
 
-  if (options?.autoLoadSessions !== false) {
-    onMounted(() => {
-      void (async () => {
+  let initPromise: Promise<void> | null = null;
+
+  function ensureInitialized() {
+    if (options?.autoLoadSessions === false) return Promise.resolve();
+    if (!initPromise) {
+      initPromise = (async () => {
         await loadSessions();
         if (options?.restoreLatestSession) {
           await restorePreferredSession();
         }
       })();
-    });
+    }
+    return initPromise;
   }
 
   return {
@@ -530,5 +554,19 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
     onActionDone,
     onPromptClick,
     clearPending,
+    ensureInitialized,
   };
+}
+
+let sharedChat: ReturnType<typeof createAiGuardChat> | null = null;
+
+/** Returns the app-wide AI chat instance (page + floating popup share one state). */
+export function useAiGuardChat(options?: UseAiGuardChatOptions) {
+  if (!sharedChat) {
+    sharedChat = createAiGuardChat(options);
+  }
+  onMounted(() => {
+    void sharedChat?.ensureInitialized();
+  });
+  return sharedChat;
 }

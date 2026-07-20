@@ -35,9 +35,11 @@ _TOOL_LABELS: dict[str, str] = {
     "get_log_stats": "统计日志概览",
     "query_log_stats_group": "按维度聚合统计",
     "create_site": "创建站点",
-    "create_rule": "创建防护规则",
+    "create_rule": "创建自定义规则",
     "create_rate_limit": "创建 CC 限速策略",
+    "create_blacklist_entry": "创建黑名单",
     "create_whitelist_entry": "创建白名单",
+    "create_exception": "创建防护例外",
     "preview_rule": "校验防护规则",
     "preview_rate_limit": "校验限速策略",
 }

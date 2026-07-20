@@ -149,8 +149,8 @@ async def delete_bot_category(
     row = await db.get(BotCategory, category_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Bot 分类不存在")
-    if row.is_builtin or row.value == RESERVED_CATEGORY_OTHER:
-        raise HTTPException(status_code=400, detail="系统内置分类不可删除")
+    if row.value == RESERVED_CATEGORY_OTHER:
+        raise HTTPException(status_code=400, detail="系统预留分类 other 不可删除")
     refs = await find_bot_category_references(db, row.value)
     if refs:
         raise HTTPException(

@@ -1,5 +1,9 @@
 """Tests for log statistics label formatting."""
-from app.services.logging.labels import format_dimension_label, format_rule_stats_label
+from app.services.logging.labels import (
+    format_dimension_label,
+    format_geo_isp,
+    format_rule_stats_label,
+)
 
 
 def test_format_rule_stats_label_with_source():
@@ -27,13 +31,15 @@ def test_format_site_id_label_with_name_and_domain():
     )
 
 
-def test_format_site_id_label_domain_only():
+def test_format_geo_isp_common_carriers():
+    assert format_geo_isp("China Telecom Guangdong") == "中国电信 (China Telecom Guangdong)"
+    assert format_geo_isp("Amazon.com, Inc.") == "亚马逊 AWS (Amazon.com, Inc.)"
+    assert format_geo_isp("CLOUDFLARENET") == "Cloudflare (CLOUDFLARENET)"
+    assert format_geo_isp("Some Random ISP LLC") == "Some Random ISP LLC"
+
+
+def test_format_dimension_label_geo_isp():
     assert (
-        format_dimension_label(
-            "site_id",
-            "1",
-            "站点 #1",
-            site_domain="aaa.zibll.com",
-        )
-        == "aaa.zibll.com (#1)"
+        format_dimension_label("geo_isp", "Alibaba Cloud LLC", "Alibaba Cloud LLC")
+        == "阿里云 (Alibaba Cloud LLC)"
     )

@@ -88,6 +88,17 @@ async def ensure_category_exists(db: AsyncSession, category: str) -> str:
     return slug
 
 
+async def ensure_categories_exist(db: AsyncSession, categories: list[str]) -> list[str]:
+    if not categories:
+        raise ValueError("请至少选择一个 Bot 分类")
+    out: list[str] = []
+    for category in categories:
+        slug = await ensure_category_exists(db, category)
+        if slug not in out:
+            out.append(slug)
+    return out
+
+
 async def category_options(db: AsyncSession) -> list[dict[str, str]]:
     rows = (
         await db.execute(

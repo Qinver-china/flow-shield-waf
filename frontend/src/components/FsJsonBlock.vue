@@ -14,6 +14,7 @@
 <script setup lang="ts">
 import { CopyOutlined } from "@ant-design/icons-vue";
 import { message } from "ant-design-vue";
+import { copyText } from "@/utils/clipboard";
 
 const props = withDefaults(
   defineProps<{
@@ -25,7 +26,7 @@ const props = withDefaults(
 
 async function copy() {
   try {
-    await navigator.clipboard.writeText(props.content);
+    await copyText(props.content);
     message.success("已复制");
   } catch {
     message.error("复制失败");

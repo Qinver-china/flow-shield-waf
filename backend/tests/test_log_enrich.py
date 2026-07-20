@@ -99,8 +99,24 @@ def test_identify_bot_from_catalog():
         }
     ]
     match = identify_bot("Mozilla/5.0 (compatible; Googlebot/2.1)", 1, bots)
-    assert match == {"name": "Googlebot", "category": "search_engine"}
+    assert match == {
+        "name": "Googlebot",
+        "categories": ["search_engine"],
+        "category": "search_engine",
+    }
 
+
+def test_identify_bot_multi_categories():
+    bots = [
+        {
+            "name": "Baiduspider",
+            "categories": ["search_engine", "cn_bot"],
+            "ua_patterns": ["Baiduspider"],
+        }
+    ]
+    match = identify_bot("Baiduspider/2.0", 1, bots)
+    assert match["categories"] == ["search_engine", "cn_bot"]
+    assert match["category"] == "search_engine"
 
 def test_parse_client_ua_chrome_macos():
     ua = (

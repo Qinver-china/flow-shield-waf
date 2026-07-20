@@ -44,19 +44,44 @@ local function as_list(target)
     return { target }
 end
 
-local function in_list(value, target)
-    local sv = tostr(value)
-    for _, item in ipairs(as_list(target)) do
-        if tostr(item) == sv then return true end
+-- When the extracted value is itself a list (e.g. bot.categories), treat
+-- membership / intersection semantics so eq/in_list match any element.
+local function value_list(value)
+    if type(value) == "table" then
+        return value
+    end
+    return { value }
+end
+
+local function lists_intersect(value, target)
+    for _, v in ipairs(value_list(value)) do
+        local sv = tostr(v)
+        for _, item in ipairs(as_list(target)) do
+            if tostr(item) == sv then return true end
+        end
     end
     return false
+end
+
+local function in_list(value, target)
+    return lists_intersect(value, target)
 end
 
 local OPS = {}
 
 -- string
-OPS.equals = function(v, t) return tostr(v) == tostr(t) end
-OPS.not_equals = function(v, t) return tostr(v) ~= tostr(t) end
+OPS.equals = function(v, t)
+    if type(v) == "table" then
+        return lists_intersect(v, { t })
+    end
+    return tostr(v) == tostr(t)
+end
+OPS.not_equals = function(v, t)
+    if type(v) == "table" then
+        return not lists_intersect(v, { t })
+    end
+    return tostr(v) ~= tostr(t)
+end
 OPS.contains = function(v, t)
     local sv = tostr(v)
     if sv == nil then return false end
@@ -95,8 +120,18 @@ OPS.regex = function(v, t)
 end
 OPS.in_list = in_list
 OPS.not_in = function(v, t) return not in_list(v, t) end
-OPS.is_empty = function(v) return v == nil or tostr(v) == "" end
-OPS.exists = function(v) return v ~= nil end
+OPS.is_empty = function(v)
+    if type(v) == "table" then
+        return #(v) == 0
+    end
+    return v == nil or tostr(v) == ""
+end
+OPS.exists = function(v)
+    if type(v) == "table" then
+        return #(v) > 0
+    end
+    return v ~= nil
+end
 OPS.len_gt = function(v, t)
     local sv = tostr(v); return sv ~= nil and #sv > (tonum(t) or 0)
 end
@@ -105,8 +140,18 @@ OPS.len_lt = function(v, t)
 end
 
 -- number (and non-numeric operands fall back to string equality)
-OPS.eq = numeric_eq
-OPS.neq = numeric_neq
+OPS.eq = function(v, t)
+    if type(v) == "table" then
+        return lists_intersect(v, { t })
+    end
+    return numeric_eq(v, t)
+end
+OPS.neq = function(v, t)
+    if type(v) == "table" then
+        return not lists_intersect(v, { t })
+    end
+    return numeric_neq(v, t)
+end
 OPS.gt = function(v, t) local nv, nt = tonum(v), tonum(t); return nv and nt and nv > nt end
 OPS.gte = function(v, t) local nv, nt = tonum(v), tonum(t); return nv and nt and nv >= nt end
 OPS.lt = function(v, t) local nv, nt = tonum(v), tonum(t); return nv and nt and nv < nt end

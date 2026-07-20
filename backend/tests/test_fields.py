@@ -56,6 +56,33 @@ def test_unsupported_operator_rejected():
         validate_condition({"field": "http.method", "op": "regex", "value": "x"})
 
 
+def test_enum_accepts_string_equality_aliases():
+    """geo.country is enum (eq/neq); AI often emits equals/not_equals."""
+    cond = validate_condition({
+        "logic": "and",
+        "conditions": [
+            {"field": "geo.country", "op": "not_equals", "value": "CN"},
+        ],
+    })
+    assert cond["conditions"][0]["op"] == "neq"
+
+    cond2 = validate_condition({
+        "field": "http.method",
+        "op": "equals",
+        "value": "POST",
+    })
+    assert cond2["conditions"][0]["op"] == "eq"
+
+
+def test_string_accepts_enum_equality_aliases():
+    cond = validate_condition({
+        "field": "http.uri.path",
+        "op": "neq",
+        "value": "/admin",
+    })
+    assert cond["conditions"][0]["op"] == "not_equals"
+
+
 def test_requires_arg_enforced():
     with pytest.raises(ValueError):
         # http.header needs a sub-key (arg)

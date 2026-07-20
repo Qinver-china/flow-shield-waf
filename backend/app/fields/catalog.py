@@ -22,6 +22,7 @@ from app.constants.traffic_windows import (
     TRAFFIC_WINDOWS_SEC,
     traffic_window_options,
 )
+from app.services.logging.labels import geo_country_field_options, geo_isp_field_options
 
 TRAFFIC_RULE_WINDOWS = TRAFFIC_WINDOWS_SEC
 
@@ -53,6 +54,8 @@ FIELD_OPTIONS: dict[str, list[dict[str, str]]] = {
         {"value": "2.0", "label": "HTTP/2"},
         {"value": "3.0", "label": "HTTP/3"},
     ],
+    "geo.country": geo_country_field_options(),
+    "geo.isp": geo_isp_field_options(),
     "geo.ip_type": [
         {"value": "residential", "label": "家庭宽带"},
         {"value": "business", "label": "商业/企业"},
@@ -166,7 +169,7 @@ FIELDS: list[dict] = [
     _f("net.scheme", "协议", "网络与地理", ENUM),
     _f("http.version", "HTTP 版本", "网络与地理", ENUM),
     # geo / threat intel
-    _f("geo.country", "IP 国家/地区", "网络与地理", STRING),
+    _f("geo.country", "IP 国家/地区", "网络与地理", ENUM),
     _f("geo.region", "IP 省/州", "网络与地理", STRING),
     _f("geo.city", "IP 城市", "网络与地理", STRING),
     _f("geo.asn", "IP ASN", "网络与地理", NUMBER),
@@ -247,7 +250,8 @@ def options_for_field(field: dict) -> list[dict[str, str]] | None:
         return BOOL_OPTIONS
     if field["value_type"] in (ENUM, TRAFFIC):
         return FIELD_OPTIONS.get(field["key"])
-    return None
+    # Optional hint options for string fields (e.g. geo.isp) — UI may still allow free text
+    return FIELD_OPTIONS.get(field["key"])
 
 
 def field_map() -> dict[str, dict]:
@@ -294,6 +298,46 @@ def catalog_compact_for_llm() -> dict:
                 "field 必须严格使用 fields 列表中的 key，禁止自造字段名",
                 "流量只能用 traffic.global / traffic.site；CC/频率限制用 create_rate_limit",
             ],
+        },
+        "operator_selection": {
+            "rule": "每个 field 只能使用该字段 operators 列表中的操作符，禁止混用其他 value_type 的写法",
+            "by_value_type": OPERATORS_BY_TYPE,
+            "canonical_examples": {
+                "enum": {
+                    "use": ["eq", "neq", "in_list"],
+                    "avoid": ["equals", "not_equals", "contains", "regex"],
+                    "fields": ["geo.country", "geo.ip_type", "http.method", "net.scheme", "ua.family"],
+                    "example": {
+                        "field": "geo.country",
+                        "op": "neq",
+                        "value": "CN",
+                        "meaning": "国家不等于 CN（禁止海外访问常用写法）",
+                    },
+                },
+                "string": {
+                    "use": [
+                        "equals", "not_equals", "contains", "not_contains",
+                        "starts_with", "ends_with", "regex", "in_list", "not_in",
+                        "is_empty", "exists", "len_gt", "len_lt",
+                    ],
+                    "note": "字符串相等用 equals/not_equals，不要写 eq/neq",
+                },
+                "number": {
+                    "use": ["eq", "neq", "gt", "gte", "lt", "lte", "between"],
+                },
+                "ip": {
+                    "use": ["eq", "in_cidr", "in_list", "in_ip_group", "not_in_ip_group", "geo_in", "exists"],
+                },
+                "bool": {"use": ["eq"], "values": ["true", "false"]},
+                "traffic": {
+                    "use": ["compare"],
+                    "fields": ["traffic.global", "traffic.site"],
+                },
+            },
+            "aliases_accepted_but_prefer_canonical": {
+                "equals↔eq": "会按字段类型归一化，但仍应优先写该字段 operators 中的正式名",
+                "not_equals↔neq": "geo.country 等 enum 应写 neq，不要写 not_equals",
+            },
         },
         "traffic_value": {
             "field": "traffic.global | traffic.site",

@@ -27,7 +27,7 @@ def test_create_schema_rejects_other():
 
 
 @pytest.mark.asyncio
-async def test_delete_builtin_category_rejected():
+async def test_delete_other_category_rejected():
     from app.api.v1 import bot_categories as api
 
     row = MagicMock()
@@ -38,3 +38,29 @@ async def test_delete_builtin_category_rejected():
     with pytest.raises(HTTPException) as exc:
         await api.delete_bot_category(1, db=db, _user=MagicMock())
     assert exc.value.status_code == 400
+    assert "other" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_delete_former_builtin_category_allowed_when_unreferenced():
+    from unittest.mock import patch
+
+    from app.api.v1 import bot_categories as api
+
+    row = MagicMock()
+    row.is_builtin = True
+    row.value = "search_engine"
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=row)
+    db.delete = AsyncMock()
+    db.commit = AsyncMock()
+    with patch(
+        "app.api.v1.bot_categories.find_bot_category_references",
+        new_callable=AsyncMock,
+    ) as refs:
+        with patch("app.api.v1.bot_categories.rule_sync.publish", new_callable=AsyncMock) as publish:
+            refs.return_value = []
+            result = await api.delete_bot_category(1, db=db, _user=MagicMock())
+    db.delete.assert_awaited_once_with(row)
+    publish.assert_awaited()
+    assert result["code"] == 0

@@ -140,12 +140,12 @@ async def build_config(db: AsyncSession) -> dict:
 
     bot_items = []
     for b in bots:
+        categories = [c for c in (b.categories or []) if isinstance(c, str) and c]
         it = {
             "id": b.id,
             "name": b.name,
-            "category": b.category,
+            "categories": categories or ["other"],
             "ua_patterns": b.ua_patterns or [],
-            "enabled": b.enabled,
             "verify_dns_suffix": b.verify_dns_suffix,
         }
         site_ids = resolved_site_ids(b)

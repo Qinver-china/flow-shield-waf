@@ -11,7 +11,7 @@ class BotProfile(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128))
-    category: Mapped[str] = mapped_column(String(32), default="other")
+    categories: Mapped[list] = mapped_column(JSON, default=list)
     ua_patterns: Mapped[list] = mapped_column(JSON, default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     site_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)

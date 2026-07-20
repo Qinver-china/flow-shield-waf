@@ -112,6 +112,27 @@ local function applies(item, site_id)
     return false
 end
 
+local function item_categories(item)
+    local cats = item.categories
+    local out = {}
+    local seen = {}
+    if type(cats) == "table" then
+        for _, c in ipairs(cats) do
+            if type(c) == "string" and c ~= "" and not seen[c] then
+                seen[c] = true
+                out[#out + 1] = c
+            end
+        end
+    end
+    if #out > 0 then
+        return out
+    end
+    if type(item.category) == "string" and item.category ~= "" then
+        return { item.category }
+    end
+    return { OTHER_CATEGORY }
+end
+
 function _M.verify_dns(_ip, _suffix)
     -- Reserved for reverse-DNS verification of claimed bots.
     return false
@@ -129,7 +150,7 @@ function _M.identify(cfg, ext, site_id)
     end
 
     for _, item in ipairs(cfg_bots(cfg)) do
-        if item.enabled ~= false and applies(item, site_id) then
+        if applies(item, site_id) then
             local patterns = item.ua_patterns or {}
             for _, pattern in ipairs(patterns) do
                 if pattern_match(ua, pattern) then
@@ -143,10 +164,12 @@ function _M.identify(cfg, ext, site_id)
                         end
                         verified = _M.verify_dns(ip, item.verify_dns_suffix)
                     end
+                    local categories = item_categories(item)
                     local match = {
                         id = item.id,
                         name = item.name,
-                        category = item.category,
+                        categories = categories,
+                        category = categories[1],
                         verified = verified,
                     }
                     ext.cache.bot = match
@@ -172,6 +195,7 @@ end
 local function clear_bot_dimensions(ext)
     ext.cache.bot_name = nil
     ext.cache.bot_category = nil
+    ext.cache.bot_categories = nil
 end
 
 function _M.resolve_dimensions(cfg, ext, site_id)
@@ -190,6 +214,7 @@ function _M.resolve_dimensions(cfg, ext, site_id)
     local match = _M.identify(cfg, ext, site_id)
     if match then
         ext.cache.bot_name = match.name
+        ext.cache.bot_categories = match.categories
         ext.cache.bot_category = match.category
         return match.name, match.category
     end
@@ -198,12 +223,14 @@ function _M.resolve_dimensions(cfg, ext, site_id)
     local crawler_name = _M.match_crawler(cfg, ua, ext)
     if crawler_name then
         ext.cache.bot_name = crawler_name
+        ext.cache.bot_categories = { OTHER_CATEGORY }
         ext.cache.bot_category = OTHER_CATEGORY
         return crawler_name, OTHER_CATEGORY
     end
 
     if _M.is_bot_ua(ua) then
         ext.cache.bot_name = nil
+        ext.cache.bot_categories = { OTHER_CATEGORY }
         ext.cache.bot_category = OTHER_CATEGORY
         return nil, OTHER_CATEGORY
     end
@@ -220,6 +247,17 @@ end
 function _M.resolve_category(cfg, ext, site_id)
     local _, category = _M.resolve_dimensions(cfg, ext, site_id)
     return category
+end
+
+function _M.resolve_categories(cfg, ext, site_id)
+    _M.resolve_dimensions(cfg, ext, site_id)
+    if ext.cache.bot_categories then
+        return ext.cache.bot_categories
+    end
+    if ext.cache.bot_category then
+        return { ext.cache.bot_category }
+    end
+    return nil
 end
 
 return _M

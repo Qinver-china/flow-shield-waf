@@ -17,6 +17,13 @@ _MAP = field_map()
 # operators that don't need a value
 _NO_VALUE_OPS = {"is_empty", "exists", "key_exists", "key_absent"}
 _IP_GROUP_OPS = {"in_ip_group", "not_in_ip_group"}
+# LLM / mixed-type aliases: enum uses eq/neq, string uses equals/not_equals
+_OP_ALIASES = {
+    "equals": "eq",
+    "eq": "equals",
+    "not_equals": "neq",
+    "neq": "not_equals",
+}
 _TRAFFIC_COMPARES = {m["value"] for m in TRAFFIC_COMPARE_MODES}
 _BASELINE_COMPARES = {"baseline_gt", "baseline_lt"}
 _QPS_COMPARES = {"qps_gt", "qps_lt"}
@@ -130,6 +137,16 @@ def _validate_traffic_value(value: Any, field: str) -> None:
         pass
 
 
+def _normalize_op(op: str, allowed: list[str] | tuple[str, ...] | set[str]) -> str | None:
+    """Return op if allowed, or its alias if that is allowed; else None."""
+    if op in allowed:
+        return op
+    alias = _OP_ALIASES.get(op)
+    if alias and alias in allowed:
+        return alias
+    return None
+
+
 def _validate_leaf(node: dict[str, Any]) -> None:
     field = node.get("field")
     if not field:
@@ -141,8 +158,13 @@ def _validate_leaf(node: dict[str, Any]) -> None:
     op = node.get("op")
     if not op:
         raise ValueError(f"字段 {field} 缺少操作符 op")
-    if op not in meta["operators"]:
+    allowed = meta["operators"]
+    normalized_op = _normalize_op(str(op), allowed)
+    if normalized_op is None:
         raise ValueError(f"字段 {field} 不支持操作符 {op}")
+    if normalized_op != op:
+        node["op"] = normalized_op
+        op = normalized_op
 
     if meta["requires_arg"] and not node.get("arg") and op not in {"key_exists", "key_absent"}:
         # map-type fields need a sub-key (header name / cookie name / json path)

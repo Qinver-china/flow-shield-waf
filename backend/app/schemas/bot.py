@@ -1,14 +1,31 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.constants.bot_settings import DEFAULT_CATEGORY
 from app.services.bot_catalog import normalize_patterns
 
 
+def _normalize_categories(values: list[str] | None) -> list[str]:
+    if not values:
+        raise ValueError("请至少选择一个 Bot 分类")
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        slug = item.strip()
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        out.append(slug)
+    if not out:
+        raise ValueError("请至少选择一个 Bot 分类")
+    return out
+
+
 class BotProfileBase(BaseModel):
     name: str
-    category: str = DEFAULT_CATEGORY
+    categories: list[str] = Field(default_factory=lambda: [DEFAULT_CATEGORY])
     ua_patterns: list[str] = Field(default_factory=list)
-    enabled: bool = True
     site_ids: list[int] | None = None
     verify_dns_suffix: str | None = None
     remark: str | None = None
@@ -22,6 +39,11 @@ class BotProfileBase(BaseModel):
         if len(name) > 128:
             raise ValueError("名称过长（最多 128 字符）")
         return name
+
+    @field_validator("categories")
+    @classmethod
+    def _validate_categories(cls, value: list[str]) -> list[str]:
+        return _normalize_categories(value)
 
     @field_validator("ua_patterns")
     @classmethod
@@ -45,17 +67,32 @@ class BotProfileBase(BaseModel):
 
 
 class BotProfileCreate(BotProfileBase):
-    pass
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_category(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        if "categories" not in data and data.get("category"):
+            data = {**data, "categories": [data["category"]]}
+        return data
 
 
 class BotProfileUpdate(BaseModel):
     name: str | None = None
-    category: str | None = None
+    categories: list[str] | None = None
     ua_patterns: list[str] | None = None
-    enabled: bool | None = None
     site_ids: list[int] | None = None
     verify_dns_suffix: str | None = None
     remark: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_category(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        if "categories" not in data and data.get("category"):
+            data = {**data, "categories": [data["category"]]}
+        return data
 
     @field_validator("name")
     @classmethod
@@ -66,6 +103,13 @@ class BotProfileUpdate(BaseModel):
         if not name:
             raise ValueError("请填写名称")
         return name
+
+    @field_validator("categories")
+    @classmethod
+    def _validate_categories(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        return _normalize_categories(value)
 
     @field_validator("ua_patterns")
     @classmethod

@@ -5,7 +5,6 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
 
 from app.constants.bot_settings import RESERVED_CATEGORY_OTHER
 from app.schemas.log import LogQuery
@@ -44,16 +43,43 @@ def test_where_clause_supports_bot_filters():
 
 
 @pytest.mark.asyncio
-async def test_delete_builtin_bot_rejected():
+async def test_delete_bot_allows_former_builtin():
     from app.api.v1 import bots as bots_api
 
     row = MagicMock()
     row.is_builtin = True
     db = AsyncMock()
     db.get = AsyncMock(return_value=row)
-    with pytest.raises(HTTPException) as exc:
-        await bots_api.delete_bot(1, db=db, _user=MagicMock())
-    assert exc.value.status_code == 400
+    db.delete = AsyncMock()
+    db.commit = AsyncMock()
+    with patch("app.api.v1.bots.rule_sync.publish", new_callable=AsyncMock) as publish:
+        result = await bots_api.delete_bot(1, db=db, _user=MagicMock())
+    db.delete.assert_awaited_once_with(row)
+    db.commit.assert_awaited()
+    publish.assert_awaited()
+    assert result["code"] == 0
+
+
+@pytest.mark.asyncio
+async def test_update_bot_allows_former_builtin_fields():
+    from app.api.v1 import bots as bots_api
+    from app.schemas.bot import BotProfileUpdate
+
+    row = MagicMock()
+    row.is_builtin = True
+    row.ua_patterns = ["Old"]
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=row)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    body = BotProfileUpdate(name="Renamed", ua_patterns=["NewBot"])
+    with patch("app.api.v1.bots.rule_sync.publish", new_callable=AsyncMock):
+        with patch("app.api.v1.bots.enrich_row", side_effect=lambda _row, data: data):
+            with patch("app.api.v1.bots._out", return_value={"id": 1, "name": "Renamed"}):
+                result = await bots_api.update_bot(1, body, db=db, _user=MagicMock())
+    assert row.name == "Renamed"
+    assert row.ua_patterns == ["NewBot"]
+    assert result["code"] == 0
 
 
 @pytest.mark.asyncio
@@ -63,7 +89,7 @@ async def test_build_config_includes_bots_without_action():
     bot = MagicMock()
     bot.id = 1
     bot.name = "Googlebot"
-    bot.category = "search_engine"
+    bot.categories = ["search_engine"]
     bot.ua_patterns = ["Googlebot"]
     bot.enabled = True
     bot.verify_dns_suffix = ".googlebot.com"
@@ -104,6 +130,7 @@ async def test_build_config_includes_bots_without_action():
 
     assert len(cfg["bots"]) == 1
     assert cfg["bots"][0]["name"] == "Googlebot"
+    assert cfg["bots"][0]["categories"] == ["search_engine"]
     assert "action" not in cfg["bots"][0]
     assert "bot" not in cfg["settings"]
     assert cfg["bot_category_values"] == ["search_engine"]
@@ -124,4 +151,6 @@ def test_apply_category_filter_supports_multiple():
     stmt = select(BotProfile)
     filtered = _apply_category_filter(stmt, ["search_engine", "ai_crawler"])
     compiled = str(filtered.compile(compile_kwargs={"literal_binds": True}))
-    assert "bot_profiles.category IN" in compiled
+    assert "bot_profiles.categories" in compiled or "categories" in compiled
+    assert "search_engine" in compiled
+    assert "ai_crawler" in compiled

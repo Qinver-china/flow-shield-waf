@@ -91,7 +91,8 @@
       v-model:value="row.valueList"
       mode="multiple"
       class="value-input"
-      placeholder="请选择"
+      placeholder="请选择（可搜索）"
+      show-search
       option-filter-prop="label"
     >
       <a-select-option
@@ -104,11 +105,21 @@
       </a-select-option>
     </a-select>
 
+    <a-auto-complete
+      v-else-if="hasOptions(fieldMap, row.field) && isStringField(fieldMap, row.field)"
+      v-model:value="row.valueText"
+      class="value-input"
+      placeholder="选择或输入（可搜索）"
+      :options="autoCompleteOptions(fieldMap, row.field)"
+      option-filter-prop="label"
+    />
+
     <a-select
       v-else-if="hasOptions(fieldMap, row.field)"
       v-model:value="row.valueText"
       class="value-input"
-      placeholder="请选择"
+      placeholder="请选择（可搜索）"
+      show-search
       option-filter-prop="label"
     >
       <a-select-option
@@ -169,12 +180,14 @@ import type { Category, Field, UiLeaf } from "@/composables/useConditionModel";
 import type { IpGroupOption } from "@/composables/useIpGroupOptions";
 import {
   NO_VALUE_OPS,
+  autoCompleteOptions,
   compareModesFor,
   formatLeafRow,
   hasOptions,
   isIpGroupOp,
   isListOp,
   isNumberOp,
+  isStringField,
   isStringMultiOp,
   isTrafficBaselineCompare,
   isTrafficField,

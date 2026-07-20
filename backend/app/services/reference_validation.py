@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import BotProfile, IpGroup, Site
@@ -121,11 +121,12 @@ async def find_bot_category_references(db: AsyncSession, category_value: str) ->
     from app.models import Exception_, IpList, RateLimit, Rule
 
     refs: list[str] = []
-    count = (
-        await db.execute(
-            select(func.count(BotProfile.id)).where(BotProfile.category == category_value)
-        )
-    ).scalar_one()
+    bots = (await db.execute(select(BotProfile))).scalars().all()
+    count = sum(
+        1
+        for row in bots
+        if category_value in (row.categories or [])
+    )
     if count:
         refs.append(f"Bot 库 ({count} 条)")
 
