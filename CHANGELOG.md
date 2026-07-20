@@ -1,5 +1,54 @@
 # 更新日志
 
+## [0.3.0] - 2026-07-20
+
+> **重大架构升级**：自本版本起，Docker Compose 由四容器（含 MySQL）精简为三容器；业务配置迁入嵌入式 SQLite，流水类数据统一写入 ClickHouse。从 0.2.x（MySQL 版）升级请务必阅读下方「迁移指引」。
+
+### 存储架构（核心）
+
+- 业务配置库由 MySQL 改为嵌入式 **SQLite**（`DB_PATH`，默认 `/data/waf.db`），Docker Compose **移除 `mysql` 服务**
+- 流水数据迁移至 **ClickHouse** 三张表：`ai_guard_incidents`、`alert_notification_logs`、`traffic_alerts`
+- AI 对话历史（`ai_guard_chat_*`）仍保存在 SQLite
+- 废弃遗留 `rule_suggestion` 表与 `/rule-suggestions` API
+- 新增 `scripts/migrate_mysql_to_sqlite.py` 与 `scripts/migrate-to-sqlite.sh` 一键迁移（可选导入历史流水至 ClickHouse）
+- 仪表盘健康检查展示 SQLite 状态（保留 `mysql` 字段名兼容旧前端）
+
+### 分析与流水层
+
+- 新增 `backend/app/services/analytics/`：`incident_store`、`alert_log_store`、`traffic_alert_store`
+- AI 防护流水线、预警评估、流量异常、仪表盘动态等改为读写 ClickHouse 流水表
+- 修复 ClickHouse 24 下 `argMax` 嵌套聚合报错（incident 列表查询）
+- 修复 `LogSampler` 对 `named_results()` 生成器误用 `len()` 的问题
+
+### AI 防护增强
+
+- AI 分析完成后发送 HTML 邮件通知，含建议规则摘要与「应用规则」「忽略」操作链接
+- 新增 JWT 鉴权公开接口（10 分钟有效）：`/api/v1/ai-guard/incidents/actions/apply|dismiss`
+- 面板外网地址改为 **系统设置 → 显示设置** 配置（`panel_public_url`），首次访问自动从请求推断（含端口）
+- 分析记录页状态文案中文化（pending / analyzing / suggested / applied / failed / dismissed）
+
+### 规则与筛选
+
+- 站点筛选改为仅匹配**明确绑定站点**的规则（不含全局规则），与列表语义一致
+- 迁移遗留 `site_ids='null'` 文本由 schema patch 自动清理
+
+### 运维与部署
+
+- `docker-compose.yml` 调整为 redis + clickhouse + app 三服务
+- 面板 Nginx 反代补充 `Host $http_host` 与 `X-Forwarded-Port`，修复自动推断面板地址丢端口
+- `.env.example`、`docs/architecture.md`、`docs/upgrade.md`、`deploy/baota/README.md` 同步更新
+
+### 迁移指引（0.2.x MySQL → 0.3.0）
+
+在**已运行旧版四容器**的服务器上：
+
+```bash
+git pull origin main
+bash scripts/migrate-to-sqlite.sh    # 备份 MySQL → 迁移 SQLite/ClickHouse → 重建三容器栈
+```
+
+全新部署直接 `docker compose up -d --build`，无需迁移脚本。完整步骤见 `scripts/migrate-to-sqlite.sh` 头部注释与 `README.md`。
+
 ## [0.2.14] - 2026-07-20
 
 ### AI 智能助手

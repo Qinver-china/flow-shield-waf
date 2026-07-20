@@ -1,1 +1,3 @@
-# 增量依赖：新增/变更的包放这里，Docker 单独一层，避免重装 base
+# 可选：MySQL -> SQLite 一次性迁移脚本依赖
+aiomysql>=0.2.0
+pymysql>=1.1.0

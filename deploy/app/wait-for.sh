@@ -1,21 +1,8 @@
 #!/usr/bin/env bash
-# Wait for external MySQL / Redis (docker compose service names).
+# Wait for Redis (docker compose service name).
 set -euo pipefail
 
 source /etc/flowshield/env
-
-echo "[wait-for] waiting for MySQL at ${DB_HOST}..."
-for i in $(seq 1 90); do
-  if mysqladmin ping -h"${DB_HOST}" -u"${DB_USER}" -p"${DB_PASSWORD}" --silent 2>/dev/null; then
-    echo "[wait-for] MySQL ready"
-    break
-  fi
-  if [ "$i" -eq 90 ]; then
-    echo "[wait-for] MySQL timeout" >&2
-    exit 1
-  fi
-  sleep 1
-done
 
 echo "[wait-for] waiting for Redis..."
 for i in $(seq 1 60); do

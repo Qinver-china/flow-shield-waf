@@ -27,6 +27,55 @@ from app.constants.ratelimit_settings import DEFAULT_RATELIMIT_FAIL_OPEN
 from app.models import WafSetting
 
 
+def _default_port(scheme: str) -> int:
+    return 443 if scheme == "https" else 80
+
+
+def _host_has_port(host: str) -> bool:
+    if host.startswith("["):
+        return "]:" in host
+    return ":" in host
+
+
+def _append_port_if_needed(host: str, scheme: str, port: str | int | None) -> str:
+    if _host_has_port(host) or port is None:
+        return host
+    port_int = int(str(port).split(",")[0].strip())
+    if port_int == _default_port(scheme):
+        return host
+    return f"{host}:{port_int}"
+
+
+def infer_panel_public_url(request) -> str:
+    """Derive panel base URL from incoming HTTP request (no trailing slash)."""
+    scheme = request.url.scheme
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    if forwarded_proto:
+        scheme = forwarded_proto.split(",")[0].strip()
+
+    forwarded_port = request.headers.get("x-forwarded-port")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_host:
+        host = forwarded_host.split(",")[0].strip()
+        host = _append_port_if_needed(host, scheme, forwarded_port)
+        return f"{scheme}://{host}".rstrip("/")
+
+    host_header = request.headers.get("host")
+    if host_header:
+        host = host_header.split(",")[0].strip()
+        host = _append_port_if_needed(host, scheme, forwarded_port)
+        return f"{scheme}://{host}".rstrip("/")
+
+    return str(request.base_url).rstrip("/")
+
+
+async def get_panel_public_url(db: AsyncSession) -> str:
+    row = await get_or_create(db)
+    if row.panel_public_url:
+        return row.panel_public_url.rstrip("/")
+    return "http://127.0.0.1:9000"
+
+
 def normalize_fingerprint_dims(raw: str | None) -> list[str]:
     if not raw:
         return list(DEFAULT_CLEARANCE_FINGERPRINT_DIMS)

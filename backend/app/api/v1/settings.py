@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -176,10 +176,15 @@ async def update_captcha_footer_settings(
 
 @router.get("/display")
 async def get_display_settings(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
     row = await waf_settings.get_or_create(db)
+    if not row.panel_public_url:
+        row.panel_public_url = waf_settings.infer_panel_public_url(request)
+        await db.commit()
+        await db.refresh(row)
     return ok(DisplaySettingsOut.from_row(row).model_dump())
 
 
@@ -191,6 +196,7 @@ async def update_display_settings(
 ):
     row = await waf_settings.get_or_create(db)
     row.timezone = body.timezone
+    row.panel_public_url = body.panel_public_url
     await db.commit()
     await db.refresh(row)
     return ok(DisplaySettingsOut.from_row(row).model_dump())

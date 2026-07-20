@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.traffic_intel.store.alerts_mysql import AlertStore
+from app.services.traffic_intel.store.alerts_clickhouse import AlertStore
 from app.services.traffic_intel.types import AnomalyResult, TrafficIntelConfig
 
 log = logging.getLogger("waf.traffic_intel.actions")
@@ -23,7 +23,7 @@ class ActionHandler(ABC):
 
 
 class PersistAlertHandler(ActionHandler):
-    """Always record anomalies in MySQL."""
+    """Always record anomalies in ClickHouse."""
 
     def __init__(self, store: AlertStore | None = None):
         self._store = store or AlertStore()
@@ -34,7 +34,7 @@ class PersistAlertHandler(ActionHandler):
         anomaly: AnomalyResult,
         config: TrafficIntelConfig,
     ) -> None:
-        await self._store.create(db, anomaly)
+        await self._store.create(anomaly)
 
 
 class LogNotifyHandler(ActionHandler):

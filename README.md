@@ -74,10 +74,10 @@
 |----|------|
 | 拦截引擎 | OpenResty（Nginx + Lua） |
 | 管理后端 | Python FastAPI + SQLAlchemy 2.0 + Pydantic v2 |
-| 配置与计数 | MySQL 8 + Redis 7（默认 Unix Socket） |
+| 配置与计数 | SQLite + Redis 7（默认 Unix Socket） |
 | 日志存储 | ClickHouse 24 |
 | 前端面板 | Vue 3 + Vite + TypeScript + Ant Design Vue |
-| 部署 | Docker Compose（4 服务） |
+| 部署 | Docker Compose（3 服务 + SQLite 内嵌于 app） |
 
 ---
 
@@ -85,7 +85,7 @@
 
 ```
 flow-shield-waf/
-├── docker-compose.yml      # mysql + redis + clickhouse + app
+├── docker-compose.yml      # redis + clickhouse + app（SQLite 在 app 卷内）
 ├── .env.example            # 环境变量模板（部署前必改）
 ├── engine/                 # OpenResty WAF 引擎（Lua）
 ├── backend/                # FastAPI 管理后端 + Worker
@@ -97,6 +97,7 @@ flow-shield-waf/
 │   ├── baota/              # 宝塔一键部署
 │   └── smoke_test.sh       # 集成回归脚本
 ├── scripts/
+│   ├── migrate_mysql_to_sqlite.py  # MySQL 升级迁移（可选）
 │   └── fresh-start.sh      # 清空数据卷并重建（开发/测试用）
 └── docs/                   # 架构 / 规则 DSL / API 文档
 ```
@@ -125,7 +126,7 @@ cp .env.example .env
 
 | 变量 | 说明 |
 |------|------|
-| `MYSQL_ROOT_PASSWORD` / `MYSQL_PASSWORD` | 数据库密码 |
+| `DB_PATH` | SQLite 配置库路径（Docker 默认 `/data/waf.db`） |
 | `REDIS_PASSWORD` | Redis 密码 |
 | `JWT_SECRET` | JWT 签名密钥（≥ 16 位随机串） |
 | `WAF_CHALLENGE_SECRET` | 挑战 Cookie HMAC 密钥（≥ 16 位随机串） |
@@ -153,14 +154,13 @@ docker compose up -d --build
 docker compose ps
 ```
 
-编排为 **4 个容器**：
+编排为 **3 个容器**（SQLite 配置库挂载在 `app` 的 `waf_sqlite` 卷）：
 
 | 容器 | 说明 |
 |------|------|
-| `mysql` | MySQL 8，持久化业务配置 |
 | `redis` | Redis 7，规则缓存 / 限速计数 / 日志 Stream |
-| `clickhouse` | ClickHouse 24，防护日志存储与聚合 |
-| `app` | 合一镜像：后端 + Worker + WAF 引擎 + 管理面板（supervisord 管理） |
+| `clickhouse` | ClickHouse 24，防护日志、AI/预警/流量异常流水 |
+| `app` | 合一镜像：后端 + Worker + WAF 引擎 + 管理面板 + SQLite |
 
 `app` 容器内进程：
 
@@ -214,11 +214,11 @@ bash deploy/smoke_test.sh
   ├─ 读/写 ──► Redis（规则版本、限速计数、日志 Stream）
   │
   └─ 配置来源 ◄── app 容器
-                    ├─ FastAPI :8000（写 MySQL、发布 Redis 配置）
+                    ├─ FastAPI :8000（写 SQLite、发布 Redis 配置）
                     ├─ Worker（消费日志 → ClickHouse、预警）
                     ├─ Panel :9000（Vue 管理界面）
-                    └─ MySQL（站点、规则、用户等）
-                         ClickHouse（防护日志）
+                    └─ SQLite（站点、规则、用户、AI 对话）
+                         ClickHouse（防护日志与流水事件）
 ```
 
 **配置热更新**：规则/限速/黑白名单变更 → 写入 Redis 并递增版本号 → 引擎 worker 轮询加载，无需 reload。
@@ -261,7 +261,7 @@ docker compose down                  # 停止所有服务
 
 | 卷名 | 内容 |
 |------|------|
-| `flowshield-waf_mysql_data` | 业务数据库 |
+| `flowshield-waf_waf_sqlite` | SQLite 业务配置（`/data/waf.db`） |
 | `flowshield-waf_redis_data` | Redis 持久化 |
 | `flowshield-waf_clickhouse_data` | 防护日志 |
 | `flowshield-waf_engine_conf` | 引擎 per-site Nginx 配置 |
@@ -296,7 +296,7 @@ curl -fsS http://127.0.0.1/waf-health
 
 **说明：**
 
-- 仅需重建 `app` 镜像；MySQL / Redis / ClickHouse 数据卷自动保留
+- 仅需重建 `app` 镜像；Redis / ClickHouse / SQLite 数据卷自动保留
 - 数据库表结构变更由 backend 启动时的 schema patch **自动完成**，无需手工迁移
 - 规则与限速策略通过 Redis 热同步，更新期间代理可能短暂抖动约 10–30 秒
 - 更新后不要在生产环境修改 `JWT_SECRET`、`WAF_CHALLENGE_SECRET`，否则会导致登录与挑战失效

@@ -1,5 +1,5 @@
 # 流盾WAF 应用镜像：后端 + Worker + 引擎 + 面板（同一容器，supervisord 管理）
-# MySQL / Redis 使用官方镜像单独运行，见 docker-compose.yml
+# MySQL / Redis / ClickHouse 使用官方镜像单独运行，见 docker-compose.yml
 # syntax=docker/dockerfile:1
 
 # ---- 1) 构建前端 ----
@@ -26,7 +26,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_INDEX_URL=${PIP_INDEX_URL} \
     PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
 
-RUN apk add --no-cache python3 py3-pip nginx supervisor curl mysql-client redis libjpeg-turbo tzdata
+RUN apk add --no-cache python3 py3-pip nginx supervisor curl redis libjpeg-turbo tzdata
 
 # 后端：分层安装 Python 依赖——base 层缓存稳定包，extra 层仅装新增包
 WORKDIR /app/backend

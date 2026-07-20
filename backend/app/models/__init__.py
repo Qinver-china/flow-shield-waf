@@ -1,7 +1,6 @@
 from app.models.ai_guard import (
     AiGuardChatMessage,
     AiGuardChatSession,
-    AiGuardIncident,
     AiGuardPolicy,
     AiGuardSetting,
 )
@@ -14,10 +13,9 @@ from app.models.ip_group import IpGroup
 from app.models.ip_list import IpList
 from app.models.rate_limit import RateLimit
 from app.models.rule import Rule
-from app.models.rule_suggestion import RuleSuggestion
 from app.models.site import Site
-from app.models.notification import AlertNotificationLog, AlertPolicy, NotificationChannel
-from app.models.traffic_intel import TrafficAlert, TrafficBaseline
+from app.models.notification import AlertPolicy, NotificationChannel
+from app.models.traffic_intel import TrafficBaseline
 from app.models.user import User
 from app.models.waf_setting import WafSetting
 
@@ -34,15 +32,11 @@ __all__ = [
     "Exception_",
     "RateLimit",
     "WafSetting",
-    "RuleSuggestion",
     "TrafficBaseline",
-    "TrafficAlert",
     "NotificationChannel",
     "AlertPolicy",
-    "AlertNotificationLog",
     "AiGuardSetting",
     "AiGuardPolicy",
-    "AiGuardIncident",
     "AiGuardChatSession",
     "AiGuardChatMessage",
 ]

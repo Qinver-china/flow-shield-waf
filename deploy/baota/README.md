@@ -28,7 +28,7 @@ cd flow-shield-waf
 
 # 2. 生成配置并修改密码/密钥
 cp .env.example .env
-vi .env   # 必改：MYSQL/REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET、WAF_ADMIN_PASSWORD
+vi .env   # 必改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET、WAF_ADMIN_PASSWORD
 
 # 3. 一键启动
 bash deploy/baota/install.sh
@@ -40,7 +40,7 @@ bash deploy/baota/install.sh
 docker compose up -d --build
 ```
 
-将启动 **4 个容器**：`mysql`、`redis`、`clickhouse`、`app`（后端 + Worker + 引擎 + 面板）。
+将启动 **3 个容器**：`redis`、`clickhouse`、`app`（后端 + Worker + 引擎 + 面板；SQLite 配置库位于 `waf_sqlite` 卷 `/data/waf.db`）。
 
 ## 四、访问
 
@@ -100,19 +100,20 @@ docker compose down               # 停止（勿加 -v，否则会删数据卷�
 
 | 数据卷 | 内容 |
 |--------|------|
-| `flowshield-waf_mysql_data` | 业务配置（站点、规则、用户） |
+| `flowshield-waf_waf_sqlite` | SQLite 业务配置（`/data/waf.db`） |
 | `flowshield-waf_redis_data` | Redis 持久化 |
-| `flowshield-waf_clickhouse_data` | 防护日志 |
+| `flowshield-waf_clickhouse_data` | 防护日志与流水事件 |
 | `flowshield-waf_engine_conf` | 引擎 per-site Nginx 配置 |
 | `flowshield-waf_engine_certs` | SSL 证书（容器内路径 `/data/engine/certs/`） |
 
 备份示例：
 
 ```bash
-# MySQL 逻辑备份
-docker compose exec -T mysql mysqldump -uwaf -p<密码> waf > backup_$(date +%Y%m%d).sql
+# SQLite 配置库
+docker compose exec -T app cp /data/waf.db /tmp/waf_backup_$(date +%Y%m%d).db
+docker cp flowshield-waf-app:/tmp/waf_backup_$(date +%Y%m%d).db ./
 
 # 数据卷打包
-docker run --rm -v flowshield-waf_mysql_data:/data -v $PWD:/backup alpine \
-  tar czf /backup/mysql_data_$(date +%Y%m%d).tgz /data
+docker run --rm -v flowshield-waf_waf_sqlite:/data -v $PWD:/backup alpine \
+  tar czf /backup/waf_sqlite_$(date +%Y%m%d).tgz /data
 ```

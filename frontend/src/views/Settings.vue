@@ -103,6 +103,15 @@
                 后台列表、日志、仪表盘等时间将按此时区显示。默认使用中国标准时间（上海，UTC+8）。
               </div>
             </a-form-item>
+            <a-form-item label="外网可访问面板地址" required>
+              <a-input
+                v-model:value="displayForm.panel_public_url"
+                placeholder="https://waf.example.com:9000"
+              />
+              <div class="hint">
+                用于 AI 分析邮件中的「应用规则 / 忽略」链接，请勿带尾部斜杠。首次打开本页时会根据当前访问地址自动填入，可手动修改。
+              </div>
+            </a-form-item>
             <a-form-item>
               <a-button type="primary" :loading="displaySaving" @click="saveDisplay">保存</a-button>
             </a-form-item>
@@ -491,9 +500,11 @@ const debugForm = reactive({
 const displayForm = reactive<{
   timezone: string;
   timezone_options: TimezoneOption[];
+  panel_public_url: string;
 }>({
   timezone: "Asia/Shanghai",
   timezone_options: [],
+  panel_public_url: "",
 });
 
 interface ResponsePageForm {
@@ -658,6 +669,7 @@ async function loadDisplay() {
   }
   displayForm.timezone = appSettings.timezone;
   displayForm.timezone_options = appSettings.timezoneOptions;
+  displayForm.panel_public_url = appSettings.panelPublicUrl;
 }
 
 async function loadBlockPage() {
@@ -787,12 +799,21 @@ async function saveDebug() {
 }
 
 async function saveDisplay() {
+  const url = displayForm.panel_public_url.trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(url)) {
+    message.warning("面板地址必须以 http:// 或 https:// 开头");
+    return;
+  }
   displaySaving.value = true;
   try {
-    await appSettings.updateTimezone(displayForm.timezone);
+    await appSettings.updateDisplay({
+      timezone: displayForm.timezone,
+      panel_public_url: url,
+    });
     displayForm.timezone = appSettings.timezone;
     displayForm.timezone_options = appSettings.timezoneOptions;
-    message.success("显示时区已保存");
+    displayForm.panel_public_url = appSettings.panelPublicUrl;
+    message.success("显示设置已保存");
   } finally {
     displaySaving.value = false;
   }

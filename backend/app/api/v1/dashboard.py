@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -9,8 +10,8 @@ from app.api.deps import get_current_user
 from app.core.db import get_db
 from app.core.redis import get_redis
 from app.models import Certificate, Exception_, IpList, RateLimit, Rule, Site, User
-from app.models.ai_guard import AiGuardIncident
-from app.models.notification import AlertNotificationLog
+from app.services.analytics.alert_log_store import AlertLogStore
+from app.services.analytics.incident_store import IncidentStore
 from app.schemas.common import ok
 from app.schemas.dashboard import (
     DashboardFeedItemOut,
@@ -23,6 +24,7 @@ from app.services.logging.query_clickhouse import stats_overview
 from app.services.rule_sync import VERSION_KEY
 
 router = APIRouter()
+log = logging.getLogger("waf.dashboard")
 
 
 async def _count_enabled(db: AsyncSession, model, extra=None) -> dict[str, int]:
@@ -80,11 +82,11 @@ async def health(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    mysql_status = "ok"
+    database_status = "ok"
     try:
         await db.execute(text("SELECT 1"))
     except Exception:  # noqa: BLE001
-        mysql_status = "error"
+        database_status = "error"
 
     redis_status = "ok"
     rule_sync = RuleSyncHealthOut(status="ok")
@@ -110,7 +112,8 @@ async def health(
 
     return ok(
         DashboardHealthOut(
-            mysql=mysql_status,
+            database=database_status,
+            mysql=database_status,
             redis=redis_status,
             clickhouse=clickhouse_status,
             rule_sync=rule_sync,
@@ -161,13 +164,7 @@ async def feed(
 ):
     items: list[DashboardFeedItemOut] = []
 
-    alert_rows = (
-        await db.execute(
-            select(AlertNotificationLog)
-            .order_by(AlertNotificationLog.id.desc())
-            .limit(limit)
-        )
-    ).scalars().all()
+    alert_rows = await AlertLogStore().list_recent(limit=limit)
     for row in alert_rows:
         items.append(
             DashboardFeedItemOut(
@@ -211,13 +208,11 @@ async def feed(
     except Exception:  # noqa: BLE001
         pass
 
-    pending_ai = (
-        await db.execute(
-            select(func.count(AiGuardIncident.id)).where(
-                AiGuardIncident.status.in_(["suggested", "pending"])
-            )
-        )
-    ).scalar_one()
+    pending_ai = 0
+    try:
+        pending_ai = await IncidentStore().count_by_status(["suggested", "pending"])
+    except Exception:  # noqa: BLE001
+        log.exception("dashboard feed: pending AI incident count failed")
 
     items.sort(key=lambda x: x.created_at, reverse=True)
     return ok(

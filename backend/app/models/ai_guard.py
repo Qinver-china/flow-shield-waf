@@ -52,25 +52,6 @@ class AiGuardPolicy(Base, TimestampMixin):
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
-class AiGuardIncident(Base, TimestampMixin):
-    """One defense analysis run and its outcome."""
-
-    __tablename__ = "ai_guard_incident"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    policy_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
-    site_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
-    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
-    trigger_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    log_sample_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    analysis_report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    suggested_rule: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    applied_rule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    apply_mode: Mapped[str | None] = mapped_column(String(24), nullable=True)
-    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
-    notification_log: Mapped[list | None] = mapped_column(JSON, nullable=True)
-
-
 class AiGuardChatSession(Base, TimestampMixin):
     __tablename__ = "ai_guard_chat_session"
 

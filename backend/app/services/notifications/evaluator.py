@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.alert_conditions import CONDITION_TYPE_MAP
 from app.core.redis import get_redis
-from app.models.notification import AlertNotificationLog, AlertPolicy, NotificationChannel
+from app.models.notification import AlertPolicy, NotificationChannel
+from app.services.analytics.alert_log_store import AlertLogStore
 from app.services.notifications.channels import send_via_channel
 from app.services.traffic_intel.constants import REDIS_SNAPSHOT_KEY
 from app.services.traffic_intel.detector import AnomalyDetector
@@ -25,6 +26,7 @@ log = logging.getLogger("waf.notify.evaluator")
 
 TRAFFIC_SNAPSHOT_KEY = REDIS_SNAPSHOT_KEY
 _LIVE_WINDOW_THRESHOLD_SEC = 60
+_alert_logs = AlertLogStore()
 
 
 class AlertPolicyEvaluator:
@@ -282,14 +284,12 @@ class AlertPolicyEvaluator:
         channel_ids = policy.channel_ids or []
         if not channel_ids:
             log.warning("policy %s triggered but no channels configured", policy.id)
-            db.add(
-                AlertNotificationLog(
-                    policy_id=policy.id,
-                    channel_id=0,
-                    status="skipped",
-                    message=message,
-                    detail="no notification channels configured",
-                )
+            await _alert_logs.insert(
+                policy_id=policy.id,
+                channel_id=0,
+                status="skipped",
+                message=message,
+                detail="no notification channels configured",
             )
             return False
         channels = (
@@ -301,14 +301,12 @@ class AlertPolicyEvaluator:
             )
         ).scalars().all()
         if not channels:
-            db.add(
-                AlertNotificationLog(
-                    policy_id=policy.id,
-                    channel_id=0,
-                    status="skipped",
-                    message=message,
-                    detail="no enabled notification channels",
-                )
+            await _alert_logs.insert(
+                policy_id=policy.id,
+                channel_id=0,
+                status="skipped",
+                message=message,
+                detail="no enabled notification channels",
             )
             return False
         subject = f"流盾WAF 预警：{policy.name}"
@@ -316,25 +314,21 @@ class AlertPolicyEvaluator:
         for ch in channels:
             try:
                 await send_via_channel(ch, subject=subject, body=message)
-                db.add(
-                    AlertNotificationLog(
-                        policy_id=policy.id,
-                        channel_id=ch.id,
-                        status="sent",
-                        message=message,
-                    )
+                await _alert_logs.insert(
+                    policy_id=policy.id,
+                    channel_id=ch.id,
+                    status="sent",
+                    message=message,
                 )
                 any_ok = True
             except Exception as exc:  # noqa: BLE001
                 log.exception("notify policy=%s channel=%s failed", policy.id, ch.id)
-                db.add(
-                    AlertNotificationLog(
-                        policy_id=policy.id,
-                        channel_id=ch.id,
-                        status="failed",
-                        message=message,
-                        detail=str(exc),
-                    )
+                await _alert_logs.insert(
+                    policy_id=policy.id,
+                    channel_id=ch.id,
+                    status="failed",
+                    message=message,
+                    detail=str(exc),
                 )
         return any_ok
 
@@ -343,30 +337,7 @@ async def latest_dispatch_status_by_policy(
     db: AsyncSession,
     policy_ids: list[int],
 ) -> dict[int, str]:
-    if not policy_ids:
-        return {}
-    from sqlalchemy import func
-
-    subq = (
-        select(
-            AlertNotificationLog.policy_id,
-            AlertNotificationLog.status,
-            func.row_number()
-            .over(
-                partition_by=AlertNotificationLog.policy_id,
-                order_by=AlertNotificationLog.id.desc(),
-            )
-            .label("rn"),
-        )
-        .where(AlertNotificationLog.policy_id.in_(policy_ids))
-        .subquery()
-    )
-    rows = (
-        await db.execute(
-            select(subq.c.policy_id, subq.c.status).where(subq.c.rn == 1)
-        )
-    ).all()
-    return {policy_id: status for policy_id, status in rows}
+    return await _alert_logs.latest_status_by_policy(policy_ids)
 
 
 async def run_alert_policies(db: AsyncSession) -> int:

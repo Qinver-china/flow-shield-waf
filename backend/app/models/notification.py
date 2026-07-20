@@ -31,16 +31,3 @@ class AlertPolicy(Base, TimestampMixin):
     cooldown_sec: Mapped[int] = mapped_column(Integer, default=300)
     last_fired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-
-class AlertNotificationLog(Base, TimestampMixin):
-    """Delivery history for alert policies."""
-
-    __tablename__ = "alert_notification_log"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    policy_id: Mapped[int] = mapped_column(Integer, index=True)
-    channel_id: Mapped[int] = mapped_column(Integer, index=True)
-    status: Mapped[str] = mapped_column(String(16), default="sent")
-    message: Mapped[str] = mapped_column(Text)
-    detail: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -15,11 +15,13 @@
       <div class="stat-card-main">
         <div class="stat-card-value" :style="valueColor ? { color: valueColor } : undefined">
           {{ value }}
+        </div>
+        <div class="stat-card-label">
+          {{ label }}
           <span v-if="delta !== undefined" class="stat-card-delta" :class="deltaClass">
             {{ deltaPrefix }}{{ Math.abs(delta).toFixed(1) }}%
           </span>
         </div>
-        <div class="stat-card-label">{{ label }}</div>
       </div>
     </div>
     <div v-if="sub" class="stat-card-sub">{{ sub }}</div>
@@ -150,6 +152,10 @@ const deltaPrefix = computed(() => {
 
 .stat-card-label {
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
   font-size: 13px;
   color: var(--fs-text-secondary);
 }

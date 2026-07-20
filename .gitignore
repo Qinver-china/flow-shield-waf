@@ -21,6 +21,7 @@ dist/
 
 # data volumes (if bind-mounted locally)
 data/
+backup/
 engine/conf.d/*.conf
 !engine/conf.d/.gitkeep
 

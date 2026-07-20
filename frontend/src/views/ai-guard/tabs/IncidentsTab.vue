@@ -10,7 +10,7 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'">
-          <a-tag :color="statusColor(record.status)">{{ record.status }}</a-tag>
+          <a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'created_at'">
           {{ formatDateTime(record.created_at) }}
@@ -98,7 +98,9 @@ const columns = [
 const summaryItems = computed(() => {
   const d = detail.value;
   if (!d) return [];
-  const items = [{ label: "状态", value: d.status, tag: true, tagColor: statusColor(d.status) }];
+  const items = [
+    { label: "状态", value: statusLabel(d.status), tag: true, tagColor: statusColor(d.status) },
+  ];
   if (d.analysis_report?.summary) {
     items.push({ label: "摘要", value: d.analysis_report.summary });
   }
@@ -111,8 +113,22 @@ const summaryItems = computed(() => {
   return items;
 });
 
+const INCIDENT_STATUS_LABELS: Record<string, string> = {
+  pending: "待处理",
+  analyzing: "分析中",
+  suggested: "待应用",
+  applied: "已应用",
+  failed: "失败",
+  dismissed: "已忽略",
+};
+
+function statusLabel(s: string) {
+  return INCIDENT_STATUS_LABELS[s] || s;
+}
+
 function statusColor(s: string) {
   const map: Record<string, string> = {
+    pending: "default",
     suggested: "orange",
     applied: "green",
     failed: "red",

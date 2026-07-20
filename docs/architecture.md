@@ -4,14 +4,13 @@
 
 流盾WAF（Flow Shield WAF）是一款面向网站、业务接口和 Web 应用的智能流量防护系统，基于 OpenResty（Nginx + Lua）构建的反向代理型 WAF，核心理念为「识别 → 拦截 → 清洗 → 守护」。
 
-部署采用 **4 个 Docker 容器**：
+部署采用 **3 个 Docker 容器**（SQLite 配置库内嵌于 `app` 卷）：
 
 | 容器 | 技术栈 | 职责 |
 | --- | --- | --- |
-| `mysql` | MySQL 8 官方镜像 | 持久化业务配置（站点、规则、用户等） |
 | `redis` | Redis 7 官方镜像 | 规则缓存、限速计数、日志 Stream |
-| `clickhouse` | ClickHouse 24 | 访问/防护日志存储与聚合查询 |
-| `app` | 自构建镜像（supervisord） | 后端 API、Worker、WAF 引擎、管理面板 |
+| `clickhouse` | ClickHouse 24 | 访问/防护日志、AI 分析/预警/流量异常流水 |
+| `app` | 自构建镜像（supervisord） | 后端 API、Worker、WAF 引擎、管理面板、SQLite |
 
 `app` 容器内由 supervisord 管理四个进程：
 
@@ -40,7 +39,7 @@ client ──> OpenResty access 阶段 (waf/access.lua)
 
 ## 配置下发与热更新
 
-1. 管理员在后台增删改配置 → backend 写入 MySQL。
+1. 管理员在后台增删改配置 → backend 写入 SQLite。
 2. backend `services/rule_sync.py` 将全量配置序列化为 JSON 写入 Redis，并递增版本号。
 3. engine 每个 worker 周期性对比版本号（`waf/sync.lua`），变化时重新加载并索引到 worker 本地内存。
 4. 站点级 Nginx server 配置由 backend `services/nginx_conf.py` 生成到共享卷，并通过 Redis key 通知 engine 执行 `openresty -s reload`（`waf/reloader.lua`）。

@@ -4,11 +4,7 @@ set -euo pipefail
 mkdir -p /data/engine/conf.d /data/engine/certs /var/log/supervisor /etc/flowshield
 
 cat >/etc/flowshield/env <<EOF
-export DB_HOST='${DB_HOST:-mysql}'
-export DB_PORT='${DB_PORT:-3306}'
-export DB_NAME='${DB_NAME:-waf}'
-export DB_USER='${DB_USER:-waf}'
-export DB_PASSWORD='${DB_PASSWORD:-waf}'
+export DB_PATH='${DB_PATH:-/data/waf.db}'
 export REDIS_HOST='${REDIS_HOST:-redis}'
 export REDIS_PORT='${REDIS_PORT:-6379}'
 export REDIS_SOCKET_PATH='${REDIS_SOCKET_PATH:-}'

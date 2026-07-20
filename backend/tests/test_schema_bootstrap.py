@@ -1,19 +1,8 @@
-from sqlalchemy.exc import OperationalError
+from pathlib import Path
 
-from app.services.schema_bootstrap import _is_retryable_schema_error
-
-
-def _operational_error(errno: int) -> OperationalError:
-    return OperationalError("stmt", {}, Exception(errno, "mysql error"))
+from app.core.config import settings
+from app.services import schema_bootstrap
 
 
-def test_retryable_schema_error_includes_concurrent_ddl():
-    assert _is_retryable_schema_error(_operational_error(1684)) is True
-
-
-def test_retryable_schema_error_includes_lock_wait_timeout():
-    assert _is_retryable_schema_error(_operational_error(1205)) is True
-
-
-def test_retryable_schema_error_ignores_unknown_codes():
-    assert _is_retryable_schema_error(_operational_error(1062)) is False
+def test_bootstrap_lock_path_follows_db_path():
+    assert schema_bootstrap._LOCK_PATH == Path(settings.db_path).with_suffix(".bootstrap.lock")

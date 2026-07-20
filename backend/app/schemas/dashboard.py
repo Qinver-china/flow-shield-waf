@@ -10,10 +10,11 @@ class RuleSyncHealthOut(BaseModel):
 
 
 class DashboardHealthOut(BaseModel):
-    mysql: str
+    database: str
     redis: str
     clickhouse: str
     rule_sync: RuleSyncHealthOut
+    mysql: str | None = None  # deprecated alias for database
 
 
 class DashboardFeedItemOut(BaseModel):

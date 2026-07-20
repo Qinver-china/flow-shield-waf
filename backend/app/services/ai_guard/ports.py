@@ -424,26 +424,30 @@ class LogSampler:
         where = " AND ".join(clauses)
         client = get_clickhouse()
 
-        blocked_rows = client.query(
-            f"SELECT request_id, client_ip, method, uri, domain, blocked, "
-            f"rule_name, mode, geo_country, ua_family, log_type "
-            f"FROM waf_logs WHERE {where} AND blocked = 1 "
-            f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
-            parameters=params,
-        ).named_results()
+        blocked_rows = list(
+            client.query(
+                f"SELECT request_id, client_ip, method, uri, domain, blocked, "
+                f"rule_name, mode, geo_country, ua_family, log_type "
+                f"FROM waf_logs WHERE {where} AND blocked = 1 "
+                f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
+                parameters=params,
+            ).named_results()
+        )
 
         blocked_count = len(blocked_rows)
         remaining = max(0, max_rows - blocked_count)
         passed_rows: list[dict] = []
         if remaining > 0:
             params["limit"] = remaining
-            passed_rows = client.query(
-                f"SELECT request_id, client_ip, method, uri, domain, blocked, "
-                f"rule_name, mode, geo_country, ua_family, log_type "
-                f"FROM waf_logs WHERE {where} AND blocked = 0 "
-                f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
-                parameters=params,
-            ).named_results()
+            passed_rows = list(
+                client.query(
+                    f"SELECT request_id, client_ip, method, uri, domain, blocked, "
+                    f"rule_name, mode, geo_country, ua_family, log_type "
+                    f"FROM waf_logs WHERE {where} AND blocked = 0 "
+                    f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
+                    parameters=params,
+                ).named_results()
+            )
 
         rows = [dict(r) for r in blocked_rows] + [dict(r) for r in passed_rows]
         meta = self._aggregate(rows, window_min)
@@ -477,6 +481,7 @@ class AiNotifier:
         channel_ids: list[int],
         subject: str,
         body: str,
+        html_body: str | None = None,
     ) -> list[dict]:
         if not channel_ids:
             return []
@@ -492,7 +497,12 @@ class AiNotifier:
         for ch in channels:
             entry = {"channel_id": ch.id, "status": "failed", "at": datetime.utcnow().isoformat()}
             try:
-                await send_via_channel(ch, subject=subject, body=body)
+                if ch.channel_type == "email":
+                    await send_via_channel(
+                        ch, subject=subject, body=body, html_body=html_body
+                    )
+                else:
+                    await send_via_channel(ch, subject=subject, body=body)
                 entry["status"] = "sent"
             except Exception as exc:  # noqa: BLE001
                 entry["detail"] = str(exc)

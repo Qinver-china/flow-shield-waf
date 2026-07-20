@@ -1,5 +1,4 @@
-# 流盾WAF (Flow Shield WAF) - 三容器编排
-# mysql + redis（官方镜像）+ app（后端/Worker/引擎/面板合一）
+# 流盾WAF (Flow Shield WAF) - redis + clickhouse + app（后端/Worker/引擎/面板合一）
 name: flowshield-waf
 
 x-logging: &default-logging
@@ -9,26 +8,6 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  mysql:
-    image: mysql:8.0
-    restart: unless-stopped
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    logging: *default-logging
-    networks:
-      - waf_net
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -99,11 +78,7 @@ services:
     container_name: flowshield-waf-app
     restart: unless-stopped
     environment:
-      DB_HOST: mysql
-      DB_PORT: "3306"
-      DB_NAME: ${MYSQL_DATABASE}
-      DB_USER: ${MYSQL_USER}
-      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_PATH: /data/waf.db
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_SOCKET_PATH: /var/run/redis/redis.sock
@@ -140,9 +115,8 @@ services:
       - engine_certs:/data/engine/certs
       - ./slide_captcha:/data/slide_captcha
       - redis_run:/var/run/redis
+      - waf_sqlite:/data
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
       clickhouse:
@@ -164,7 +138,7 @@ networks:
     driver: bridge
 
 volumes:
-  mysql_data:
+  waf_sqlite:
   redis_data:
   redis_run:
   clickhouse_data:

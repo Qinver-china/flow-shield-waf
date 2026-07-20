@@ -6,13 +6,13 @@ import logging
 
 from sqlalchemy import text
 
-from app.core.db import engine
-
 log = logging.getLogger("waf.schema")
 
 
 async def apply_schema_patches(conn=None) -> None:
     if conn is None:
+        from app.core.db import engine
+
         async with engine.begin() as connection:
             await _apply_schema_patches(connection)
         return
@@ -25,6 +25,8 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_site_extra_domains(conn)
     await _ensure_resource_block_page_columns(conn)
     await _drop_legacy_bot_columns(conn)
+    await _normalize_legacy_site_ids_null(conn)
+    await _ensure_waf_setting_panel_public_url(conn)
 
 
 async def _ensure_resource_block_page_columns(conn) -> None:
@@ -33,13 +35,13 @@ async def _ensure_resource_block_page_columns(conn) -> None:
             await conn.execute(
                 text(
                     f"ALTER TABLE {table} "
-                    "ADD COLUMN custom_block_page_enabled TINYINT(1) NOT NULL DEFAULT 0"
+                    "ADD COLUMN custom_block_page_enabled BOOLEAN NOT NULL DEFAULT 0"
                 )
             )
             log.info("schema patch applied: %s.custom_block_page_enabled", table)
         if not await _column_exists(conn, table, "block_page_status_code"):
             await conn.execute(
-                text(f"ALTER TABLE {table} ADD COLUMN block_page_status_code INT NULL")
+                text(f"ALTER TABLE {table} ADD COLUMN block_page_status_code INTEGER NULL")
             )
             log.info("schema patch applied: %s.block_page_status_code", table)
         if not await _column_exists(conn, table, "block_page_html"):
@@ -48,14 +50,8 @@ async def _ensure_resource_block_page_columns(conn) -> None:
 
 
 async def _column_exists(conn, table: str, column: str) -> bool:
-    result = await conn.execute(
-        text(
-            "SELECT COUNT(*) FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            f"AND TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}'"
-        )
-    )
-    return int(result.scalar_one()) > 0
+    result = await conn.execute(text(f"PRAGMA table_info({table})"))
+    return any(row[1] == column for row in result.fetchall())
 
 
 async def _drop_legacy_bot_columns(conn) -> None:
@@ -66,33 +62,23 @@ async def _drop_legacy_bot_columns(conn) -> None:
     ):
         if not await _column_exists(conn, table, column):
             continue
-        await conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
-        log.info("schema patch applied: dropped %s.%s", table, column)
+        # SQLite lacks DROP COLUMN on older versions; recreate not needed if absent on fresh installs.
+        try:
+            await conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+            log.info("schema patch applied: dropped %s.%s", table, column)
+        except Exception:  # noqa: BLE001
+            log.warning("could not drop legacy column %s.%s", table, column)
 
 
 async def _ensure_site_extra_domains(conn) -> None:
-    result = await conn.execute(
-        text(
-            "SELECT COUNT(*) FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            "AND TABLE_NAME = 'site' AND COLUMN_NAME = 'extra_domains'"
-        )
-    )
-    if int(result.scalar_one()) > 0:
+    if await _column_exists(conn, "site", "extra_domains"):
         return
     await conn.execute(text("ALTER TABLE site ADD COLUMN extra_domains TEXT NULL"))
     log.info("schema patch applied: site.extra_domains")
 
 
 async def _ensure_waf_setting_timezone(conn) -> None:
-    result = await conn.execute(
-        text(
-            "SELECT COUNT(*) FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            "AND TABLE_NAME = 'waf_setting' AND COLUMN_NAME = 'timezone'"
-        )
-    )
-    if int(result.scalar_one()) > 0:
+    if await _column_exists(conn, "waf_setting", "timezone"):
         return
     await conn.execute(
         text(
@@ -104,20 +90,50 @@ async def _ensure_waf_setting_timezone(conn) -> None:
 
 
 async def _ensure_waf_setting_ratelimit_fail_open(conn) -> None:
-    result = await conn.execute(
-        text(
-            "SELECT COUNT(*) FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            "AND TABLE_NAME = 'waf_setting' AND COLUMN_NAME = 'ratelimit_fail_open'"
-        )
-    )
-    if int(result.scalar_one()) > 0:
+    if await _column_exists(conn, "waf_setting", "ratelimit_fail_open"):
         return
     await conn.execute(
         text(
             "ALTER TABLE waf_setting "
-            "ADD COLUMN ratelimit_fail_open TINYINT(1) NOT NULL DEFAULT 1"
+            "ADD COLUMN ratelimit_fail_open BOOLEAN NOT NULL DEFAULT 1"
         )
     )
     log.info("schema patch applied: waf_setting.ratelimit_fail_open")
 
+
+async def _normalize_legacy_site_ids_null(conn) -> None:
+    """MySQL→SQLite migration may store JSON null as literal text 'null'."""
+    for table in ("rule", "rate_limit", "exception", "ip_list", "bot_profile"):
+        if not await _table_exists(conn, table):
+            continue
+        if not await _column_exists(conn, table, "site_ids"):
+            continue
+        result = await conn.execute(
+            text(
+                f"UPDATE {table} SET site_ids = NULL "
+                "WHERE site_ids IN ('null', '[]', '')"
+            )
+        )
+        if result.rowcount:
+            log.info(
+                "schema patch applied: normalized %s.site_ids (%s rows)",
+                table,
+                result.rowcount,
+            )
+
+
+async def _table_exists(conn, table: str) -> bool:
+    result = await conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"),
+        {"name": table},
+    )
+    return result.first() is not None
+
+
+async def _ensure_waf_setting_panel_public_url(conn) -> None:
+    if await _column_exists(conn, "waf_setting", "panel_public_url"):
+        return
+    await conn.execute(
+        text("ALTER TABLE waf_setting ADD COLUMN panel_public_url VARCHAR(512) NULL")
+    )
+    log.info("schema patch applied: waf_setting.panel_public_url")

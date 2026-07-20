@@ -22,7 +22,7 @@ from app.services.traffic_intel.constants import (
 )
 from app.services.traffic_intel.detector import AnomalyDetector
 from app.services.traffic_intel.ingest import SnapshotIngestor
-from app.services.traffic_intel.store.alerts_mysql import AlertStore
+from app.services.traffic_intel.store.alerts_clickhouse import AlertStore
 from app.services.traffic_intel.redis_baselines import publish_baselines_to_redis
 from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.types import TrafficIntelConfig
@@ -101,7 +101,6 @@ class TrafficIntelPipeline:
         kept = []
         for a in anomalies:
             recent = await self._alerts.recent_open_count(
-                db,
                 site_id=a.site_id,
                 window_sec=a.window_sec,
                 within_sec=self.config.alert_cooldown_sec,

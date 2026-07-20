@@ -100,3 +100,56 @@ ENGINE = MergeTree
 ORDER BY (site_id, window_sec, ts)
 TTL ts + INTERVAL 90 DAY
 SETTINGS allow_nullable_key = 1;
+
+CREATE TABLE IF NOT EXISTS waf.ai_guard_incidents (
+  incident_id UInt64,
+  version UInt64,
+  policy_id Nullable(UInt32),
+  site_id Nullable(UInt32),
+  status LowCardinality(String),
+  trigger_snapshot String DEFAULT '{}',
+  log_sample_meta String DEFAULT '{}',
+  analysis_report String DEFAULT '{}',
+  suggested_rule String DEFAULT '{}',
+  applied_rule_id Nullable(UInt32),
+  apply_mode Nullable(String),
+  error_detail Nullable(String),
+  notification_log String DEFAULT '[]',
+  created_at DateTime64(3),
+  updated_at DateTime64(3)
+)
+ENGINE = ReplacingMergeTree(version)
+ORDER BY (incident_id)
+TTL toDateTime(updated_at) + INTERVAL 180 DAY
+SETTINGS allow_nullable_key = 1;
+
+CREATE TABLE IF NOT EXISTS waf.alert_notification_logs (
+  id UInt64,
+  policy_id UInt32,
+  channel_id UInt32,
+  status LowCardinality(String),
+  message String,
+  detail Nullable(String),
+  created_at DateTime64(3)
+)
+ENGINE = MergeTree
+ORDER BY (created_at, id)
+TTL toDateTime(created_at) + INTERVAL 90 DAY;
+
+CREATE TABLE IF NOT EXISTS waf.traffic_alerts (
+  id UInt64,
+  site_id Nullable(UInt32),
+  window_sec UInt32,
+  current_requests UInt32,
+  baseline_avg Float64,
+  deviation_ratio Float64,
+  severity LowCardinality(String),
+  status LowCardinality(String),
+  message String,
+  detected_at DateTime64(3),
+  created_at DateTime64(3)
+)
+ENGINE = MergeTree
+ORDER BY (detected_at, id)
+TTL toDateTime(detected_at) + INTERVAL 90 DAY
+SETTINGS allow_nullable_key = 1;

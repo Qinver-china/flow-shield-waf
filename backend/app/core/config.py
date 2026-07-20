@@ -21,7 +21,10 @@ _INSECURE_ADMIN_PASSWORDS = frozenset({"admin888"})
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # database
+    # database (SQLite embedded config store)
+    db_path: str = "/data/waf.db"
+
+    # legacy mysql settings (migration script only)
     db_host: str = "mysql"
     db_port: int = 3306
     db_name: str = "waf"
@@ -71,6 +74,8 @@ class Settings(BaseSettings):
     engine_conf_dir: str = "/data/engine/conf.d"
     engine_cert_dir: str = "/data/engine/certs"
     engine_reload_url: str = "http://engine/.waf/reload"
+    # Public panel URL for links in emails (no trailing slash).
+    # Configured in system settings (waf_setting.panel_public_url).
     # Docker host gateway when origin_host is localhost (container localhost != host).
     waf_origin_host_gateway: str = "172.17.0.1"
     # slide captcha static assets (backgrounds + tiles); Docker 默认 /data/slide_captcha
@@ -78,6 +83,10 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        return f"sqlite+aiosqlite:///{self.db_path}"
+
+    @property
+    def mysql_database_url(self) -> str:
         return (
             f"mysql+aiomysql://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"

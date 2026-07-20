@@ -30,15 +30,15 @@ cd /path/to/flow-shield-waf
 # 备份 .env
 cp .env .env.bak.$(date +%Y%m%d)
 
-# 备份 MySQL（示例）
-docker compose exec -T mysql mysqldump -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" "${MYSQL_DATABASE}" \
-  > backup_waf_$(date +%Y%m%d).sql
+# 备份 SQLite 配置库
+docker compose exec -T app cp /data/waf.db /tmp/waf_backup_$(date +%Y%m%d).db
+docker cp flowshield-waf-app:/tmp/waf_backup_$(date +%Y%m%d).db ./
 
 # 或打包数据卷（可选）
 docker run --rm \
-  -v flowshield-waf_mysql_data:/data \
+  -v flowshield-waf_waf_sqlite:/data \
   -v "$(pwd)":/backup alpine \
-  tar czf /backup/mysql_data_$(date +%Y%m%d).tgz /data
+  tar czf /backup/waf_sqlite_$(date +%Y%m%d).tgz /data
 ```
 
 ### 2. 拉取新版本代码

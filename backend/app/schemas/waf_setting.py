@@ -94,6 +94,7 @@ class TimezoneOption(BaseModel):
 
 class DisplaySettings(BaseModel):
     timezone: str = DEFAULT_TIMEZONE
+    panel_public_url: str = Field(min_length=8, max_length=512)
 
     @field_validator("timezone")
     @classmethod
@@ -101,6 +102,14 @@ class DisplaySettings(BaseModel):
         if value not in ALLOWED_TIMEZONES:
             raise ValueError(f"不支持的时区: {value}")
         return value
+
+    @field_validator("panel_public_url")
+    @classmethod
+    def _validate_panel_public_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("面板地址必须以 http:// 或 https:// 开头")
+        return normalized
 
 
 class DisplaySettingsOut(DisplaySettings):
@@ -113,4 +122,5 @@ class DisplaySettingsOut(DisplaySettings):
         tz = getattr(row, "timezone", None) or DEFAULT_TIMEZONE
         if tz not in ALLOWED_TIMEZONES:
             tz = DEFAULT_TIMEZONE
-        return cls(timezone=tz)
+        panel_url = getattr(row, "panel_public_url", None) or ""
+        return cls(timezone=tz, panel_public_url=panel_url)

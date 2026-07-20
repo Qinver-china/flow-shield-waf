@@ -70,6 +70,9 @@ async def _bootstrap() -> None:
         from app.services.logging.clickhouse_patches import ensure_hourly_mv_state
 
         ensure_hourly_mv_state()
+        from app.services.analytics.clickhouse_schema import ensure_analytics_schema
+
+        await asyncio.to_thread(ensure_analytics_schema)
         from app.services.logging.retention_ttl import apply_log_retention_ttl
 
         await apply_log_retention_ttl()

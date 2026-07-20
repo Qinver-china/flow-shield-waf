@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import ColumnElement, or_, text
+from sqlalchemy import ColumnElement, text
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 
@@ -34,11 +34,9 @@ def site_scope_filter(
     site_ids_col: InstrumentedAttribute[list | None],
     target_site_id: int,
 ) -> ColumnElement[bool]:
-    """Match global rules (NULL/empty site_ids) or rows scoped to target_site_id."""
-    return or_(
-        site_ids_col.is_(None),
-        text("JSON_LENGTH(COALESCE(site_ids, JSON_ARRAY())) = 0"),
-        text("JSON_CONTAINS(site_ids, CAST(:sid AS JSON), '$')").bindparams(
-            sid=target_site_id
-        ),
-    )
+    """Match rows explicitly bound to target_site_id (global/unscoped rows excluded)."""
+    _ = site_ids_col  # column identity for callers; SQL uses physical column name
+    return text(
+        "EXISTS (SELECT 1 FROM json_each(COALESCE(NULLIF(site_ids, 'null'), '[]')) AS je "
+        "WHERE CAST(je.value AS INTEGER) = :sid)"
+    ).bindparams(sid=target_site_id)

@@ -15,7 +15,6 @@ from app.api.v1 import (
     meta,
     notification_channels,
     ratelimit,
-    rule_suggestions,
     rules,
     settings,
     sites,
@@ -38,9 +37,6 @@ api_router.include_router(ai_guard.router, prefix="/ai-guard", tags=["ai-guard"]
 api_router.include_router(certificates.router, prefix="/certificates", tags=["certificates"])
 api_router.include_router(sites.router, prefix="/sites", tags=["sites"])
 api_router.include_router(rules.router, prefix="/rules", tags=["rules"])
-api_router.include_router(
-    rule_suggestions.router, prefix="/rule-suggestions", tags=["rule-suggestions"]
-)
 api_router.include_router(blacklist.router, prefix="/blacklist", tags=["blacklist"])
 api_router.include_router(bots.router, prefix="/bots", tags=["bots"])
 api_router.include_router(

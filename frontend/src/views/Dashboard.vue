@@ -351,6 +351,7 @@ const stats = reactive<any>({
 
 const summary = reactive<SummaryData>({});
 const health = reactive<any>({
+  database: "ok",
   mysql: "ok",
   redis: "ok",
   clickhouse: "ok",
@@ -398,7 +399,7 @@ function enabledSub(item: CountPair) {
 }
 
 const healthItems = computed(() => [
-  { key: "mysql", label: "MySQL", status: health.mysql },
+  { key: "database", label: "SQLite", status: health.database || health.mysql },
   { key: "redis", label: "Redis", status: health.redis },
   { key: "clickhouse", label: "ClickHouse", status: health.clickhouse },
   { key: "rule_sync", label: "规则同步", status: health.rule_sync?.status || "ok" },

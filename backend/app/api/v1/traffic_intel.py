@@ -22,7 +22,7 @@ from app.services.traffic_intel.constants import (
     DEFAULT_SPIKE_RATIO,
     REDIS_SNAPSHOT_KEY,
 )
-from app.services.traffic_intel.store.alerts_mysql import AlertStore
+from app.services.traffic_intel.store.alerts_clickhouse import AlertStore
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.types import TrafficIntelConfig
@@ -92,8 +92,22 @@ async def list_alerts(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    rows = await AlertStore().list_recent(db, limit=limit, site_id=site_id)
-    return ok([AlertOut.model_validate(r) for r in rows])
+    rows = await AlertStore().list_recent(limit=limit, site_id=site_id)
+    return ok([
+        AlertOut(
+            id=r.id,
+            site_id=r.site_id,
+            window_sec=r.window_sec,
+            current_requests=r.current_requests,
+            baseline_avg=r.baseline_avg,
+            deviation_ratio=r.deviation_ratio,
+            severity=r.severity,
+            status=r.status,
+            message=r.message,
+            detected_at=r.detected_at,
+        )
+        for r in rows
+    ])
 
 
 @router.get("/series")

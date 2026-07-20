@@ -6,7 +6,8 @@ from app.api.deps import Pagination, get_current_user
 from app.constants.alert_conditions import ALERT_CONDITION_TYPES, CHANNEL_TYPES
 from app.core.db import get_db
 from app.models import User
-from app.models.notification import AlertNotificationLog, AlertPolicy, NotificationChannel
+from app.models.notification import AlertPolicy, NotificationChannel
+from app.services.analytics.alert_log_store import AlertLogStore
 from app.schemas.common import ok
 from app.schemas.notification import AlertPolicyCreate, AlertPolicyOut, AlertPolicyUpdate
 from app.services.notifications.validators import validate_condition_params
@@ -145,13 +146,7 @@ async def list_notification_logs(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    rows = (
-        await db.execute(
-            select(AlertNotificationLog)
-            .order_by(AlertNotificationLog.id.desc())
-            .limit(min(limit, 200))
-        )
-    ).scalars().all()
+    rows = await AlertLogStore().list_recent(limit=min(limit, 200))
     return ok([
         {
             "id": r.id,

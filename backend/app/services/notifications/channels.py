@@ -35,11 +35,12 @@ async def send_via_channel(
     *,
     subject: str,
     body: str,
+    html_body: str | None = None,
 ) -> None:
     if not channel.enabled:
         raise ValueError(f"通道「{channel.name}」已禁用")
     if channel.channel_type == "email":
         cfg = EmailChannelConfig.model_validate(channel.config or {})
-        await send_email(cfg, subject, body)
+        await send_email(cfg, subject, body, html_body=html_body)
         return
     raise ValueError(f"通道类型「{channel.channel_type}」尚未实现")
