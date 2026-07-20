@@ -43,12 +43,12 @@
             />
             <span v-else>-</span>
           </template>
-          <template v-else-if="columnKey(column) === 'uri'">
+          <template v-else-if="columnKey(column) === 'request_uri'">
             <log-dimension-action-cell
-              v-if="record.uri"
-              :label="record.uri"
-              detail-field="uri"
-              :detail-value="record.uri"
+              v-if="record.request_uri || record.uri"
+              :label="record.request_uri || record.uri"
+              detail-field="request_uri"
+              :detail-value="record.request_uri || record.uri"
               :filter-state="filterState"
             />
             <span v-else>-</span>
@@ -126,7 +126,7 @@ const columns = [
   { title: "域名", key: "domain", dataIndex: "domain", width: 140, ellipsis: true },
   { title: "IP", key: "client_ip", dataIndex: "client_ip", width: 130 },
   { title: "方法", key: "method", dataIndex: "method", width: 72 },
-  { title: "URL", key: "uri", dataIndex: "uri", ellipsis: true },
+  { title: "请求 URI", key: "request_uri", dataIndex: "request_uri", ellipsis: true },
   { title: "命中规则", key: "rule_name", dataIndex: "rule_name", width: 140, ellipsis: true },
   { title: "防护方式", key: "mode", dataIndex: "mode", width: 100 },
   { title: "来源", key: "source", dataIndex: "source", width: 110 },

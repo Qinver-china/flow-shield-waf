@@ -15,7 +15,7 @@ local function cfg_crawler_detect(cfg)
     return cfg and cfg.crawler_detect
 end
 
-function _M.match_crawler(cfg, ua)
+local function match_crawler_raw(cfg, ua)
     if not ua or ua == "" then
         return nil
     end
@@ -58,6 +58,18 @@ function _M.match_crawler(cfg, ua)
         return match[0]
     end
     return nil
+end
+
+function _M.match_crawler(cfg, ua, ext)
+    if ext and ext.cache.crawler_match_resolved then
+        return ext.cache.crawler_match_name
+    end
+    local name = match_crawler_raw(cfg, ua)
+    if ext then
+        ext.cache.crawler_match_resolved = true
+        ext.cache.crawler_match_name = name
+    end
+    return name
 end
 
 function _M.is_bot_ua(ua)
@@ -148,34 +160,66 @@ function _M.identify(cfg, ext, site_id)
     return nil
 end
 
-function _M.resolve_name(cfg, ext, site_id)
-    if ext.cache.bot_name_resolved then
-        return ext.cache.bot_name
+local function ensure_ua_family(cfg, ext, site_id)
+    if ext.cache.ua_family ~= nil then
+        return ext.cache.ua_family
     end
+    local ua_parse = require "waf.ua_parse"
+    local ua = ext:get("http.ua")
+    return ua_parse.family(ua, cfg, ext, site_id)
+end
+
+local function clear_bot_dimensions(ext)
+    ext.cache.bot_name = nil
+    ext.cache.bot_category = nil
+end
+
+function _M.resolve_dimensions(cfg, ext, site_id)
+    if ext.cache.bot_dimensions_resolved then
+        return ext.cache.bot_name, ext.cache.bot_category
+    end
+    ext.cache.bot_dimensions_resolved = true
     ext.cache.bot_name_resolved = true
 
+    local fam = ensure_ua_family(cfg, ext, site_id)
+    if fam ~= "bot" then
+        clear_bot_dimensions(ext)
+        return nil, nil
+    end
+
     local match = _M.identify(cfg, ext, site_id)
-    if match and match.name then
+    if match then
         ext.cache.bot_name = match.name
-        return match.name
+        ext.cache.bot_category = match.category
+        return match.name, match.category
     end
 
     local ua = ext:get("http.ua")
-    local crawler_name = _M.match_crawler(cfg, ua)
-    ext.cache.bot_name = crawler_name
-    return crawler_name
+    local crawler_name = _M.match_crawler(cfg, ua, ext)
+    if crawler_name then
+        ext.cache.bot_name = crawler_name
+        ext.cache.bot_category = OTHER_CATEGORY
+        return crawler_name, OTHER_CATEGORY
+    end
+
+    if _M.is_bot_ua(ua) then
+        ext.cache.bot_name = nil
+        ext.cache.bot_category = OTHER_CATEGORY
+        return nil, OTHER_CATEGORY
+    end
+
+    clear_bot_dimensions(ext)
+    return nil, nil
+end
+
+function _M.resolve_name(cfg, ext, site_id)
+    local name, _ = _M.resolve_dimensions(cfg, ext, site_id)
+    return name
 end
 
 function _M.resolve_category(cfg, ext, site_id)
-    local match = _M.identify(cfg, ext, site_id)
-    if match and match.category then
-        return match.category
-    end
-    local ua = ext:get("http.ua")
-    if _M.match_crawler(cfg, ua) or _M.is_bot_ua(ua) then
-        return OTHER_CATEGORY
-    end
-    return nil
+    local _, category = _M.resolve_dimensions(cfg, ext, site_id)
+    return category
 end
 
 return _M

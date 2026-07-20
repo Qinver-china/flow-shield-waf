@@ -1,3 +1,8 @@
+from pathlib import Path
+import json
+
+import pytest
+
 from app.services.bot_identify import (
     identify_bot,
     is_bot_ua_heuristic,
@@ -6,6 +11,46 @@ from app.services.bot_identify import (
 )
 from app.services.logging.enrich import enrich_entry
 from app.services.logging.ua_parse import parse_client_ua
+
+
+@pytest.fixture(autouse=True)
+def _install_vendored_crawlers(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.services.crawler_vendored.store.settings.crawler_vendored_path", str(tmp_path))
+    seed_dir = Path(__file__).resolve().parents[1] / "app" / "data" / "crawler_detect_seed"
+    if not seed_dir.is_dir():
+        return
+    from app.services.crawler_vendored.match import invalidate_match_cache
+    from app.services.crawler_vendored.store import save_bundle
+
+    crawlers = json.loads((seed_dir / "Crawlers.json").read_text(encoding="utf-8"))
+    exclusions = json.loads((seed_dir / "Exclusions.json").read_text(encoding="utf-8"))
+    save_bundle(
+        crawlers=crawlers,
+        exclusions=exclusions,
+        upstream_commit="test",
+        source="test",
+    )
+    invalidate_match_cache()
+
+
+def test_enrich_entry_normalizes_request_uri(monkeypatch):
+    monkeypatch.setattr("app.services.logging.enrich.get_bots", lambda: [])
+    out = enrich_entry({
+        "request_uri": "/api?x=1",
+        "uri_path": "/api",
+        "query_count": 3,
+    })
+    assert out["request_uri"] == "/api?x=1"
+    assert "uri" not in out
+    assert out["query_count"] == 3
+
+
+def test_enrich_entry_migrates_legacy_uri_key(monkeypatch):
+    monkeypatch.setattr("app.services.logging.enrich.get_bots", lambda: [])
+    out = enrich_entry({"uri": "/legacy?a=1"})
+    assert out["request_uri"] == "/legacy?a=1"
+    assert "uri" not in out
+    assert out["uri_path"] == "/legacy"
 
 
 def test_enrich_entry_fills_xff_first_from_payload_headers(monkeypatch):
@@ -112,6 +157,22 @@ def test_enrich_entry_crawlerdetect_fallback(monkeypatch):
     assert out["ua_family"] == "bot"
     assert out["bot_name"]
     assert out["bot_category"] == "other"
+    assert out["ua_browser"] is None
+
+
+def test_enrich_entry_trusts_engine_bot_dimensions(monkeypatch):
+    monkeypatch.setattr("app.services.logging.enrich.get_bots", lambda: [])
+    out = enrich_entry({
+        "uri": "/",
+        "ua": "Mozilla/5.0 (compatible; Googlebot/2.1)",
+        "ua_family": "bot",
+        "ua_os": "Linux",
+        "bot_name": "Googlebot",
+        "bot_category": "search_engine",
+    })
+    assert out["bot_name"] == "Googlebot"
+    assert out["bot_category"] == "search_engine"
+    assert out["ua_family"] == "bot"
     assert out["ua_browser"] is None
 
 

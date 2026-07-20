@@ -3,6 +3,40 @@
     title="Bot 库"
     description="维护 Bot 识别库与分类，在防护规则中通过 bot.name / bot.category / bot.is_known 引用；日志自动写入 bot 维度"
   >
+    <a-alert
+      v-if="vendoredInfo"
+      type="info"
+      show-icon
+      class="vendored-banner"
+    >
+      <template #message>
+        <div class="vendored-head">
+          <span>Vendored 爬虫规则（JayBizzle/Crawler-Detect）</span>
+          <a-button
+            size="small"
+            :loading="vendoredSyncing"
+            @click="syncVendored"
+          >
+            立即更新 vendored
+          </a-button>
+        </div>
+      </template>
+      <template #description>
+        <div v-if="vendoredInfo.installed" class="vendored-meta">
+          <span>上游：{{ vendoredInfo.upstream_repo }}@{{ vendoredInfo.upstream_branch }}</span>
+          <span v-if="vendoredInfo.upstream_commit">Commit：{{ shortCommit(vendoredInfo.upstream_commit) }}</span>
+          <span>爬虫规则：{{ vendoredInfo.crawlers_count }} 条</span>
+          <span>排除规则：{{ vendoredInfo.exclusions_count }} 条</span>
+          <span>上次更新：{{ formatTime(vendoredInfo.updated_at) }}</span>
+          <span>下次自动更新：{{ formatTime(vendoredInfo.next_auto_update_at) }}</span>
+          <span>自动更新周期：{{ vendoredInfo.auto_update_days }} 天</span>
+        </div>
+        <div v-else class="vendored-meta">
+          尚未安装 vendored 规则，可点击「立即更新 vendored」从上游拉取。
+        </div>
+      </template>
+    </a-alert>
+
     <template #actions>
       <a-button
         v-if="activeTab === 'bots'"
@@ -158,6 +192,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { message } from "ant-design-vue";
 import { api } from "@/api";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
@@ -171,6 +206,56 @@ const botCrudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const categoryCrudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 
 const categoryOptions = ref<{ label: string; value: string }[]>([]);
+
+type VendoredInfo = {
+  installed: boolean;
+  upstream_repo: string;
+  upstream_branch: string;
+  upstream_commit?: string | null;
+  crawlers_count?: number;
+  exclusions_count?: number;
+  updated_at?: string | null;
+  next_auto_update_at?: string | null;
+  auto_update_days?: number;
+  source?: string | null;
+};
+
+const vendoredInfo = ref<VendoredInfo | null>(null);
+const vendoredSyncing = ref(false);
+
+function shortCommit(commit?: string | null) {
+  if (!commit) return "—";
+  return commit.slice(0, 8);
+}
+
+function formatTime(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+async function loadVendoredInfo() {
+  const resp = await api.get("/api/v1/bots/vendored");
+  vendoredInfo.value = resp.data || null;
+}
+
+async function syncVendored() {
+  vendoredSyncing.value = true;
+  try {
+    const resp = await api.post("/api/v1/bots/vendored/sync");
+    if (resp.data?.updated === false) {
+      message.info("当前未到自动更新周期，已强制检查完成");
+    } else {
+      message.success("vendored 规则已更新并下发到引擎");
+    }
+    await loadVendoredInfo();
+  } catch (err: any) {
+    message.error(err?.response?.data?.message || "更新 vendored 规则失败");
+  } finally {
+    vendoredSyncing.value = false;
+  }
+}
 
 const botFilters = computed<ResourceFilterField[]>(() => [
   { key: "q", label: "搜索", type: "search", placeholder: "名称 / UA 模式" },
@@ -280,10 +365,27 @@ watch(activeTab, (tab) => {
 
 onMounted(() => {
   void loadCategoryOptions();
+  void loadVendoredInfo();
 });
 </script>
 
 <style scoped>
+.vendored-banner {
+  margin-bottom: 16px;
+}
+.vendored-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.vendored-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--fs-text-muted, #94a3b8);
+  font-size: 13px;
+}
 .muted {
   color: var(--fs-text-muted, #94a3b8);
 }

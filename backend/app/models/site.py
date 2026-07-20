@@ -22,6 +22,7 @@ class Site(Base, TimestampMixin):
     origin_protocol: Mapped[str] = mapped_column(String(16), default="follow")
     origin_http_port: Mapped[int] = mapped_column(Integer, default=80)
     origin_https_port: Mapped[int] = mapped_column(Integer, default=443)
+    client_ip_source: Mapped[str] = mapped_column(String(32), default="remote_addr")
     listen_http: Mapped[bool] = mapped_column(Boolean, default=True)
     listen_https: Mapped[bool] = mapped_column(Boolean, default=False)
     certificate_id: Mapped[int | None] = mapped_column(

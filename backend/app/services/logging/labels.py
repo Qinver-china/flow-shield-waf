@@ -114,6 +114,8 @@ def format_dimension_label(
         return raw_label or key
     if dimension == "full_url":
         return raw_label or key
+    if dimension in ("request_uri", "uri_query"):
+        return raw_label or key
     if dimension == "bot_category":
         return _BOT_CATEGORY_LABELS.get(key, raw_label or key)
     if dimension == "site_id":

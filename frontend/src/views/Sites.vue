@@ -69,6 +69,19 @@
                 <a-select v-model:value="record.origin_protocol" :options="protocolOptions" :disabled="readonly" />
               </a-form-item>
             </a-col>
+            <a-col :span="24">
+              <a-form-item
+                label="客户端 IP 获取方式"
+                extra="站点接入 CDN 或反向代理时，选择与上游一致的客户端 IP 来源头；影响规则匹配、限速、日志与 GeoIP。"
+              >
+                <a-select
+                  v-model:value="record.client_ip_source"
+                  :disabled="readonly"
+                  style="width: 100%"
+                  :options="clientIpSourceSelectOptions"
+                />
+              </a-form-item>
+            </a-col>
           </a-row>
           <a-row :gutter="16" style="margin-bottom: 12px;">
             <a-col :span="12">
@@ -190,6 +203,7 @@ import FsFormSection from "@/components/FsFormSection.vue";
 import OriginHostInput from "@/components/OriginHostInput.vue";
 import { enabledFilterOptions } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
+import { CLIENT_IP_SOURCE_OPTIONS, clientIpSourceLabel } from "@/constants/clientIpSource";
 import { api } from "@/api";
 import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
@@ -211,6 +225,11 @@ const protocolOptions = [
   { value: "https", label: "HTTPS" },
 ];
 
+const clientIpSourceSelectOptions = CLIENT_IP_SOURCE_OPTIONS.map((o) => ({
+  value: o.value,
+  label: o.label,
+}));
+
 const blockStatusOptions = [
   { value: 403, label: "403 Forbidden" },
   { value: 429, label: "429 Too Many Requests" },
@@ -231,6 +250,12 @@ const columns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
   { title: "域名", dataIndex: "domains_display", sorter: true },
   { title: "源站", dataIndex: "origin_display" },
+  {
+    title: "客户端 IP",
+    dataIndex: "client_ip_source",
+    width: 180,
+    customRender: ({ text }: { text: string }) => clientIpSourceLabel(text),
+  },
   { title: "证书", dataIndex: "certificate_name", width: 140 },
   { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
 ];
@@ -249,6 +274,7 @@ const defaultRecord = () => ({
   origin_protocol: "follow",
   origin_http_port: 80,
   origin_https_port: 443,
+  client_ip_source: "remote_addr",
   listen_http: true,
   listen_https: false,
   certificate_id: null as number | null,

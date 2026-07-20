@@ -113,7 +113,6 @@ async def health(
     return ok(
         DashboardHealthOut(
             database=database_status,
-            mysql=database_status,
             redis=redis_status,
             clickhouse=clickhouse_status,
             rule_sync=rule_sync,

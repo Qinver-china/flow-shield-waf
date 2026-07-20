@@ -1,3 +1,1 @@
-# 可选：MySQL -> SQLite 一次性迁移脚本依赖
-aiomysql>=0.2.0
-pymysql>=1.1.0
+# 可选增量依赖（Docker 分层缓存用；当前无额外包）

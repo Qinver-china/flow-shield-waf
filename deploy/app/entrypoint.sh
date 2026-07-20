@@ -1,7 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p /data/engine/conf.d /data/engine/certs /var/log/supervisor /etc/flowshield
+mkdir -p /data/engine/conf.d /data/engine/certs /var/log/supervisor /etc/flowshield /etc/nginx/geoip
+
+GEOIP_DIR="${WAF_GEOIP_DIR:-/etc/nginx/geoip}"
+GEOIP_MODULE="/usr/local/openresty/nginx/modules/ngx_http_geoip2_module.so"
+SNIP_LOAD="/etc/nginx/snippets/geoip2-load.conf"
+SNIP_HTTP="/etc/nginx/snippets/geoip2-http.conf"
+
+: >"$SNIP_LOAD"
+: >"$SNIP_HTTP"
+
+if [ -f "$GEOIP_MODULE" ] && compgen -G "$GEOIP_DIR/*.mmdb" >/dev/null; then
+  echo "load_module modules/ngx_http_geoip2_module.so;" >"$SNIP_LOAD"
+  {
+    if [ -f "$GEOIP_DIR/GeoLite2-Country.mmdb" ]; then
+      cat <<'NGX'
+geoip2 /etc/nginx/geoip/GeoLite2-Country.mmdb {
+    auto_reload 60m;
+    $geoip2_country source=$remote_addr country iso_code;
+}
+NGX
+    fi
+    if [ -f "$GEOIP_DIR/GeoLite2-City.mmdb" ]; then
+      cat <<'NGX'
+geoip2 /etc/nginx/geoip/GeoLite2-City.mmdb {
+    auto_reload 60m;
+    $geoip2_region source=$remote_addr subdivisions 0 iso_code;
+    $geoip2_city   source=$remote_addr city names en;
+}
+NGX
+    fi
+    if [ -f "$GEOIP_DIR/GeoLite2-ASN.mmdb" ]; then
+      cat <<'NGX'
+geoip2 /etc/nginx/geoip/GeoLite2-ASN.mmdb {
+    auto_reload 60m;
+    $geoip2_asn source=$remote_addr autonomous_system_number;
+    $geoip2_isp source=$remote_addr autonomous_system_organization;
+}
+NGX
+    fi
+  } >"$SNIP_HTTP"
+fi
 
 cat >/etc/flowshield/env <<EOF
 export DB_PATH='${DB_PATH:-/data/waf.db}'

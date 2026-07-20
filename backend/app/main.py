@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.api.internal.slide_captcha import router as slide_captcha_router
 from app.api.v1 import api_router
-from app.background import run_config_sync_retry
+from app.background import run_config_sync_retry, run_crawler_vendored_auto_sync
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.logging import setup_logging
@@ -79,6 +79,12 @@ async def _bootstrap() -> None:
         from app.services.slide_captcha.service import warmup
 
         await asyncio.to_thread(warmup)
+        from app.services.crawler_vendored.sync import ensure_vendored_rules
+
+        try:
+            await ensure_vendored_rules(db)
+        except Exception:  # noqa: BLE001
+            log.exception("initial crawler vendored bootstrap failed")
         try:
             await rule_sync.publish(db)
         except Exception:  # noqa: BLE001
@@ -93,11 +99,13 @@ async def lifespan(_app: FastAPI):
     await _bootstrap()
     stop = asyncio.Event()
     sync_task = asyncio.create_task(run_config_sync_retry(stop))
+    crawler_sync_task = asyncio.create_task(run_crawler_vendored_auto_sync(stop))
     try:
         yield
     finally:
         stop.set()
         await sync_task
+        await crawler_sync_task
 
 
 app = FastAPI(

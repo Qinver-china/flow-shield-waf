@@ -141,7 +141,7 @@ git checkout <previous-tag-or-commit>
 docker compose up -d --build app
 ```
 
-若已执行不可逆 schema patch，回滚代码后一般仍可运行（新增列通常向后兼容）；严重问题可从备份恢复 MySQL 数据卷。
+若已执行不可逆 schema patch，回滚代码后一般仍可运行（新增列通常向后兼容）；严重问题可从 SQLite / ClickHouse 数据卷备份恢复。
 
 ---
 

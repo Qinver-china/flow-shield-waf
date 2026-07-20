@@ -6,6 +6,7 @@ from app.constants.response_pages import (
     DEFAULT_BLOCK_PAGE_STATUS,
     DEFAULT_CAPTCHA_FOOTER_HTML,
 )
+from app.constants.client_ip import CLIENT_IP_SOURCE_DEFAULT, CLIENT_IP_SOURCE_VALUES
 from app.services.origin import (
     ORIGIN_PROTOCOLS,
     format_origin_display,
@@ -33,6 +34,7 @@ class SiteBase(BaseModel):
     origin_protocol: str = "follow"
     origin_http_port: int = Field(default=80, ge=1, le=65535)
     origin_https_port: int = Field(default=443, ge=1, le=65535)
+    client_ip_source: str = CLIENT_IP_SOURCE_DEFAULT
     listen_http: bool = True
     listen_https: bool = False
     certificate_id: int | None = None
@@ -92,6 +94,13 @@ class SiteBase(BaseModel):
             raise ValueError("回源协议无效")
         return v
 
+    @field_validator("client_ip_source")
+    @classmethod
+    def _check_client_ip_source(cls, v: str) -> str:
+        if v not in CLIENT_IP_SOURCE_VALUES:
+            raise ValueError("客户端 IP 获取方式无效")
+        return v
+
     @model_validator(mode="after")
     def _check_listen_and_certs(self) -> "SiteBase":
         if not self.listen_http and not self.listen_https:
@@ -112,6 +121,7 @@ class SiteUpdate(BaseModel):
     origin_protocol: str | None = None
     origin_http_port: int | None = Field(default=None, ge=1, le=65535)
     origin_https_port: int | None = Field(default=None, ge=1, le=65535)
+    client_ip_source: str | None = None
     listen_http: bool | None = None
     listen_https: bool | None = None
     certificate_id: int | None = None
@@ -162,6 +172,13 @@ class SiteUpdate(BaseModel):
             raise ValueError("回源协议无效")
         return v
 
+    @field_validator("client_ip_source")
+    @classmethod
+    def _check_client_ip_source(cls, v: str | None) -> str | None:
+        if v is not None and v not in CLIENT_IP_SOURCE_VALUES:
+            raise ValueError("客户端 IP 获取方式无效")
+        return v
+
 
 class SiteOut(SiteBase):
     model_config = ConfigDict(from_attributes=True)
@@ -186,6 +203,7 @@ class SiteOut(SiteBase):
                 "origin_protocol": data.origin_protocol,
                 "origin_http_port": data.origin_http_port,
                 "origin_https_port": data.origin_https_port,
+                "client_ip_source": getattr(data, "client_ip_source", CLIENT_IP_SOURCE_DEFAULT),
                 "listen_http": data.listen_http,
                 "listen_https": data.listen_https,
                 "certificate_id": data.certificate_id,

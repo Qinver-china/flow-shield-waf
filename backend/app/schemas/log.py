@@ -14,7 +14,8 @@ class LogOut(BaseModel):
     client_ip: str | None = None
     geo_country: str | None = None
     method: str | None = None
-    uri: str | None = None
+    uri: str | None = None  # deprecated alias; use request_uri
+    request_uri: str | None = None
     ua: str | None = None
     rule_id: int | None = None
     rule_name: str | None = None
@@ -48,6 +49,8 @@ class LogQuery(BaseModel):
     scheme: str | None = None
     http_version: str | None = None
     uri_path: str | None = None
+    request_uri: str | None = None
+    uri_query: str | None = None
     uri_ext: str | None = None
     referer_host: str | None = None
     ip_is_private: bool | None = None

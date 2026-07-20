@@ -22,7 +22,7 @@ export type LogDetailActionField =
   | "domain"
   | "client_ip"
   | "method"
-  | "uri"
+  | "request_uri"
   | "mode"
   | "source"
   | "blocked";
@@ -167,7 +167,7 @@ export function useLogDimensionActions() {
     const actions: LogDimensionAction[] = [];
     let filterConditions: LogFilterCondition[] = [];
 
-    if (field === "uri") {
+    if (field === "request_uri") {
       const keywordField = findLogFilterField("keyword");
       if (keywordField) {
         filterConditions = [
@@ -205,7 +205,7 @@ export function useLogDimensionActions() {
       }
     }
 
-    if (field === "client_ip" || field === "uri") {
+    if (field === "client_ip" || field === "request_uri") {
       actions.push({
         key: "copy",
         label: "复制",

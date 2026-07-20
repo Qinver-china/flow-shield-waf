@@ -1,4 +1,4 @@
-"""User-Agent parsing for log enrichment (ua-parser + CrawlerDetect)."""
+"""User-Agent parsing for log enrichment (ua-parser + vendored crawler rules)."""
 from __future__ import annotations
 
 from ua_parser import parse_os, parse_user_agent

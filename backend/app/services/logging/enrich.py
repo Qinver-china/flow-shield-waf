@@ -52,6 +52,10 @@ def _site_id_value(entry: dict) -> int | None:
         return None
 
 
+def _engine_enriched_bot(entry: dict) -> bool:
+    return entry.get("bot_name") is not None or entry.get("bot_category") is not None
+
+
 def _enrich_one(
     entry: dict,
     *,
@@ -59,39 +63,69 @@ def _enrich_one(
     categories: set[str] | None,
 ) -> dict:
     out = dict(entry)
-    path = out.get("uri_path") or out.get("uri") or "/"
+    raw_uri = out.get("request_uri") or out.get("uri")
+    path = out.get("uri_path")
+    if not path:
+        path = raw_uri or "/"
     if isinstance(path, str) and "?" in path:
         path = path.split("?", 1)[0]
     out["uri_path"] = path
+    if raw_uri:
+        out["request_uri"] = raw_uri
+    out.pop("uri", None)
     out["uri_pattern"] = normalize_uri_pattern(path)
 
     ua = out.get("ua")
     ua_str = ua if isinstance(ua, str) else None
-    family, os_name, browser = parse_client_ua(ua_str)
-    out["ua_family"] = family
-    out["ua_os"] = os_name
-    out["ua_browser"] = browser
 
-    bot_name, bot_category = resolve_bot_dimensions(
-        ua_str,
-        _site_id_value(out),
-        bots,
-        categories,
-    )
-    if bot_name or bot_category:
-        out["bot_name"] = bot_name
-        out["bot_category"] = bot_category
+    if _engine_enriched_bot(out):
         out["ua_family"] = "bot"
         out["ua_browser"] = None
     else:
+        if out.get("ua_family") is None:
+            family, os_name, browser = parse_client_ua(ua_str)
+            out["ua_family"] = family
+            if out.get("ua_os") is None:
+                out["ua_os"] = os_name
+            if out.get("ua_browser") is None:
+                out["ua_browser"] = browser
+        elif out.get("ua_family") == "bot":
+            out["ua_browser"] = None
+            if out.get("ua_os") is None and ua_str:
+                _, os_name, _ = parse_client_ua(ua_str)
+                out["ua_os"] = os_name
+        elif ua_str and out.get("ua_browser") is None:
+            _, os_name, browser = parse_client_ua(ua_str)
+            if out.get("ua_os") is None:
+                out["ua_os"] = os_name
+            out["ua_browser"] = browser
+
+        if out.get("bot_name") is None and out.get("bot_category") is None:
+            bot_name, bot_category = resolve_bot_dimensions(
+                ua_str,
+                _site_id_value(out),
+                bots,
+                categories,
+            )
+            if bot_name or bot_category:
+                out["bot_name"] = bot_name
+                out["bot_category"] = bot_category
+                out["ua_family"] = "bot"
+                out["ua_browser"] = None
+        elif out.get("bot_name") or out.get("bot_category"):
+            out["ua_family"] = "bot"
+            out["ua_browser"] = None
+
+    if not out.get("bot_name") and not out.get("bot_category"):
         out["bot_name"] = None
         out["bot_category"] = None
 
     payload = out.get("payload")
     if isinstance(payload, dict):
-        query = payload.get("query")
-        if isinstance(query, dict):
-            out["query_count"] = len(query)
+        if out.get("query_count") is None:
+            query = payload.get("query")
+            if isinstance(query, dict):
+                out["query_count"] = len(query)
         if not out.get("xff_first"):
             out["xff_first"] = _first_xff(payload.get("headers"))
     return out

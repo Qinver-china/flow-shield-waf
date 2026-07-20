@@ -1,5 +1,5 @@
 # 流盾WAF 应用镜像：后端 + Worker + 引擎 + 面板（同一容器，supervisord 管理）
-# MySQL / Redis / ClickHouse 使用官方镜像单独运行，见 docker-compose.yml
+# Redis / ClickHouse 使用官方镜像单独运行；SQLite 内嵌于 app 卷，见 docker-compose.yml
 # syntax=docker/dockerfile:1
 
 # ---- 1) 构建前端 ----
@@ -50,7 +50,7 @@ COPY deploy/clickhouse /app/deploy/clickhouse
 COPY engine/lua /etc/nginx/lua
 COPY engine/snippets /etc/nginx/snippets
 COPY deploy/app/engine.nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
-RUN mkdir -p /etc/nginx/html /data/engine/conf.d /data/engine/certs \
+RUN mkdir -p /etc/nginx/html /data/engine/conf.d /data/engine/certs /etc/nginx/geoip \
     /usr/local/openresty/nginx/logs \
     && touch /usr/local/openresty/nginx/logs/error.log \
     && chmod 666 /usr/local/openresty/nginx/logs/error.log \

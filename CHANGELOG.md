@@ -1,5 +1,53 @@
 # 更新日志
 
+## [0.3.2] - 2026-07-20
+
+### 地理维度（GeoIP）
+
+- 新增引擎模块 `geo_lookup.lua`：规则提取与日志写入共用同一套 Geo 字段解析
+- **日志懒补全**：凡写入日志的请求均补全 `geo_country` / `geo_region` / `geo_city` / `geo_asn` / `geo_isp` / `geo_ip_type`；规则已 trace 的字段直接复用，未 trace 的仅在日志路径批量读取 `ngx.var`（不影响未写日志的请求与未引用 `geo.*` 的规则匹配）
+- **内网 IP 跳过 Geo**：规则匹配与日志补全前均判断 `util.is_private_ip`（10/8、172.16/12、192.168/16、127/8），内网地址不进行任何地理查询
+- 部署支持自动启用 GeoIP2：将 MaxMind `.mmdb` 放入 `deploy/geoip/` 后容器启动自动生成 `geoip2` 配置；未配置时国家可回退 `CF-IPCountry`
+- **仓库已附带** GeoLite2-Country / City / ASN 三库（`deploy/geoip/`），开箱即用；需更新时自行下载覆盖同名文件后重启 `app`
+- 大屏「来源国家」统计改为仅统计**已拦截**请求（`blocked = 1`）
+
+### 站点与 CDN
+
+- 站点新增 **客户端 IP 获取方式**：支持直连 IP、`X-Forwarded-For`（首/末跳）、`X-Real-IP`、`CF-Connecting-IP`、`True-Client-IP`、`X-Client-IP`；影响规则 `ip.src`、限速、挑战、日志与 GeoIP
+- 单值 CDN 头模式自动生成 Nginx `real_ip` 配置，使 GeoIP2 与真实客户端 IP 对齐
+
+### Bot 识别
+
+- CrawlerDetect 改为 **vendored 规则**：从上游 [JayBizzle/Crawler-Detect](https://github.com/JayBizzle/Crawler-Detect) 拉取 JSON，本地编译后下发引擎；移除运行时 `crawlerdetect` Python 依赖
+- Bot 管理页展示 vendored 版本信息，支持「立即更新 vendored」；系统每 30 天自动同步上游
+- 引擎日志入库时直接写入 `bot_name` / `bot_category` / `ua_family`；识别顺序仍为 **自建 Bot 库 → vendored 爬虫规则 → UA 启发式**
+- Python 日志 enrich 优先信任引擎已写入的 bot 维度，减少重复判断
+- 修复引擎 `sync.lua` 未加载 `bots` / `crawler_detect` 导致规则与日志侧 Bot 识别失效的问题
+- 引擎 `bot.lua` 合并 `resolve_dimensions` 并缓存 vendored 正则匹配结果，避免日志 enrich 重复跑大正则
+- `bot.name` / `bot.category` 规则求值前先确认 `ua.family` 为 bot，浏览器流量直接短路，避免重复 Bot 名称/分类判断
+
+### URL 维度对齐
+
+- 新增引擎共享模块 `uri_parse.lua`，规则提取与日志写入共用同一套路径/后缀/深度/查询串解析逻辑
+- 修复日志 `uri_depth` 与规则 `http.uri.depth` 算法不一致的问题（统一为路径段数量）
+- 统一 `uri_ext` 与 `http.uri.ext` 的后缀正则（支持字母、数字与连字符）
+- 日志列 `uri` 重命名为 `request_uri`（对应 `http.request_uri`）；新增 `uri_query`（`http.uri.query`）、`referer`（`http.referer`）
+- 引擎入库时直接写入 `query_count`，与 `http.query.count` 对齐
+- 日志统计/筛选 UI 标注与规则字段的对应关系（如 `http.uri.path`、`http.host`）
+
+### 字段目录 UI 对齐
+
+- 规则条件字段选择器与日志统计/筛选维度采用统一分类（`网络与地理` / `URL 与路径` / `HTTP 请求` / `客户端识别` / `时间与流量`；日志另含 `防护命中`）
+- 日志统计/筛选支持 `request_uri`（原始请求行）、`uri_query`（原始查询串）维度，与规则字段 `http.request_uri` / `http.uri.query` 对齐
+
+## [0.3.1] - 2026-07-20
+
+### 清理
+
+- 移除 MySQL → SQLite 一次性迁移脚本与相关依赖（`migrate-to-sqlite.sh`、`migrate_mysql_to_sqlite.py`、`aiomysql` / `pymysql`）
+- 移除 `.env` 中 MySQL 迁移专用变量与健康检查 `mysql` 兼容字段
+- 总览跳转防护日志时默认时间范围改为近 24 小时（与总览数据一致）
+
 ## [0.3.0] - 2026-07-20
 
 > **重大架构升级**：自本版本起，Docker Compose 由四容器（含 MySQL）精简为三容器；业务配置迁入嵌入式 SQLite，流水类数据统一写入 ClickHouse。从 0.2.x（MySQL 版）升级请务必阅读下方「迁移指引」。

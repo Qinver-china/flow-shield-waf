@@ -19,17 +19,24 @@ function _M.family(ua, cfg, ext, site_id)
     if not ua or ua == "" then
         return nil
     end
+    if ext and ext.cache.ua_family ~= nil then
+        return ext.cache.ua_family
+    end
     cfg = cfg or sync.get()
+    local fam
     if bot.identify(cfg, ext, site_id) then
-        return "bot"
+        fam = "bot"
+    elseif bot.match_crawler(cfg, ua, ext) then
+        fam = "bot"
+    elseif bot.is_bot_ua(ua) then
+        fam = "bot"
+    else
+        fam = "browser"
     end
-    if bot.match_crawler(cfg, ua) then
-        return "bot"
+    if ext then
+        ext.cache.ua_family = fam
     end
-    if bot.is_bot_ua(ua) then
-        return "bot"
-    end
-    return "browser"
+    return fam
 end
 
 function _M.os(ua)

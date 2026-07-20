@@ -48,6 +48,29 @@ def _apply_category_filter(stmt: Select, categories: list[str] | None) -> Select
     return stmt.where(BotProfile.category.in_(values))
 
 
+@router.get("/vendored")
+async def get_vendored_info(
+    _user: User = Depends(get_current_user),
+):
+    from app.services.crawler_vendored import manifest_for_api
+
+    return ok(manifest_for_api())
+
+
+@router.post("/vendored/sync")
+async def sync_vendored_rules(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    from app.services.crawler_vendored.sync import sync_from_upstream
+
+    try:
+        result = await sync_from_upstream(db, force=True, source="manual")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"更新 vendored 规则失败: {exc}") from exc
+    return ok(result)
+
+
 @router.get("")
 async def list_bots(
     pg: Pagination = Depends(),

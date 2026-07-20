@@ -3,6 +3,8 @@
 -- of truth). Body/JSON/multipart fields are read lazily and cached per request.
 local cjson = require "cjson.safe"
 local util = require "waf.util"
+local uri_parse = require "waf.uri_parse"
+local geo_lookup = require "waf.geo_lookup"
 
 local _M = {}
 _M.__index = _M
@@ -172,19 +174,19 @@ function _M:_resolve(field, arg)
     elseif field == "http.version" then
         return ngx.req.http_version()
 
-    -- geo / threat intel (optional; from geoip2 vars if configured)
+    -- geo (optional; geoip2 vars when configured — only read when rules reference geo.*)
     elseif field == "geo.country" then
-        return ngx.var.geoip2_country or ngx.var.http_cf_ipcountry
+        return geo_lookup.field(self, "country")
     elseif field == "geo.region" then
-        return ngx.var.geoip2_region
+        return geo_lookup.field(self, "region")
     elseif field == "geo.city" then
-        return ngx.var.geoip2_city
+        return geo_lookup.field(self, "city")
     elseif field == "geo.asn" then
-        return tonumber(ngx.var.geoip2_asn)
+        return geo_lookup.field(self, "asn")
     elseif field == "geo.isp" then
-        return ngx.var.geoip2_isp
+        return geo_lookup.field(self, "isp")
     elseif field == "geo.ip_type" then
-        return ngx.var.geoip2_ip_type
+        return geo_lookup.field(self, "ip_type")
 
     -- request line / method / host
     elseif field == "http.method" then
@@ -192,26 +194,21 @@ function _M:_resolve(field, arg)
     elseif field == "http.host" then
         return ngx.var.host
     elseif field == "http.url" then
-        return (ngx.var.scheme or "http") .. "://" .. (ngx.var.host or "") .. (ngx.var.request_uri or "")
+        return uri_parse.full_url()
     elseif field == "http.request_uri" then
-        return ngx.var.request_uri
+        return uri_parse.request_uri()
 
     -- url / path
     elseif field == "http.uri.path" then
-        return ngx.var.uri
+        return uri_parse.path()
     elseif field == "http.uri.segment" then
-        local segs = {}
-        for s in (ngx.var.uri or ""):gmatch("[^/]+") do segs[#segs + 1] = s end
-        local idx = tonumber(arg or "1") or 1
-        return segs[idx]
+        return uri_parse.segment(nil, arg)
     elseif field == "http.uri.ext" then
-        return (ngx.var.uri or ""):match("%.([%a%d]+)$")
+        return uri_parse.ext()
     elseif field == "http.uri.depth" then
-        local n = 0
-        for _ in (ngx.var.uri or ""):gmatch("[^/]+") do n = n + 1 end
-        return n
+        return uri_parse.depth()
     elseif field == "http.uri.query" then
-        return ngx.var.args
+        return uri_parse.query()
 
     -- query args
     elseif field == "http.query" then

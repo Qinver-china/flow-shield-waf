@@ -71,6 +71,8 @@ _LOG_COMMON_FILTER_PROPERTIES = {
     "domain": {"type": "string"},
     "method": {"type": "string"},
     "uri_path": {"type": "string", "description": "URI 路径"},
+    "request_uri": {"type": "string", "description": "原始请求行（路径+查询串）"},
+    "uri_query": {"type": "string", "description": "原始查询串"},
     "uri_ext": {"type": "string", "description": "URI 扩展名"},
     "geo_country": {"type": "string", "description": "国家代码，如 CN"},
     "geo_city": {"type": "string"},

@@ -39,13 +39,13 @@ function toQueryString(filters: LogNavQuery): Record<string, string> {
 }
 
 /** 从总览等页面跳转到防护日志，并带上筛选条件 */
-export function useLogNavigation() {
+export function useLogNavigation(defaultPreset: LogNavQuery["preset"] = "6h") {
   const router = useRouter();
 
   function goToLogs(filters: LogNavQuery = {}) {
     router.push({
       path: "/logs",
-      query: toQueryString({ preset: "6h", ...filters }),
+      query: toQueryString({ preset: defaultPreset, ...filters }),
     });
   }
 

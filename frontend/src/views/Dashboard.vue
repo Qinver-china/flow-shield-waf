@@ -154,7 +154,7 @@
       <a-col :xs="24" :md="12" :xl="8">
         <a-card class="panel-card" :bordered="false">
           <template #title>
-            <span class="panel-title"><global-outlined /> 国家 / 地区 Top</span>
+            <span class="panel-title"><global-outlined /> 拦截来源国家 Top</span>
           </template>
           <div ref="countryEl" class="chart-box" />
         </a-card>
@@ -295,7 +295,7 @@ const themeStore = useThemeStore();
 const { isDark } = storeToRefs(themeStore);
 const appSettings = useAppSettingsStore();
 const router = useRouter();
-const { goToLogs } = useLogNavigation();
+const { goToLogs } = useLogNavigation("24h");
 const { formatSiteId } = useSiteOptions();
 const { enabled: liveRefreshEnabled } = useDashboardLiveRefresh();
 
@@ -352,7 +352,6 @@ const stats = reactive<any>({
 const summary = reactive<SummaryData>({});
 const health = reactive<any>({
   database: "ok",
-  mysql: "ok",
   redis: "ok",
   clickhouse: "ok",
   rule_sync: { status: "ok", version: null },
@@ -399,7 +398,7 @@ function enabledSub(item: CountPair) {
 }
 
 const healthItems = computed(() => [
-  { key: "database", label: "SQLite", status: health.database || health.mysql },
+  { key: "database", label: "SQLite", status: health.database },
   { key: "redis", label: "Redis", status: health.redis },
   { key: "clickhouse", label: "ClickHouse", status: health.clickhouse },
   { key: "rule_sync", label: "规则同步", status: health.rule_sync?.status || "ok" },

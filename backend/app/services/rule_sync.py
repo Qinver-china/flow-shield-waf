@@ -64,6 +64,7 @@ def _site_item(site) -> dict:
         "domain": site.domain,
         "domains": domains,
         "enabled": site.enabled,
+        "client_ip_source": getattr(site, "client_ip_source", None) or "remote_addr",
     }
     if site.custom_block_page_enabled:
         item["block_page"] = {

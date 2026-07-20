@@ -23,9 +23,9 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_waf_setting_timezone(conn)
     await _ensure_waf_setting_ratelimit_fail_open(conn)
     await _ensure_site_extra_domains(conn)
+    await _ensure_site_client_ip_source(conn)
     await _ensure_resource_block_page_columns(conn)
     await _drop_legacy_bot_columns(conn)
-    await _normalize_legacy_site_ids_null(conn)
     await _ensure_waf_setting_panel_public_url(conn)
 
 
@@ -77,6 +77,18 @@ async def _ensure_site_extra_domains(conn) -> None:
     log.info("schema patch applied: site.extra_domains")
 
 
+async def _ensure_site_client_ip_source(conn) -> None:
+    if await _column_exists(conn, "site", "client_ip_source"):
+        return
+    await conn.execute(
+        text(
+            "ALTER TABLE site "
+            "ADD COLUMN client_ip_source VARCHAR(32) NOT NULL DEFAULT 'remote_addr'"
+        )
+    )
+    log.info("schema patch applied: site.client_ip_source")
+
+
 async def _ensure_waf_setting_timezone(conn) -> None:
     if await _column_exists(conn, "waf_setting", "timezone"):
         return
@@ -99,35 +111,6 @@ async def _ensure_waf_setting_ratelimit_fail_open(conn) -> None:
         )
     )
     log.info("schema patch applied: waf_setting.ratelimit_fail_open")
-
-
-async def _normalize_legacy_site_ids_null(conn) -> None:
-    """MySQL→SQLite migration may store JSON null as literal text 'null'."""
-    for table in ("rule", "rate_limit", "exception", "ip_list", "bot_profile"):
-        if not await _table_exists(conn, table):
-            continue
-        if not await _column_exists(conn, table, "site_ids"):
-            continue
-        result = await conn.execute(
-            text(
-                f"UPDATE {table} SET site_ids = NULL "
-                "WHERE site_ids IN ('null', '[]', '')"
-            )
-        )
-        if result.rowcount:
-            log.info(
-                "schema patch applied: normalized %s.site_ids (%s rows)",
-                table,
-                result.rowcount,
-            )
-
-
-async def _table_exists(conn, table: str) -> bool:
-    result = await conn.execute(
-        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"),
-        {"name": table},
-    )
-    return result.first() is not None
 
 
 async def _ensure_waf_setting_panel_public_url(conn) -> None:

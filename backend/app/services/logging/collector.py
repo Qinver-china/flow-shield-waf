@@ -121,6 +121,11 @@ async def run_consumer(stop_event: asyncio.Event | None = None) -> None:
 
     await asyncio.to_thread(ensure_hourly_mv_state)
     await refresh_from_redis(redis)
+    from app.services.crawler_vendored.store import install_seed_if_missing
+    from app.services.crawler_vendored.match import invalidate_match_cache
+
+    install_seed_if_missing()
+    invalidate_match_cache()
     global _last_bot_catalog_refresh
     _last_bot_catalog_refresh = time.monotonic()
     log.info(

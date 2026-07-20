@@ -426,7 +426,7 @@ class LogSampler:
 
         blocked_rows = list(
             client.query(
-                f"SELECT request_id, client_ip, method, uri, domain, blocked, "
+                f"SELECT request_id, client_ip, method, request_uri, domain, blocked, "
                 f"rule_name, mode, geo_country, ua_family, log_type "
                 f"FROM waf_logs WHERE {where} AND blocked = 1 "
                 f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
@@ -441,7 +441,7 @@ class LogSampler:
             params["limit"] = remaining
             passed_rows = list(
                 client.query(
-                    f"SELECT request_id, client_ip, method, uri, domain, blocked, "
+                    f"SELECT request_id, client_ip, method, request_uri, domain, blocked, "
                     f"rule_name, mode, geo_country, ua_family, log_type "
                     f"FROM waf_logs WHERE {where} AND blocked = 0 "
                     f"ORDER BY ts DESC LIMIT {{limit:UInt32}}",
@@ -457,7 +457,7 @@ class LogSampler:
         from collections import Counter
 
         ips = Counter(str(r.get("client_ip") or "") for r in rows)
-        uris = Counter(str(r.get("uri") or "")[:120] for r in rows)
+        uris = Counter(str(r.get("request_uri") or r.get("uri") or "")[:120] for r in rows)
         methods = Counter(str(r.get("method") or "") for r in rows)
         blocked = sum(1 for r in rows if r.get("blocked"))
         return {
@@ -522,7 +522,7 @@ def _sanitize_log_item(item: dict) -> dict:
         "client_ip": item.get("client_ip"),
         "method": item.get("method"),
         "domain": item.get("domain"),
-        "uri": (item.get("uri") or "")[:200],
+        "request_uri": (item.get("request_uri") or item.get("uri") or "")[:200],
         "uri_path": item.get("uri_path"),
         "blocked": bool(item.get("blocked")),
         "source": item.get("source"),

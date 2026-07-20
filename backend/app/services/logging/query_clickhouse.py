@@ -34,7 +34,8 @@ STATS_DIMENSIONS = frozenset({
     "rule_id", "client_ip", "source", "mode", "site_id", "domain", "geo_country",
     "method", "blocked", "log_type", "ip_is_private", "xff_first", "geo_region",
     "geo_city", "geo_isp", "geo_ip_type", "geo_asn", "scheme", "http_version",
-    "uri_path", "uri_ext", "uri_depth", "uri_pattern", "full_url", "referer_host",
+    "uri_path", "uri_ext", "uri_depth", "uri_pattern", "request_uri", "uri_query",
+    "full_url", "referer_host",
     "query_count_bucket", "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
     "bot_category", "tls_version",
     "tls_ja3", "hour_of_day", "weekday",
@@ -64,6 +65,8 @@ _DIM_COLUMN = {
     "uri_ext": "uri_ext",
     "uri_depth": "uri_depth",
     "uri_pattern": "uri_pattern",
+    "request_uri": "request_uri",
+    "uri_query": "uri_query",
     "referer_host": "referer_host",
     "ua": "ua",
     "ua_family": "ua_family",
@@ -235,8 +238,8 @@ def _dimension_groups_inner_sql(dimension: str, where: str) -> str:
         return f"SELECT blocked FROM waf_logs WHERE {where} GROUP BY blocked"
     if dimension == "full_url":
         return (
-            f"SELECT concat(scheme, '://', domain, uri) AS full_url FROM waf_logs "
-            f"WHERE {where} AND domain != '' AND uri != '' GROUP BY full_url"
+            f"SELECT concat(scheme, '://', domain, request_uri) AS full_url FROM waf_logs "
+            f"WHERE {where} AND domain != '' AND request_uri != '' GROUP BY full_url"
         )
     col = _DIM_COLUMN.get(dimension, dimension)
     return f"SELECT {col} FROM waf_logs WHERE {where} GROUP BY {col}"
@@ -254,7 +257,8 @@ def _count_dimension_groups(client, dimension: str, where: str, params: dict) ->
 _FILTER_FIELDS = frozenset({
     "log_type", "source", "site_id", "client_ip", "rule_id", "rule_name", "action", "mode",
     "blocked", "domain", "geo_country", "geo_region", "geo_city", "geo_isp", "geo_ip_type",
-    "geo_asn", "method", "scheme", "http_version", "uri_path", "uri_ext", "referer_host",
+    "geo_asn", "method", "scheme", "http_version", "uri_path", "uri_ext", "request_uri",
+    "uri_query", "referer_host",
     "ip_is_private", "xff_first", "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
     "bot_category", "tls_version", "keyword",
 })
@@ -322,19 +326,19 @@ def _append_condition_sql(
         for vidx, raw in enumerate(values):
             pname = _param_name("kw", idx * 10 + vidx)
             expr = (
-                f"(positionCaseInsensitive({_col('uri')}, {{{pname}:String}}) > 0 "
+                f"(positionCaseInsensitive({_col('request_uri')}, {{{pname}:String}}) > 0 "
                 f"OR positionCaseInsensitive({_col('ua')}, {{{pname}:String}}) > 0 "
                 f"OR positionCaseInsensitive({_col('domain')}, {{{pname}:String}}) > 0 "
-                f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('uri')}), {{{pname}:String}}) > 0)"
+                f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('request_uri')}), {{{pname}:String}}) > 0)"
             )
             if op in {"ne", "not_contains"}:
                 expr = f"NOT {expr}"
             elif op == "like":
                 expr = (
-                    f"(positionCaseInsensitive({_col('uri')}, {{{pname}:String}}) > 0 "
+                    f"(positionCaseInsensitive({_col('request_uri')}, {{{pname}:String}}) > 0 "
                     f"OR positionCaseInsensitive({_col('ua')}, {{{pname}:String}}) > 0 "
                     f"OR positionCaseInsensitive({_col('domain')}, {{{pname}:String}}) > 0 "
-                    f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('uri')}), {{{pname}:String}}) > 0)"
+                    f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('request_uri')}), {{{pname}:String}}) > 0)"
                 )
             subparts.append(expr)
             params[pname] = raw
@@ -469,6 +473,12 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
     if q.uri_path:
         parts.append(f"{_col('uri_path')} = {{uri_path:String}}")
         params["uri_path"] = q.uri_path
+    if q.request_uri:
+        parts.append(f"{_col('request_uri')} = {{request_uri:String}}")
+        params["request_uri"] = q.request_uri
+    if q.uri_query:
+        parts.append(f"{_col('uri_query')} = {{uri_query:String}}")
+        params["uri_query"] = q.uri_query
     if q.uri_ext:
         parts.append(f"{_col('uri_ext')} = {{uri_ext:String}}")
         params["uri_ext"] = q.uri_ext
@@ -504,10 +514,10 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
         params["tls_version"] = q.tls_version
     if q.keyword:
         parts.append(
-            f"(positionCaseInsensitive({_col('uri')}, {{kw:String}}) > 0 "
+            f"(positionCaseInsensitive({_col('request_uri')}, {{kw:String}}) > 0 "
             f"OR positionCaseInsensitive({_col('ua')}, {{kw:String}}) > 0 "
             f"OR positionCaseInsensitive({_col('domain')}, {{kw:String}}) > 0 "
-            f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('uri')}), {{kw:String}}) > 0)"
+            f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('request_uri')}), {{kw:String}}) > 0)"
         )
         params["kw"] = q.keyword
     _append_json_filters(parts, params, q.filters)
@@ -629,7 +639,8 @@ async def stats_overview(
         ).result_rows
         top_countries = client.query(
             f"SELECT geo_country, count() AS c FROM waf_logs WHERE {where} "
-            f"AND geo_country != '' GROUP BY geo_country ORDER BY c DESC LIMIT 8",
+            f"AND {_col('blocked')} = 1 AND geo_country != '' "
+            f"GROUP BY geo_country ORDER BY c DESC LIMIT 8",
             parameters=params,
         ).result_rows
         top_methods = client.query(
@@ -850,8 +861,8 @@ async def stats_by_dimension(
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
     elif dimension == "full_url":
         rows = client.query(
-            f"SELECT concat(scheme, '://', domain, uri) AS full_url, count() AS c "
-            f"FROM waf_logs WHERE {where} AND domain != '' AND uri != '' "
+            f"SELECT concat(scheme, '://', domain, request_uri) AS full_url, count() AS c "
+            f"FROM waf_logs WHERE {where} AND domain != '' AND request_uri != '' "
             f"GROUP BY full_url ORDER BY c DESC {page_clause}",
             parameters=params,
         ).result_rows

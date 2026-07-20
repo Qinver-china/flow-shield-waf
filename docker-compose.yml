@@ -113,6 +113,7 @@ services:
     volumes:
       - engine_conf:/data/engine/conf.d
       - engine_certs:/data/engine/certs
+      - ./deploy/geoip:/etc/nginx/geoip:ro
       - ./slide_captcha:/data/slide_captcha
       - redis_run:/var/run/redis
       - waf_sqlite:/data

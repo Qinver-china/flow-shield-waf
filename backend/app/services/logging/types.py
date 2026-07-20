@@ -18,7 +18,7 @@ class LogType(str, Enum):
 # common queryable columns present on every log row
 COMMON_FIELDS = [
     "ts", "log_type", "source", "site_id", "domain", "client_ip",
-    "geo_country", "method", "uri", "ua", "rule_id", "rule_name",
+    "geo_country", "method", "request_uri", "ua", "rule_id", "rule_name",
     "action", "mode", "blocked", "request_id",
 ]
 

@@ -44,6 +44,9 @@ local function empty_config()
         exceptions = {},
         ratelimits = {},
         ip_groups = {},
+        bots = {},
+        bot_category_values = {},
+        crawler_detect = nil,
         settings = {
             js_challenge_ttl = 1800,
             captcha_ttl = 1800,
@@ -149,6 +152,9 @@ function _M.load(force)
         exceptions = parsed.exceptions or {},
         ratelimits = sort_by_priority(parsed.ratelimits or {}),
         ip_groups = parsed.ip_groups or {},
+        bots = parsed.bots or {},
+        bot_category_values = parsed.bot_category_values or {},
+        crawler_detect = parsed.crawler_detect,
         settings = parsed.settings or {
             js_challenge_ttl = 1800,
             captcha_ttl = 1800,
@@ -160,7 +166,8 @@ function _M.load(force)
     }
     _fail_streak = 0
     _backoff_until = 0
-    ngx.log(ngx.NOTICE, "waf sync: loaded config version ", ver, " rules=", #_config.rules)
+    ngx.log(ngx.NOTICE, "waf sync: loaded config version ", ver,
+        " rules=", #_config.rules, " bots=", #(_config.bots or {}))
     return true
 end
 

@@ -94,10 +94,10 @@ flow-shield-waf/
 ├── deploy/
 │   ├── app/                # 应用镜像（后端 + Worker + 引擎 + 面板）
 │   ├── clickhouse/         # ClickHouse 初始化 SQL
+│   ├── geoip/              # MaxMind .mmdb（已附带，见 deploy/geoip/README.md）
 │   ├── baota/              # 宝塔一键部署
 │   └── smoke_test.sh       # 集成回归脚本
 ├── scripts/
-│   ├── migrate_mysql_to_sqlite.py  # MySQL 升级迁移（可选）
 │   └── fresh-start.sh      # 清空数据卷并重建（开发/测试用）
 └── docs/                   # 架构 / 规则 DSL / API 文档
 ```
@@ -201,6 +201,74 @@ bash deploy/smoke_test.sh
 
 ---
 
+## 地理位置（GeoIP）
+
+流盾 WAF 支持基于 MaxMind GeoIP2 的地理维度匹配与日志补全，用于按国家/地区/运营商编写规则，并在防护日志中记录来源地理信息。
+
+### 内网 IP 自动跳过（性能优先）
+
+在进行**任何**地理位置相关操作之前，引擎会先判断客户端 IP 是否为内网地址。内网 IP **不会**触发 GeoIP2 查询，也不会读取 `CF-IPCountry` 等兜底头，以避免无意义的性能开销。
+
+内网判定标准由引擎统一维护（`engine/lua/waf/util.lua` → `is_private_ip`），当前包含以下 IPv4 网段：
+
+| 网段 | 说明 |
+|------|------|
+| `10.0.0.0/8` | RFC 1918 A 类私网 |
+| `172.16.0.0/12` | RFC 1918 B 类私网 |
+| `192.168.0.0/16` | RFC 1918 C 类私网 |
+| `127.0.0.0/8` | 回环地址 |
+
+适用场景：
+
+- **规则匹配**：`geo.country`、`geo.region` 等字段对内网 IP 直接返回空，不查库
+- **日志写入**：内网请求不写地理字段（`geo_country` 等保持为空），`ip_is_private` 记为 `true`
+
+> 客户端 IP 取自 TCP 连接地址（`remote_addr`），与限速、挑战一致，防止伪造 `X-Forwarded-For`。若需扩展内网网段定义，请修改 `util.is_private_ip` 后重建 `app` 镜像。
+
+### 启用 MaxMind GeoIP2
+
+项目 `deploy/geoip/` 目录**已附带** GeoLite2 三库（Country / City / ASN），默认直接可用，无需下载。
+
+```bash
+docker compose up -d --build   # 或已部署时：docker compose restart app
+```
+
+`docker-compose.yml` 将该目录挂载到容器内 `/etc/nginx/geoip`；entrypoint 检测到 `.mmdb` 后**自动生成** GeoIP2 配置。
+
+**需要更新库时**：自行从 [MaxMind GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) 下载最新文件，覆盖 `deploy/geoip/` 中同名文件后重启 `app` 即可。详见 [`deploy/geoip/README.md`](deploy/geoip/README.md)。
+
+### 规则与日志行为
+
+| 路径 | 行为 |
+|------|------|
+| 规则引用 `geo.*` | 仅在该字段被求值时查询；内网 IP 直接跳过 |
+| 日志写入 | 凡落库的请求均尝试补全地理字段 |
+| 规则已 trace 地理字段 | 写日志时复用 trace，不重复查询 |
+| 规则未查地理 | 仅在日志路径懒加载批量读取 `ngx.var` |
+| 未配置 GeoIP2 | 公网 IP 的国家可回退 `CF-IPCountry`（Cloudflare） |
+
+可在自定义规则中使用 `geo.country`、`geo.region`、`geo.city`、`geo.asn`、`geo.isp`、`geo.ip_type` 及 `geo_in` 操作符。总览大屏「拦截来源国家」仅统计已拦截（`blocked = 1`）请求。
+
+### 接入 CDN 时的客户端 IP
+
+若域名前置了 CDN 或反向代理，请在 **站点管理 → 回源配置 → 客户端 IP 获取方式** 选择与上游一致的头字段：
+
+| 选项 | 适用场景 |
+|------|----------|
+| 直连 IP（默认） | 客户端直连 WAF，无 CDN |
+| CF-Connecting-IP | Cloudflare |
+| True-Client-IP | Akamai 等 |
+| X-Real-IP / X-Client-IP | 通用反向代理 |
+| X-Forwarded-For（第一个/最后一个） | 多层代理链 |
+
+该设置影响规则中的 `ip.src`、限速键、挑战校验、防护日志与 GeoIP。对于 `X-Real-IP`、`CF-Connecting-IP` 等单值头，引擎还会在站点 Nginx 配置中启用 `real_ip` 模块，使 GeoIP2 与 `$remote_addr` 同步为真实客户端地址。
+
+> 请确保流量**仅**从可信 CDN / 代理进入 WAF，避免客户端伪造 IP 头。直连公网暴露时请保持「直连 IP」。
+
+更多细节见 [`deploy/geoip/README.md`](deploy/geoip/README.md) 与 [`docs/rule-dsl.md`](docs/rule-dsl.md)。
+
+---
+
 ## 架构示意
 
 ```
@@ -232,7 +300,7 @@ bash deploy/smoke_test.sh
 | 模块 | 功能 |
 |------|------|
 | 总览 | 请求量、拦截统计、配置版本、站点概览 |
-| 站点管理 | 域名、回源、HTTP/HTTPS、证书、自定义拦截页 |
+| 站点管理 | 域名、回源、HTTP/HTTPS、证书、客户端 IP 获取方式（CDN）、自定义拦截页 |
 | 证书管理 | SSL 证书上传与管理 |
 | 自定义规则 | SQL 注入、扫描器等防护规则，支持优先级与五种模式 |
 | 黑名单 / 白名单 | 全局访问控制（黑名单必须配置匹配条件） |

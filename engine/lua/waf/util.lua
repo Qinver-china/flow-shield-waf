@@ -30,10 +30,68 @@ local function normalize_ip(ip)
     return ip
 end
 
--- Resolve client IP for rate limiting and challenge clearance.
--- Edge WAF uses the TCP peer address so clients cannot spoof X-Forwarded-For.
--- (Trusted upstream proxy support can be added later via settings.)
+local function header_value(name)
+    local headers = ngx.req.get_headers()
+    local v = headers[name]
+    if type(v) == "table" then
+        v = v[1]
+    end
+    if v and v ~= "" then
+        return v
+    end
+    local var_name = "http_" .. name:lower():gsub("-", "_")
+    return ngx.var[var_name]
+end
+
+local function xff_first()
+    local xff = header_value("X-Forwarded-For")
+    if not xff or xff == "" then
+        return nil
+    end
+    return xff:match("^%s*([^,%s]+)")
+end
+
+local function xff_last()
+    local xff = header_value("X-Forwarded-For")
+    if not xff or xff == "" then
+        return nil
+    end
+    local last
+    for part in xff:gmatch("([^,%s]+)") do
+        last = part
+    end
+    return last
+end
+
+local IP_RESOLVERS = {
+    remote_addr = function()
+        return ngx.var.remote_addr
+    end,
+    xff_first = xff_first,
+    xff_last = xff_last,
+    x_real_ip = function()
+        return header_value("X-Real-IP")
+    end,
+    cf_connecting_ip = function()
+        return header_value("CF-Connecting-IP")
+    end,
+    true_client_ip = function()
+        return header_value("True-Client-IP")
+    end,
+    x_client_ip = function()
+        return header_value("X-Client-IP")
+    end,
+}
+
+-- Resolve client IP using per-site mode (ngx.ctx.waf_client_ip_source).
+-- Falls back to remote_addr when the configured header is absent.
 function _M.client_ip()
+    local source = ngx.ctx.waf_client_ip_source or "remote_addr"
+    local resolver = IP_RESOLVERS[source] or IP_RESOLVERS.remote_addr
+    local ip = normalize_ip(resolver())
+    if ip and ip ~= "" then
+        return ip
+    end
     return normalize_ip(ngx.var.remote_addr)
 end
 
@@ -63,6 +121,8 @@ function _M.ip_in_cidr(ip, cidr)
     return math.floor(ip_int / shift) == math.floor(net_int / shift)
 end
 
+-- Private / internal IPv4 ranges maintained by Flow Shield WAF.
+-- Used by ip.src.is_private rules, geo lookup short-circuit, and log ip_is_private.
 function _M.is_private_ip(ip)
     if not ip then return false end
     return _M.ip_in_cidr(ip, "10.0.0.0/8")

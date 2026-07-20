@@ -13,13 +13,37 @@ _BOT_COLUMNS = (
     ("bot_category", "LowCardinality(Nullable(String))"),
 )
 
+_URI_COLUMNS = (
+    ("uri_query", "String DEFAULT ''"),
+    ("referer", "String DEFAULT ''"),
+)
+
 _HOURLY_MV = "mv_stats_core_hourly_mv"
 
 
 def ensure_clickhouse_columns() -> None:
     try:
         client = get_clickhouse()
+        rows = client.query(
+            "SELECT name FROM system.columns "
+            "WHERE database = {db:String} AND table = 'waf_logs'",
+            parameters={"db": settings.clickhouse_database},
+        ).result_rows
+        col_names = {str(row[0]) for row in rows}
+        if "uri" in col_names and "request_uri" not in col_names:
+            client.command("ALTER TABLE waf_logs RENAME COLUMN uri TO request_uri")
+            log.info("clickhouse column renamed: waf_logs.uri -> request_uri")
+        elif "request_uri" not in col_names:
+            client.command(
+                "ALTER TABLE waf_logs ADD COLUMN IF NOT EXISTS request_uri String DEFAULT ''"
+            )
+            log.info("clickhouse column ensured: waf_logs.request_uri")
         for col, col_type in _BOT_COLUMNS:
+            client.command(
+                f"ALTER TABLE waf_logs ADD COLUMN IF NOT EXISTS {col} {col_type}"
+            )
+            log.info("clickhouse column ensured: waf_logs.%s", col)
+        for col, col_type in _URI_COLUMNS:
             client.command(
                 f"ALTER TABLE waf_logs ADD COLUMN IF NOT EXISTS {col} {col_type}"
             )

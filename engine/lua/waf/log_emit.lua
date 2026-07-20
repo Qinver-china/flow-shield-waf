@@ -2,6 +2,11 @@
 local log_snapshot = require "waf.log_snapshot"
 local log_policy = require "waf.log_policy"
 local events = require "waf.events"
+local bot = require "waf.bot"
+local ua_parse = require "waf.ua_parse"
+local uri_parse = require "waf.uri_parse"
+local geo_lookup = require "waf.geo_lookup"
+local util = require "waf.util"
 
 local _M = {}
 
@@ -15,30 +20,6 @@ local function trace_pick(trace, field, arg)
     return item and item.value
 end
 
-local function referer_host()
-    local ref = ngx.var.http_referer
-    if not ref or ref == "" then return nil end
-    local host = ref:match("^https?://([^/%?#:]+)")
-    return host
-end
-
-local function uri_path()
-    local uri = ngx.var.uri or "/"
-    return uri
-end
-
-local function uri_ext(path)
-    local ext = path:match("%.([%w%-]+)$")
-    return ext
-end
-
-local function uri_depth(path)
-    local depth = 0
-    for _ in path:gmatch("/") do depth = depth + 1 end
-    if depth > 0 then depth = depth - 1 end
-    return depth
-end
-
 local function xff_first()
     local xff = ngx.var.http_x_forwarded_for
     if not xff or xff == "" then
@@ -49,7 +30,7 @@ end
 
 function _M.build_tier_a(ctx, meta, mode, blocked, trace, ext, captured)
     local summary = log_snapshot.summary_columns(trace, ext, captured)
-    local path = uri_path()
+    local path = uri_parse.path()
     local ua = summary.ua or ngx.var.http_user_agent
     if ua and #ua > MAX_UA then
         ua = ua:sub(1, MAX_UA)
@@ -61,15 +42,13 @@ function _M.build_tier_a(ctx, meta, mode, blocked, trace, ext, captured)
         site_id = ctx.site_id,
         domain = ctx.domain,
         client_ip = summary.client_ip,
-        geo_country = summary.geo_country or trace_pick(trace, "geo.country"),
-        geo_region = trace_pick(trace, "geo.region"),
-        geo_city = trace_pick(trace, "geo.city"),
-        geo_ip_type = trace_pick(trace, "geo.ip_type"),
         method = ngx.req.get_method(),
-        uri = ngx.var.request_uri,
+        request_uri = uri_parse.request_uri(),
         uri_path = path,
-        uri_ext = uri_ext(path),
-        uri_depth = uri_depth(path),
+        uri_ext = uri_parse.ext(path),
+        uri_depth = uri_parse.depth(path),
+        uri_query = uri_parse.query(),
+        query_count = uri_parse.query_count(),
         scheme = ngx.var.scheme,
         http_version = ngx.var.server_protocol,
         ua = ua,
@@ -79,8 +58,10 @@ function _M.build_tier_a(ctx, meta, mode, blocked, trace, ext, captured)
         mode = mode,
         blocked = blocked,
         request_id = ctx.request_id,
-        referer_host = referer_host(),
-        ip_is_private = trace_pick(trace, "ip.src.is_private"),
+        referer = uri_parse.referer(),
+        referer_host = uri_parse.referer_host(),
+        ip_is_private = trace_pick(trace, "ip.src.is_private")
+            or util.is_private_ip(summary.client_ip),
         xff_first = xff_first(),
         tls_version = ngx.var.ssl_protocol,
         tls_cipher = ngx.var.ssl_cipher,
@@ -97,6 +78,20 @@ local function merge_baseline(entry, baseline)
     end
 end
 
+local function enrich_bot_dimensions(entry, cfg, ext, site_id)
+    local ua = entry.ua
+    if not ua or ua == "" then
+        return
+    end
+    entry.ua_family = ua_parse.family(ua, cfg, ext, site_id)
+    entry.ua_os = ua_parse.os(ua)
+    if entry.ua_family ~= "bot" then
+        return
+    end
+    entry.bot_name, entry.bot_category = bot.resolve_dimensions(cfg, ext, site_id)
+    entry.ua_browser = nil
+end
+
 function _M.emit(cfg, ctx, meta, mode, blocked, trace, ext)
     local ok_log, _reason = log_policy.should_log(cfg, mode, ctx.request_id)
     if not ok_log then
@@ -107,6 +102,9 @@ function _M.emit(cfg, ctx, meta, mode, blocked, trace, ext)
     local entry = _M.build_tier_a(ctx, meta, mode, blocked, trace, ext, captured)
     local baseline = log_snapshot.build_baseline(trace, meta, ext, captured)
     merge_baseline(entry, baseline)
+    enrich_bot_dimensions(entry, cfg, ext, ctx.site_id)
+    -- Lazy geo fill on log path only: reuse rule trace when present, else batch-read ngx.var.
+    geo_lookup.fill_entry(entry, trace, ext)
 
     if log_policy.include_detail(cfg, mode) then
         entry.evaluated = log_snapshot.evaluated_fields(trace)

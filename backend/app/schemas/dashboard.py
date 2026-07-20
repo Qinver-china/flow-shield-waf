@@ -14,7 +14,6 @@ class DashboardHealthOut(BaseModel):
     redis: str
     clickhouse: str
     rule_sync: RuleSyncHealthOut
-    mysql: str | None = None  # deprecated alias for database
 
 
 class DashboardFeedItemOut(BaseModel):

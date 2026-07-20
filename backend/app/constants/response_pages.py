@@ -32,7 +32,7 @@ PAGE_TEMPLATE_VARIABLES = [
     {"key": "client_ip", "label": "客户端 IP", "description": "访客 IP 地址"},
     {"key": "domain", "label": "域名", "description": "请求 Host"},
     {"key": "method", "label": "请求方法", "description": "HTTP 方法，如 GET / POST"},
-    {"key": "uri", "label": "请求 URI", "description": "含查询串的请求路径"},
+    {"key": "request_uri", "label": "请求 URI", "description": "含查询串的请求路径（http.request_uri）"},
     {"key": "rule_id", "label": "规则 ID", "description": "命中的规则 ID"},
     {"key": "rule_name", "label": "规则名称", "description": "命中的规则名称"},
     {"key": "source", "label": "防护来源", "description": "rule / ratelimit / blacklist"},

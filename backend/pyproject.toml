@@ -1,6 +1,6 @@
 [project]
 name = "flowshield-waf-backend"
-version = "0.3.0"
+version = "0.3.2"
 description = "流盾WAF (Flow Shield WAF) - 管理后端"
 license = "PolyForm-Noncommercial-1.0.0"
 requires-python = ">=3.11"
@@ -20,7 +20,6 @@ dependencies = [
     "httpx>=0.27",
     "clickhouse-connect>=0.7",
     "ua-parser[regex]>=1.0.2",
-    "crawlerdetect>=0.3.2",
     "openai>=1.40",
     "pi-captcha>=0.0.1",
     "pillow>=10.0",

@@ -1,3 +1,5 @@
+import { logStatsDimensionLayout } from "@/constants/logDimensionLayout";
+
 export const modeLabel: Record<string, string> = {
   observe: "观察",
   block: "拦截",
@@ -99,6 +101,8 @@ export function formatStatsValueLabel(
     }
     case "ua":
     case "full_url":
+    case "request_uri":
+    case "uri_query":
       return label;
     case "bot_category":
       return botCategoryLabel[key] || botCategoryLabel[label] || label;
@@ -118,69 +122,7 @@ export function localizeStatsItems(
   }));
 }
 
-export const statsDimensionGroups = [
-  {
-    label: "核心",
-    items: [
-      { key: "rule_id", label: "命中规则", desc: "按规则 ID 聚合" },
-      { key: "source", label: "防护来源", desc: "规则 / 黑名单 / 限速等" },
-      { key: "mode", label: "防护方式", desc: "观察 / 拦截 / 人机等" },
-      { key: "blocked", label: "拦截结果", desc: "已拦截 vs 已放行" },
-      { key: "log_type", label: "日志类型", desc: "防护 / 访问 / 审计" },
-      { key: "site_id", label: "站点", desc: "按站点 ID 聚合（名称实时解析）" },
-    ],
-  },
-  {
-    label: "网络与地理",
-    items: [
-      { key: "client_ip", label: "客户端 IP", desc: "按来源 IP 聚合" },
-      { key: "ip_is_private", label: "内网 IP", desc: "是否内网地址" },
-      { key: "xff_first", label: "XFF 首跳", desc: "X-Forwarded-For 第一个 IP" },
-      { key: "geo_country", label: "国家/地区", desc: "按 IP 地理位置聚合" },
-      { key: "geo_region", label: "省/州", desc: "地理区域" },
-      { key: "geo_city", label: "城市", desc: "地理城市" },
-      { key: "geo_isp", label: "运营商", desc: "ISP" },
-      { key: "geo_ip_type", label: "IP 类型", desc: "机房 / 家庭等" },
-      { key: "geo_asn", label: "ASN", desc: "自治系统号" },
-    ],
-  },
-  {
-    label: "HTTP / URL",
-    items: [
-      { key: "method", label: "请求方法", desc: "GET / POST 等" },
-      { key: "scheme", label: "协议", desc: "http / https" },
-      { key: "http_version", label: "HTTP 版本", desc: "1.0 / 1.1 / 2" },
-      { key: "domain", label: "域名", desc: "按请求域名聚合" },
-      { key: "full_url", label: "完整 URL", desc: "协议 + 域名 + 路径与查询串" },
-      { key: "uri_path", label: "请求路径", desc: "URI path" },
-      { key: "uri_ext", label: "文件后缀", desc: "如 php / js" },
-      { key: "uri_depth", label: "路径深度", desc: "路径段数量" },
-      { key: "uri_pattern", label: "路径模式", desc: "归一化后的路径" },
-      { key: "referer_host", label: "Referer 主机", desc: "来源页域名" },
-      { key: "query_count_bucket", label: "参数数量", desc: "查询参数个数分段" },
-    ],
-  },
-  {
-    label: "客户端",
-    items: [
-      { key: "ua", label: "User-Agent", desc: "完整 UA 字符串（Top 命中）" },
-      { key: "ua_family", label: "UA 类型", desc: "浏览器 / Bot" },
-      { key: "bot_name", label: "Bot 名称", desc: "命中的已知 Bot" },
-      { key: "bot_category", label: "Bot 分类", desc: "搜索引擎 / 爬虫等" },
-      { key: "ua_os", label: "操作系统", desc: "OS 分布" },
-      { key: "ua_browser", label: "浏览器", desc: "浏览器分布" },
-      { key: "tls_version", label: "TLS 版本", desc: "TLS 协议版本" },
-      { key: "tls_ja3", label: "JA3 指纹", desc: "TLS 指纹" },
-    ],
-  },
-  {
-    label: "时间",
-    items: [
-      { key: "hour_of_day", label: "小时分布", desc: "0-23 点" },
-      { key: "weekday", label: "星期分布", desc: "周一至周日" },
-    ],
-  },
-] as const;
+export const statsDimensionGroups = logStatsDimensionLayout;
 
 export const statsDimensions = statsDimensionGroups.flatMap((g) => g.items);
 
@@ -533,52 +475,59 @@ export const geoCountryOptions = selectFromRecord(geoCountryLabel);
 
 export const logDetailFilterGroups: { label: string; fields: LogFilterFieldDef[] }[] = [
   {
-    label: "核心",
+    label: "防护命中",
     fields: [
       { key: "source", label: "防护来源", type: "select", options: selectFromRecord(sourceLabel) },
       { key: "mode", label: "防护方式", type: "select", options: selectFromRecord(modeLabel) },
       { key: "log_type", label: "日志类型", type: "select", options: selectFromRecord(logTypeLabel) },
       { key: "blocked", label: "拦截结果", type: "bool" },
       { key: "site_id", label: "站点", type: "site" },
-      { key: "rule_id", label: "规则 ID", type: "rule_id" },
+      { key: "rule_id", label: "命中规则", type: "rule_id" },
       { key: "rule_name", label: "规则名称", type: "text", placeholder: "模糊匹配" },
       { key: "action", label: "动作", type: "text", placeholder: "action" },
+      { key: "keyword", label: "关键字", type: "text", placeholder: "URL / UA / 域名模糊搜索" },
     ],
   },
   {
     label: "网络与地理",
     fields: [
       { key: "client_ip", label: "客户端 IP", type: "text", placeholder: "精确匹配" },
-      { key: "ip_is_private", label: "内网 IP", type: "bool" },
-      { key: "xff_first", label: "XFF 首跳", type: "text", placeholder: "精确匹配" },
-      { key: "geo_country", label: "国家/地区", type: "select", options: geoCountryOptions },
-      { key: "geo_region", label: "省/州", type: "text", placeholder: "精确匹配" },
-      { key: "geo_city", label: "城市", type: "text", placeholder: "精确匹配" },
-      { key: "geo_isp", label: "运营商", type: "text", placeholder: "精确匹配" },
-      { key: "geo_ip_type", label: "IP 类型", type: "text", placeholder: "如 datacenter / residential" },
-      { key: "geo_asn", label: "ASN", type: "number" },
-    ],
-  },
-  {
-    label: "HTTP / URL",
-    fields: [
-      { key: "method", label: "请求方法", type: "select", options: httpMethodOptions },
+      { key: "ip_is_private", label: "IP 是否内网", type: "bool" },
       { key: "scheme", label: "协议", type: "select", options: schemeOptions },
       { key: "http_version", label: "HTTP 版本", type: "select", options: httpVersionOptions },
-      { key: "domain", label: "域名", type: "text", placeholder: "精确匹配" },
-      { key: "uri_path", label: "请求路径", type: "text", placeholder: "精确匹配" },
-      { key: "uri_ext", label: "文件后缀", type: "text", placeholder: "如 php / js" },
-      { key: "referer_host", label: "Referer 主机", type: "text", placeholder: "精确匹配" },
-      { key: "keyword", label: "关键字", type: "text", placeholder: "URL / UA / 域名模糊搜索" },
+      { key: "geo_country", label: "IP 国家/地区", type: "select", options: geoCountryOptions },
+      { key: "geo_region", label: "IP 省/州", type: "text", placeholder: "精确匹配" },
+      { key: "geo_city", label: "IP 城市", type: "text", placeholder: "精确匹配" },
+      { key: "geo_asn", label: "IP ASN", type: "number" },
+      { key: "geo_isp", label: "运营商 ISP", type: "text", placeholder: "精确匹配" },
+      { key: "geo_ip_type", label: "IP 类型", type: "text", placeholder: "如 datacenter / residential" },
+      { key: "xff_first", label: "X-Forwarded-For", type: "text", placeholder: "XFF 首跳 IP" },
     ],
   },
   {
-    label: "客户端",
+    label: "URL 与路径",
     fields: [
+      { key: "domain", label: "请求域名", type: "text", placeholder: "精确匹配" },
+      { key: "request_uri", label: "原始请求行", type: "text", placeholder: "如 /api?id=1" },
+      { key: "uri_path", label: "请求路径", type: "text", placeholder: "精确匹配" },
+      { key: "uri_ext", label: "文件后缀", type: "text", placeholder: "如 php / js" },
+      { key: "uri_query", label: "原始查询串", type: "text", placeholder: "如 id=1&foo=bar" },
+    ],
+  },
+  {
+    label: "HTTP 请求",
+    fields: [
+      { key: "method", label: "请求方法", type: "select", options: httpMethodOptions },
+      { key: "referer_host", label: "Referer", type: "text", placeholder: "Referer 主机名" },
       { key: "ua", label: "User-Agent", type: "text", placeholder: "模糊匹配" },
-      { key: "ua_family", label: "UA 类型", type: "text", placeholder: "如 browser / bot" },
+    ],
+  },
+  {
+    label: "客户端识别",
+    fields: [
       { key: "bot_name", label: "Bot 名称", type: "text", placeholder: "如 Googlebot" },
       { key: "bot_category", label: "Bot 分类", type: "select", options: [] },
+      { key: "ua_family", label: "UA 类型", type: "text", placeholder: "如 browser / bot" },
       { key: "ua_os", label: "操作系统", type: "text", placeholder: "精确匹配" },
       { key: "ua_browser", label: "浏览器", type: "text", placeholder: "精确匹配" },
       { key: "tls_version", label: "TLS 版本", type: "text", placeholder: "如 TLSv1.3" },
@@ -634,8 +583,10 @@ export function logDetailFiltersUseAdvanced(filters: LogDetailFilters): boolean 
   if (filters.scheme) return true;
   if (filters.http_version) return true;
   if (filters.domain) return true;
+  if (filters.request_uri) return true;
   if (filters.uri_path) return true;
   if (filters.uri_ext) return true;
+  if (filters.uri_query) return true;
   if (filters.referer_host) return true;
   if (filters.ua) return true;
   if (filters.ua_family) return true;
@@ -669,8 +620,10 @@ export type LogDetailFilters = {
   scheme?: string;
   http_version?: string;
   domain: string;
+  request_uri: string;
   uri_path: string;
   uri_ext: string;
+  uri_query: string;
   referer_host: string;
   keyword: string;
   ua: string;
@@ -705,8 +658,10 @@ export function createDefaultLogFilters(): LogDetailFilters {
     scheme: undefined,
     http_version: undefined,
     domain: "",
+    request_uri: "",
     uri_path: "",
     uri_ext: "",
+    uri_query: "",
     referer_host: "",
     keyword: "",
     ua: "",
@@ -761,8 +716,10 @@ export function buildLogQueryParams(
     geo_isp: filters.geo_isp || undefined,
     geo_ip_type: filters.geo_ip_type || undefined,
     domain: filters.domain || undefined,
+    request_uri: filters.request_uri || undefined,
     uri_path: filters.uri_path || undefined,
     uri_ext: filters.uri_ext || undefined,
+    uri_query: filters.uri_query || undefined,
     referer_host: filters.referer_host || undefined,
     keyword: filters.keyword || undefined,
     ua: filters.ua || undefined,
@@ -862,8 +819,10 @@ const STATS_DIM_FILTER: Partial<Record<StatsDimension, { field: string; operator
   scheme: { field: "scheme" },
   http_version: { field: "http_version" },
   domain: { field: "domain" },
+  request_uri: { field: "request_uri" },
   uri_path: { field: "uri_path" },
   uri_ext: { field: "uri_ext" },
+  uri_query: { field: "uri_query" },
   referer_host: { field: "referer_host" },
   ua: { field: "ua", operator: "contains" },
   ua_family: { field: "ua_family" },
@@ -1088,6 +1047,12 @@ export function applyStatsDrillDownToFilters(
       break;
     case "uri_path":
       filters.uri_path = key;
+      break;
+    case "request_uri":
+      filters.request_uri = key;
+      break;
+    case "uri_query":
+      filters.uri_query = key;
       break;
     case "uri_ext":
       filters.uri_ext = key;

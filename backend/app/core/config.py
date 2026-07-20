@@ -24,13 +24,6 @@ class Settings(BaseSettings):
     # database (SQLite embedded config store)
     db_path: str = "/data/waf.db"
 
-    # legacy mysql settings (migration script only)
-    db_host: str = "mysql"
-    db_port: int = 3306
-    db_name: str = "waf"
-    db_user: str = "waf"
-    db_password: str = "waf"
-
     # redis
     redis_host: str = "redis"
     redis_port: int = 6379
@@ -70,6 +63,11 @@ class Settings(BaseSettings):
     log_collector_max_drain_batches: int = 4
     log_collector_bot_catalog_refresh_sec: int = 30
 
+    # vendored Crawler-Detect rules (JayBizzle/Crawler-Detect)
+    crawler_vendored_path: str = ""
+    crawler_vendored_auto_update_days: int = 30
+    crawler_vendored_check_interval_sec: int = 3600
+
     # engine integration
     engine_conf_dir: str = "/data/engine/conf.d"
     engine_cert_dir: str = "/data/engine/certs"
@@ -86,11 +84,19 @@ class Settings(BaseSettings):
         return f"sqlite+aiosqlite:///{self.db_path}"
 
     @property
-    def mysql_database_url(self) -> str:
-        return (
-            f"mysql+aiomysql://{self.db_user}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
-        )
+    def data_dir(self) -> str:
+        import os
+
+        parent = os.path.dirname(self.db_path)
+        return parent or "/data"
+
+    @property
+    def crawler_vendored_dir(self) -> str:
+        if self.crawler_vendored_path.strip():
+            return self.crawler_vendored_path.strip()
+        import os
+
+        return os.path.join(self.data_dir, "crawler_vendored")
 
     @property
     def redis_url(self) -> str:

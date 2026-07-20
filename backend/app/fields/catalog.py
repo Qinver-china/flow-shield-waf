@@ -146,89 +146,96 @@ def _f(key, label, category, value_type, requires_arg=False, extra_ops=None):
     }
 
 
+# ordered category names for the condition editor (and log dimension UI alignment)
+CATEGORY_ORDER: list[str] = [
+    "网络与地理",
+    "URL 与路径",
+    "HTTP 请求",
+    "客户端识别",
+    "时间与流量",
+]
+
 # ordered catalog
 FIELDS: list[dict] = [
     # client & network
-    _f("ip.src", "客户端 IP", "客户端与网络", IP),
-    _f("ip.src.is_private", "IP 是否内网", "客户端与网络", BOOL),
-    _f("net.src_port", "客户端端口", "客户端与网络", NUMBER),
-    _f("net.dst_port", "服务端口", "客户端与网络", NUMBER),
-    _f("net.scheme", "协议", "客户端与网络", ENUM),
-    _f("http.version", "HTTP 版本", "客户端与网络", ENUM),
+    _f("ip.src", "客户端 IP", "网络与地理", IP),
+    _f("ip.src.is_private", "IP 是否内网", "网络与地理", BOOL),
+    _f("net.src_port", "客户端端口", "网络与地理", NUMBER),
+    _f("net.dst_port", "服务端口", "网络与地理", NUMBER),
+    _f("net.scheme", "协议", "网络与地理", ENUM),
+    _f("http.version", "HTTP 版本", "网络与地理", ENUM),
     # geo / threat intel
-    _f("geo.country", "IP 国家/地区", "地理位置与情报", STRING),
-    _f("geo.region", "IP 省/州", "地理位置与情报", STRING),
-    _f("geo.city", "IP 城市", "地理位置与情报", STRING),
-    _f("geo.asn", "IP ASN", "地理位置与情报", NUMBER),
-    _f("geo.isp", "运营商 ISP", "地理位置与情报", STRING),
-    _f("geo.ip_type", "IP 类型", "地理位置与情报", ENUM),
-    # request line
-    _f("http.method", "请求方法", "请求行", ENUM),
-    _f("http.host", "请求域名", "请求行", STRING),
-    _f("http.url", "完整 URL", "请求行", STRING),
-    _f("http.request_uri", "原始请求行", "请求行", STRING),
+    _f("geo.country", "IP 国家/地区", "网络与地理", STRING),
+    _f("geo.region", "IP 省/州", "网络与地理", STRING),
+    _f("geo.city", "IP 城市", "网络与地理", STRING),
+    _f("geo.asn", "IP ASN", "网络与地理", NUMBER),
+    _f("geo.isp", "运营商 ISP", "网络与地理", STRING),
+    _f("geo.ip_type", "IP 类型", "网络与地理", ENUM),
     # url / path
+    _f("http.host", "请求域名", "URL 与路径", STRING),
+    _f("http.url", "完整 URL", "URL 与路径", STRING),
+    _f("http.request_uri", "原始请求行", "URL 与路径", STRING),
     _f("http.uri.path", "请求路径", "URL 与路径", STRING),
     _f("http.uri.segment", "路径段", "URL 与路径", STRING, requires_arg=True),
     _f("http.uri.ext", "文件后缀", "URL 与路径", STRING),
     _f("http.uri.depth", "路径深度", "URL 与路径", NUMBER),
     _f("http.uri.query", "原始查询串", "URL 与路径", STRING),
-    # query args
-    _f("http.query", "查询参数", "查询参数", STRING, requires_arg=True),
-    _f("http.query.count", "查询参数个数", "查询参数", NUMBER),
-    # headers
-    _f("http.header", "请求头", "请求头", STRING, requires_arg=True),
-    _f("http.header.count", "请求头数量", "请求头", NUMBER),
-    _f("http.ua", "User-Agent", "请求头", STRING),
-    _f("http.referer", "Referer", "请求头", STRING),
-    _f("http.content_type", "Content-Type", "请求头", STRING),
-    _f("http.content_length", "Content-Length", "请求头", NUMBER),
-    _f("http.accept", "Accept", "请求头", STRING),
-    _f("http.accept_language", "Accept-Language", "请求头", STRING),
-    _f("http.accept_encoding", "Accept-Encoding", "请求头", STRING),
-    _f("http.origin", "Origin", "请求头", STRING),
-    _f("http.xff", "X-Forwarded-For", "请求头", STRING),
-    _f("http.range", "Range", "请求头", STRING),
-    _f("http.has_auth", "是否带 Authorization", "请求头", BOOL),
+    _f("http.query", "查询参数", "URL 与路径", STRING, requires_arg=True),
+    _f("http.query.count", "查询参数个数", "URL 与路径", NUMBER),
+    # method / headers / cookies / body
+    _f("http.method", "请求方法", "HTTP 请求", ENUM),
+    _f("http.header", "请求头", "HTTP 请求", STRING, requires_arg=True),
+    _f("http.header.count", "请求头数量", "HTTP 请求", NUMBER),
+    _f("http.ua", "User-Agent", "HTTP 请求", STRING),
+    _f("http.referer", "Referer", "HTTP 请求", STRING),
+    _f("http.content_type", "Content-Type", "HTTP 请求", STRING),
+    _f("http.content_length", "Content-Length", "HTTP 请求", NUMBER),
+    _f("http.accept", "Accept", "HTTP 请求", STRING),
+    _f("http.accept_language", "Accept-Language", "HTTP 请求", STRING),
+    _f("http.accept_encoding", "Accept-Encoding", "HTTP 请求", STRING),
+    _f("http.origin", "Origin", "HTTP 请求", STRING),
+    _f("http.xff", "X-Forwarded-For", "HTTP 请求", STRING),
+    _f("http.range", "Range", "HTTP 请求", STRING),
+    _f("http.has_auth", "是否带 Authorization", "HTTP 请求", BOOL),
     # cookies
-    _f("http.cookie", "Cookie 参数", "Cookie", STRING, requires_arg=True),
-    _f("http.cookie_raw", "原始 Cookie", "Cookie", STRING),
-    _f("http.cookie.count", "Cookie 个数", "Cookie", NUMBER),
+    _f("http.cookie", "Cookie 参数", "HTTP 请求", STRING, requires_arg=True),
+    _f("http.cookie_raw", "原始 Cookie", "HTTP 请求", STRING),
+    _f("http.cookie.count", "Cookie 个数", "HTTP 请求", NUMBER),
     # body
-    _f("http.body.raw", "原始请求体", "请求体", STRING),
-    _f("http.body.size", "请求体大小", "请求体", NUMBER),
-    _f("http.body.form", "表单参数", "请求体", STRING, requires_arg=True),
-    _f("http.body.json", "JSON 字段", "请求体", STRING, requires_arg=True),
-    _f("http.upload.filename", "上传文件名", "请求体", STRING),
-    _f("http.upload.ext", "上传文件后缀", "请求体", STRING),
+    _f("http.body.raw", "原始请求体", "HTTP 请求", STRING),
+    _f("http.body.size", "请求体大小", "HTTP 请求", NUMBER),
+    _f("http.body.form", "表单参数", "HTTP 请求", STRING, requires_arg=True),
+    _f("http.body.json", "JSON 字段", "HTTP 请求", STRING, requires_arg=True),
+    _f("http.upload.filename", "上传文件名", "HTTP 请求", STRING),
+    _f("http.upload.ext", "上传文件后缀", "HTTP 请求", STRING),
     # tls
-    _f("tls.version", "TLS 版本", "TLS 与指纹", STRING),
-    _f("tls.cipher", "TLS 加密套件", "TLS 与指纹", STRING),
-    _f("tls.sni", "SNI", "TLS 与指纹", STRING),
-    _f("tls.ja3", "JA3 指纹", "TLS 与指纹", STRING),
+    _f("tls.version", "TLS 版本", "客户端识别", STRING),
+    _f("tls.cipher", "TLS 加密套件", "客户端识别", STRING),
+    _f("tls.sni", "SNI", "客户端识别", STRING),
+    _f("tls.ja3", "JA3 指纹", "客户端识别", STRING),
     # derived
-    _f("derived.args_count", "参数总数", "派生维度", NUMBER),
-    _f("derived.time.hour", "当前小时", "派生维度", NUMBER),
-    _f("derived.time.weekday", "星期几", "派生维度", NUMBER),
-    _f("derived.fingerprint", "请求指纹", "派生维度", STRING),
+    _f("derived.args_count", "参数总数", "时间与流量", NUMBER),
+    _f("derived.time.hour", "当前小时", "时间与流量", NUMBER),
+    _f("derived.time.weekday", "星期几", "时间与流量", NUMBER),
+    _f("derived.fingerprint", "请求指纹", "时间与流量", STRING),
     # bot identification
-    _f("bot.name", "Bot 名称", "Bot 识别", STRING),
-    _f("bot.category", "Bot 分类", "Bot 识别", ENUM),
-    _f("bot.is_known", "已知 Bot", "Bot 识别", BOOL),
+    _f("bot.name", "Bot 名称", "客户端识别", STRING),
+    _f("bot.category", "Bot 分类", "客户端识别", ENUM, extra_ops=["not_in"]),
+    _f("bot.is_known", "匹配自建Bot库", "客户端识别", BOOL),
     # ua parsing (aligned with log stats: ua_family / ua_os)
-    _f("ua.family", "UA 类型", "UA 解析", ENUM),
-    _f("ua.os", "操作系统", "UA 解析", STRING),
+    _f("ua.family", "UA 类型", "客户端识别", ENUM),
+    _f("ua.os", "操作系统", "客户端识别", STRING),
     # traffic intelligence
     {
         "key": "traffic.global",
         "label": "全站请求量",
-        "category": "流量与智能",
+        "category": "时间与流量",
         **_TRAFFIC_FIELD_DEF,
     },
     {
         "key": "traffic.site",
         "label": "当前站点请求量",
-        "category": "流量与智能",
+        "category": "时间与流量",
         **_TRAFFIC_FIELD_DEF,
     },
 ]
@@ -257,10 +264,17 @@ def catalog_for_frontend() -> dict:
         if f.get("compare_modes"):
             entry["compare_modes"] = f["compare_modes"]
         categories.setdefault(f["category"], []).append(entry)
+    ordered: list[dict] = []
+    seen: set[str] = set()
+    for name in CATEGORY_ORDER:
+        if name in categories:
+            ordered.append({"name": name, "fields": categories[name]})
+            seen.add(name)
+    for name, fields in categories.items():
+        if name not in seen:
+            ordered.append({"name": name, "fields": fields})
     return {
-        "categories": [
-            {"name": name, "fields": fields} for name, fields in categories.items()
-        ],
+        "categories": ordered,
         "operators": OPERATORS,
         "operators_by_type": OPERATORS_BY_TYPE,
     }

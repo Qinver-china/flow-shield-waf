@@ -4,7 +4,7 @@
     {
       "key": "ip.src",
       "label": "客户端 IP",
-      "category": "客户端与网络",
+      "category": "网络与地理",
       "value_type": "ip",
       "requires_arg": false,
       "operators": [
@@ -20,7 +20,7 @@
     {
       "key": "ip.src.is_private",
       "label": "IP 是否内网",
-      "category": "客户端与网络",
+      "category": "网络与地理",
       "value_type": "bool",
       "requires_arg": false,
       "operators": [
@@ -30,7 +30,7 @@
     {
       "key": "net.src_port",
       "label": "客户端端口",
-      "category": "客户端与网络",
+      "category": "网络与地理",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -46,7 +46,7 @@
     {
       "key": "net.dst_port",
       "label": "服务端口",
-      "category": "客户端与网络",
+      "category": "网络与地理",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -62,7 +62,7 @@
     {
       "key": "net.scheme",
       "label": "协议",
-      "category": "客户端与网络",
+      "category": "网络与地理",
       "value_type": "enum",
       "requires_arg": false,
       "operators": [
@@ -74,7 +74,7 @@
     {
       "key": "http.version",
       "label": "HTTP 版本",
-      "category": "客户端与网络",
+      "category": "网络与地理",
       "value_type": "enum",
       "requires_arg": false,
       "operators": [
@@ -86,7 +86,7 @@
     {
       "key": "geo.country",
       "label": "IP 国家/地区",
-      "category": "地理位置与情报",
+      "category": "网络与地理",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -108,7 +108,7 @@
     {
       "key": "geo.region",
       "label": "IP 省/州",
-      "category": "地理位置与情报",
+      "category": "网络与地理",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -130,7 +130,7 @@
     {
       "key": "geo.city",
       "label": "IP 城市",
-      "category": "地理位置与情报",
+      "category": "网络与地理",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -152,7 +152,7 @@
     {
       "key": "geo.asn",
       "label": "IP ASN",
-      "category": "地理位置与情报",
+      "category": "网络与地理",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -168,7 +168,7 @@
     {
       "key": "geo.isp",
       "label": "运营商 ISP",
-      "category": "地理位置与情报",
+      "category": "网络与地理",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -190,7 +190,7 @@
     {
       "key": "geo.ip_type",
       "label": "IP 类型",
-      "category": "地理位置与情报",
+      "category": "网络与地理",
       "value_type": "enum",
       "requires_arg": false,
       "operators": [
@@ -202,7 +202,7 @@
     {
       "key": "http.method",
       "label": "请求方法",
-      "category": "请求行",
+      "category": "HTTP 请求",
       "value_type": "enum",
       "requires_arg": false,
       "operators": [
@@ -214,7 +214,7 @@
     {
       "key": "http.host",
       "label": "请求域名",
-      "category": "请求行",
+      "category": "URL 与路径",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -236,7 +236,7 @@
     {
       "key": "http.url",
       "label": "完整 URL",
-      "category": "请求行",
+      "category": "URL 与路径",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -258,7 +258,7 @@
     {
       "key": "http.request_uri",
       "label": "原始请求行",
-      "category": "请求行",
+      "category": "URL 与路径",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -386,7 +386,7 @@
     {
       "key": "http.query",
       "label": "查询参数",
-      "category": "查询参数",
+      "category": "URL 与路径",
       "value_type": "string",
       "requires_arg": true,
       "operators": [
@@ -410,7 +410,7 @@
     {
       "key": "http.query.count",
       "label": "查询参数个数",
-      "category": "查询参数",
+      "category": "URL 与路径",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -426,7 +426,7 @@
     {
       "key": "http.header",
       "label": "请求头",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": true,
       "operators": [
@@ -450,7 +450,7 @@
     {
       "key": "http.header.count",
       "label": "请求头数量",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -466,7 +466,7 @@
     {
       "key": "http.ua",
       "label": "User-Agent",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -488,7 +488,7 @@
     {
       "key": "http.referer",
       "label": "Referer",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -510,7 +510,7 @@
     {
       "key": "http.content_type",
       "label": "Content-Type",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -532,7 +532,7 @@
     {
       "key": "http.content_length",
       "label": "Content-Length",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -548,7 +548,7 @@
     {
       "key": "http.accept",
       "label": "Accept",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -570,7 +570,7 @@
     {
       "key": "http.accept_language",
       "label": "Accept-Language",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -592,7 +592,7 @@
     {
       "key": "http.accept_encoding",
       "label": "Accept-Encoding",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -614,7 +614,7 @@
     {
       "key": "http.origin",
       "label": "Origin",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -636,7 +636,7 @@
     {
       "key": "http.xff",
       "label": "X-Forwarded-For",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -658,7 +658,7 @@
     {
       "key": "http.range",
       "label": "Range",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -680,7 +680,7 @@
     {
       "key": "http.has_auth",
       "label": "是否带 Authorization",
-      "category": "请求头",
+      "category": "HTTP 请求",
       "value_type": "bool",
       "requires_arg": false,
       "operators": [
@@ -690,7 +690,7 @@
     {
       "key": "http.cookie",
       "label": "Cookie 参数",
-      "category": "Cookie",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": true,
       "operators": [
@@ -714,7 +714,7 @@
     {
       "key": "http.cookie_raw",
       "label": "原始 Cookie",
-      "category": "Cookie",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -736,7 +736,7 @@
     {
       "key": "http.cookie.count",
       "label": "Cookie 个数",
-      "category": "Cookie",
+      "category": "HTTP 请求",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -752,7 +752,7 @@
     {
       "key": "http.body.raw",
       "label": "原始请求体",
-      "category": "请求体",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -774,7 +774,7 @@
     {
       "key": "http.body.size",
       "label": "请求体大小",
-      "category": "请求体",
+      "category": "HTTP 请求",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -790,7 +790,7 @@
     {
       "key": "http.body.form",
       "label": "表单参数",
-      "category": "请求体",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": true,
       "operators": [
@@ -814,7 +814,7 @@
     {
       "key": "http.body.json",
       "label": "JSON 字段",
-      "category": "请求体",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": true,
       "operators": [
@@ -838,7 +838,7 @@
     {
       "key": "http.upload.filename",
       "label": "上传文件名",
-      "category": "请求体",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -860,7 +860,7 @@
     {
       "key": "http.upload.ext",
       "label": "上传文件后缀",
-      "category": "请求体",
+      "category": "HTTP 请求",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -882,7 +882,7 @@
     {
       "key": "tls.version",
       "label": "TLS 版本",
-      "category": "TLS 与指纹",
+      "category": "客户端识别",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -904,7 +904,7 @@
     {
       "key": "tls.cipher",
       "label": "TLS 加密套件",
-      "category": "TLS 与指纹",
+      "category": "客户端识别",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -926,7 +926,7 @@
     {
       "key": "tls.sni",
       "label": "SNI",
-      "category": "TLS 与指纹",
+      "category": "客户端识别",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -948,7 +948,7 @@
     {
       "key": "tls.ja3",
       "label": "JA3 指纹",
-      "category": "TLS 与指纹",
+      "category": "客户端识别",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -970,7 +970,7 @@
     {
       "key": "derived.args_count",
       "label": "参数总数",
-      "category": "派生维度",
+      "category": "时间与流量",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -986,7 +986,7 @@
     {
       "key": "derived.time.hour",
       "label": "当前小时",
-      "category": "派生维度",
+      "category": "时间与流量",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -1002,7 +1002,7 @@
     {
       "key": "derived.time.weekday",
       "label": "星期几",
-      "category": "派生维度",
+      "category": "时间与流量",
       "value_type": "number",
       "requires_arg": false,
       "operators": [
@@ -1018,7 +1018,7 @@
     {
       "key": "derived.fingerprint",
       "label": "请求指纹",
-      "category": "派生维度",
+      "category": "时间与流量",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -1040,7 +1040,7 @@
     {
       "key": "bot.name",
       "label": "Bot 名称",
-      "category": "Bot 识别",
+      "category": "客户端识别",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -1062,19 +1062,20 @@
     {
       "key": "bot.category",
       "label": "Bot 分类",
-      "category": "Bot 识别",
+      "category": "客户端识别",
       "value_type": "enum",
       "requires_arg": false,
       "operators": [
         "eq",
         "neq",
-        "in_list"
+        "in_list",
+        "not_in"
       ]
     },
     {
       "key": "bot.is_known",
-      "label": "已知 Bot",
-      "category": "Bot 识别",
+      "label": "匹配自建Bot库",
+      "category": "客户端识别",
       "value_type": "bool",
       "requires_arg": false,
       "operators": [
@@ -1084,7 +1085,7 @@
     {
       "key": "ua.family",
       "label": "UA 类型",
-      "category": "UA 解析",
+      "category": "客户端识别",
       "value_type": "enum",
       "requires_arg": false,
       "operators": [
@@ -1106,7 +1107,7 @@
     {
       "key": "ua.os",
       "label": "操作系统",
-      "category": "UA 解析",
+      "category": "客户端识别",
       "value_type": "string",
       "requires_arg": false,
       "operators": [
@@ -1128,7 +1129,7 @@
     {
       "key": "traffic.global",
       "label": "全站请求量",
-      "category": "流量与智能",
+      "category": "时间与流量",
       "value_type": "traffic",
       "requires_arg": false,
       "operators": [
@@ -1164,7 +1165,7 @@
     {
       "key": "traffic.site",
       "label": "当前站点请求量",
-      "category": "流量与智能",
+      "category": "时间与流量",
       "value_type": "traffic",
       "requires_arg": false,
       "operators": [
