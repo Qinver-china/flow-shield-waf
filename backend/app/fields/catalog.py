@@ -18,6 +18,7 @@ BOOL = "bool"
 TRAFFIC = "traffic"
 
 from app.constants.traffic_windows import (
+    TRAFFIC_BASELINE_MIN_WINDOW_SEC,
     TRAFFIC_WINDOWS_SEC,
     traffic_window_options,
 )
@@ -290,17 +291,56 @@ def catalog_compact_for_llm() -> dict:
                 "必须使用 logic + conditions，不要使用 all/any",
                 "单条叶子条件可省略外层分组，系统会自动包裹",
                 "requires_arg=true 的字段必须提供 arg（如 http.header 的 Header 名）",
+                "field 必须严格使用 fields 列表中的 key，禁止自造字段名",
+                "流量只能用 traffic.global / traffic.site；CC/频率限制用 create_rate_limit",
             ],
         },
         "traffic_value": {
             "field": "traffic.global | traffic.site",
             "op": "compare",
+            "invalid_field_examples": [
+                "traffic.global.request_count",
+                "traffic.global.qps",
+                "traffic.site.request_count",
+            ],
             "value": {
-                "window_sec": "60|300|1800|3600|86400",
-                "compare": "abs_gt|abs_lt|qps_gt|qps_lt|baseline_gt|baseline_lt",
-                "threshold": "非负数（abs/qps 比较时）",
-                "percent": "非负数（baseline 比较时，百分比）",
+                "window_sec": list(TRAFFIC_WINDOWS_SEC),
+                "compare": [m["value"] for m in TRAFFIC_COMPARE_MODES],
+                "threshold": "非负数（abs_gt/abs_lt/qps_gt/qps_lt 时必填）",
+                "percent": "非负数（baseline_gt/baseline_lt 时必填，表示相对基线的百分比）",
             },
+            "baseline_min_window_sec": TRAFFIC_BASELINE_MIN_WINDOW_SEC,
+            "notes": [
+                "禁止写 traffic.global.request_count 等带点后缀的字段",
+                "baseline_gt/baseline_lt 要求 window_sec >= 300（5 分钟或更长）",
+                "CC/频率限制应使用 create_rate_limit，不要用 traffic 字段模拟限速",
+            ],
+            "examples": [
+                {
+                    "description": "全站 5 分钟请求量超过 1000",
+                    "leaf": {
+                        "field": "traffic.global",
+                        "op": "compare",
+                        "value": {"window_sec": 300, "compare": "abs_gt", "threshold": 1000},
+                    },
+                },
+                {
+                    "description": "当前站点 QPS 超过 50",
+                    "leaf": {
+                        "field": "traffic.site",
+                        "op": "compare",
+                        "value": {"window_sec": 60, "compare": "qps_gt", "threshold": 50},
+                    },
+                },
+                {
+                    "description": "全站流量高于基线 200%",
+                    "leaf": {
+                        "field": "traffic.global",
+                        "op": "compare",
+                        "value": {"window_sec": 300, "compare": "baseline_gt", "percent": 200},
+                    },
+                },
+            ],
         },
         "block_page": {
             "custom_block_page_enabled": "bool，启用自定义拦截页",
@@ -316,6 +356,11 @@ def catalog_compact_for_llm() -> dict:
                 "requires_arg": f.get("requires_arg", False),
                 "operators": f.get("operators")
                 or OPERATORS_BY_TYPE.get(f["value_type"], []),
+                **(
+                    {"compare_modes": [m["value"] for m in f["compare_modes"]]}
+                    if f.get("compare_modes")
+                    else {}
+                ),
             }
             for f in FIELDS
         ],

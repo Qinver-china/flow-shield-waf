@@ -24,6 +24,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_waf_setting_ratelimit_fail_open(conn)
     await _ensure_site_extra_domains(conn)
     await _ensure_site_client_ip_source(conn)
+    await _ensure_site_force_https(conn)
     await _ensure_resource_block_page_columns(conn)
     await _drop_legacy_bot_columns(conn)
     await _ensure_waf_setting_panel_public_url(conn)
@@ -87,6 +88,15 @@ async def _ensure_site_client_ip_source(conn) -> None:
         )
     )
     log.info("schema patch applied: site.client_ip_source")
+
+
+async def _ensure_site_force_https(conn) -> None:
+    if await _column_exists(conn, "site", "force_https"):
+        return
+    await conn.execute(
+        text("ALTER TABLE site ADD COLUMN force_https BOOLEAN NOT NULL DEFAULT 0")
+    )
+    log.info("schema patch applied: site.force_https")
 
 
 async def _ensure_waf_setting_timezone(conn) -> None:

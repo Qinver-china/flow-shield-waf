@@ -263,6 +263,8 @@ class AiResourceWriter:
             raise ValueError("至少需要开启 HTTP 或 HTTPS 监听")
         if body.listen_https and not body.certificate_id:
             raise ValueError("开启 HTTPS 时必须选择 SSL 证书")
+        if body.force_https and not body.listen_https:
+            raise ValueError("开启强制 HTTPS 需要先开启 HTTPS 监听")
         if body.certificate_id:
             from app.models import Certificate
 

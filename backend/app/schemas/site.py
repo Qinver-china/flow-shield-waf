@@ -37,6 +37,7 @@ class SiteBase(BaseModel):
     client_ip_source: str = CLIENT_IP_SOURCE_DEFAULT
     listen_http: bool = True
     listen_https: bool = False
+    force_https: bool = False
     certificate_id: int | None = None
     enabled: bool = True
     custom_block_page_enabled: bool = False
@@ -107,6 +108,8 @@ class SiteBase(BaseModel):
             raise ValueError("至少需要开启 HTTP 或 HTTPS 监听")
         if self.listen_https and not self.certificate_id:
             raise ValueError("开启 HTTPS 时必须选择 SSL 证书")
+        if self.force_https and not self.listen_https:
+            raise ValueError("开启强制 HTTPS 需要先开启 HTTPS 监听")
         return self
 
 
@@ -124,6 +127,7 @@ class SiteUpdate(BaseModel):
     client_ip_source: str | None = None
     listen_http: bool | None = None
     listen_https: bool | None = None
+    force_https: bool | None = None
     certificate_id: int | None = None
     enabled: bool | None = None
     custom_block_page_enabled: bool | None = None
@@ -206,6 +210,7 @@ class SiteOut(SiteBase):
                 "client_ip_source": getattr(data, "client_ip_source", CLIENT_IP_SOURCE_DEFAULT),
                 "listen_http": data.listen_http,
                 "listen_https": data.listen_https,
+                "force_https": getattr(data, "force_https", False),
                 "certificate_id": data.certificate_id,
                 "enabled": data.enabled,
                 "custom_block_page_enabled": data.custom_block_page_enabled,

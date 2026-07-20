@@ -25,6 +25,7 @@ class Site(Base, TimestampMixin):
     client_ip_source: Mapped[str] = mapped_column(String(32), default="remote_addr")
     listen_http: Mapped[bool] = mapped_column(Boolean, default=True)
     listen_https: Mapped[bool] = mapped_column(Boolean, default=False)
+    force_https: Mapped[bool] = mapped_column(Boolean, default=False)
     certificate_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("certificate.id"), nullable=True
     )

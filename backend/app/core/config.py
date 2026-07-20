@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Hourly MV is unused by queries today; detach on ingest hot path when false.
     clickhouse_hourly_mv_enabled: bool = False
 
+    # application logging (backend + worker); WARNING = only warnings/errors
+    log_level: str = "WARNING"
+
     # log collector (worker)
     log_collector_batch_size: int = 2000
     log_collector_max_drain_batches: int = 4

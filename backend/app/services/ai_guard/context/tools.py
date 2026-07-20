@@ -231,6 +231,7 @@ TOOL_DEFINITIONS: list[dict] = [
                     },
                     "listen_http": {"type": "boolean"},
                     "listen_https": {"type": "boolean"},
+                    "force_https": {"type": "boolean"},
                     "certificate_id": {"type": "integer"},
                     "enabled": {"type": "boolean"},
                 },

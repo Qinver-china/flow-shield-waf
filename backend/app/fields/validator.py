@@ -21,6 +21,77 @@ _TRAFFIC_COMPARES = {m["value"] for m in TRAFFIC_COMPARE_MODES}
 _BASELINE_COMPARES = {"baseline_gt", "baseline_lt"}
 _QPS_COMPARES = {"qps_gt", "qps_lt"}
 _TRAFFIC_FIELDS = {"traffic.global", "traffic.site"}
+_TRAFFIC_COMPARE_OPS = {
+    "gt": "abs_gt",
+    "gte": "abs_gt",
+    ">": "abs_gt",
+    ">=": "abs_gt",
+    "lt": "abs_lt",
+    "lte": "abs_lt",
+    "<": "abs_lt",
+    "<=": "abs_lt",
+    "qps_gt": "qps_gt",
+    "qps_lt": "qps_lt",
+    "abs_gt": "abs_gt",
+    "abs_lt": "abs_lt",
+    "baseline_gt": "baseline_gt",
+    "baseline_lt": "baseline_lt",
+}
+
+
+def _normalize_traffic_leaf(node: dict[str, Any]) -> dict[str, Any]:
+    """Map LLM-friendly traffic aliases (e.g. traffic.global.request_count) to catalog keys."""
+    field = node.get("field")
+    if not isinstance(field, str):
+        return node
+    if field in _TRAFFIC_FIELDS:
+        return node
+
+    base: str | None = None
+    metric = ""
+    if field.startswith("traffic.global."):
+        base = "traffic.global"
+        metric = field[len("traffic.global.") :]
+    elif field.startswith("traffic.site."):
+        base = "traffic.site"
+        metric = field[len("traffic.site.") :]
+    if base is None:
+        return node
+
+    out = dict(node)
+    out["field"] = base
+    if out.get("op") == "compare" and isinstance(out.get("value"), dict):
+        return out
+
+    op = str(out.get("op") or "")
+    raw_value = out.get("value")
+    prefer_qps = metric in ("qps", "rps") or op in ("qps_gt", "qps_lt")
+    if op in _TRAFFIC_COMPARE_OPS:
+        compare = _TRAFFIC_COMPARE_OPS[op]
+    else:
+        compare = "qps_gt" if prefer_qps else "abs_gt"
+
+    if isinstance(raw_value, dict):
+        tv = dict(raw_value)
+        tv.setdefault("window_sec", 300)
+        tv.setdefault("compare", compare)
+        if compare in ("abs_gt", "abs_lt", "qps_gt", "qps_lt"):
+            if "threshold" not in tv and "value" in tv:
+                tv["threshold"] = tv.pop("value")
+        elif compare in ("baseline_gt", "baseline_lt"):
+            if "percent" not in tv and "value" in tv:
+                tv["percent"] = tv.pop("value")
+    elif isinstance(raw_value, (int, float)):
+        if compare.startswith("baseline"):
+            tv = {"window_sec": 300, "compare": compare, "percent": raw_value}
+        else:
+            tv = {"window_sec": 300, "compare": compare, "threshold": raw_value}
+    else:
+        return out
+
+    out["op"] = "compare"
+    out["value"] = tv
+    return out
 
 
 def _validate_traffic_value(value: Any, field: str) -> None:
@@ -123,6 +194,8 @@ def _normalize_condition_shape(node: Any) -> Any:
         if not isinstance(items, list):
             raise ValueError("any 必须是数组")
         return {"logic": "or", "conditions": [_normalize_condition_shape(c) for c in items]}
+    if "field" in node:
+        return _normalize_traffic_leaf(node)
     return node
 
 

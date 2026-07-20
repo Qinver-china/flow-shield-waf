@@ -159,10 +159,11 @@
 .fs-form-section__title::before {
   content: "";
   flex-shrink: 0;
-  width: 3px;
-  height: 14px;
+  width: 4px;
+  height: 1em;
   border-radius: 999px;
   background: var(--fs-color-primary);
+  box-shadow: -1px 1px 4px var(--fs-color-primary);
 }
 
 .fs-form-section__desc {

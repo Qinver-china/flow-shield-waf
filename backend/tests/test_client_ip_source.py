@@ -24,6 +24,18 @@ def test_site_create_rejects_invalid_client_ip_source():
         )
 
 
+def test_site_create_rejects_force_https_without_listen_https():
+    with pytest.raises(ValidationError):
+        SiteCreate(
+            name="t",
+            domains=["example.com"],
+            origin_host="127.0.0.1",
+            listen_http=True,
+            listen_https=False,
+            force_https=True,
+        )
+
+
 def test_real_ip_block_cf():
     site = SimpleNamespace(client_ip_source="cf_connecting_ip")
     block = _real_ip_block(site)
@@ -48,9 +60,38 @@ def test_render_site_includes_real_ip_for_cdn():
         client_ip_source="cf_connecting_ip",
         listen_http=True,
         listen_https=False,
+        force_https=False,
         certificate_id=None,
         certificate=None,
     )
     conf = render_site(site)
     assert "CF-Connecting-IP" in conf
     assert 'set $waf_site_id "1"' in conf
+
+
+def test_render_site_force_https_redirect():
+    cert = SimpleNamespace(
+        cert_path="/etc/nginx/certs/example.crt",
+        key_path="/etc/nginx/certs/example.key",
+    )
+    site = SimpleNamespace(
+        id=2,
+        domain="example.com",
+        extra_domains=None,
+        origin_host="127.0.0.1",
+        origin_protocol="http",
+        origin_http_port=80,
+        origin_https_port=443,
+        client_ip_source="remote_addr",
+        listen_http=True,
+        listen_https=True,
+        force_https=True,
+        certificate_id=1,
+        certificate=cert,
+    )
+    conf = render_site(site)
+    assert "return 301 https://$host$request_uri;" in conf
+    assert "listen 80;" in conf
+    assert "listen 443 ssl;" in conf
+    assert conf.count("listen 80;") == 1
+    assert "/etc/nginx/certs/example.crt" in conf

@@ -140,6 +140,17 @@
               </a-empty>
               <span v-else>{{ certName(record.certificate_id) }}</span>
             </a-form-item>
+            <div class="fs-switch-row" style="margin-bottom: 16px">
+              <span>强制 HTTPS</span>
+              <a-switch v-model:checked="record.force_https" :disabled="readonly" />
+            </div>
+            <a-alert
+              v-if="record.force_https"
+              type="info"
+              show-icon
+              style="margin-bottom: 16px"
+              message="已开启强制 HTTPS：HTTP 请求将自动 301 跳转到 HTTPS，不再经 WAF 代理处理。"
+            />
           </template>
         </fs-form-section>
 
@@ -277,6 +288,7 @@ const defaultRecord = () => ({
   client_ip_source: "remote_addr",
   listen_http: true,
   listen_https: false,
+  force_https: false,
   certificate_id: null as number | null,
   enabled: true,
   custom_block_page_enabled: false,
@@ -299,6 +311,12 @@ function preparePayload(row: Record<string, any>) {
   }
   if (row.listen_https && !row.certificate_id) {
     throw new Error("开启 HTTPS 时必须选择 SSL 证书");
+  }
+  if (row.force_https && !row.listen_https) {
+    throw new Error("开启强制 HTTPS 需要先开启 HTTPS 监听");
+  }
+  if (!row.listen_https) {
+    row.force_https = false;
   }
   if (row.custom_block_page_enabled && !(row.block_page_html || "").trim()) {
     throw new Error("启用自定义拦截页时必须填写 HTML 内容");

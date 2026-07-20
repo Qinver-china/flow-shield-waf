@@ -7,7 +7,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.ai_guard.config import AiGuardRuntimeConfig
-from app.services.ai_guard.context.builder import build_knowledge_snapshot
+from app.services.ai_guard.context.builder import build_knowledge_snapshot, knowledge_for_defense
 from app.services.ai_guard.llm.client import LlmClient
 from app.services.ai_guard.llm.prompts import DEFENSE_SYSTEM
 from app.services.ai_guard.llm.schemas import AttackAnalysis
@@ -28,6 +28,7 @@ async def analyze_and_suggest(
     snapshot = await build_knowledge_snapshot(db)
     compact = compact_log_rows(log_rows, limit=80)
 
+    field_catalog = snapshot.get("field_catalog") or {}
     user_content = json.dumps(
         {
             "site_id": site_id,
@@ -36,7 +37,8 @@ async def analyze_and_suggest(
                 log_meta.get("blocked_count", 0) / max(log_meta.get("sampled", 1), 1), 3
             ),
             "samples": compact,
-            "field_catalog_summary": snapshot.get("field_catalog", {}).get("categories", [])[:8],
+            "field_catalog": knowledge_for_defense(field_catalog),
+            "defense": snapshot.get("defense"),
         },
         ensure_ascii=False,
         default=str,

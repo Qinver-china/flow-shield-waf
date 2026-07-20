@@ -143,6 +143,30 @@ def test_traffic_global_qps_ok():
     })
 
 
+def test_traffic_llm_alias_request_count_normalized():
+    cond = validate_condition({
+        "field": "traffic.global.request_count",
+        "op": "gt",
+        "value": 1000,
+    })
+    leaf = cond["conditions"][0]
+    assert leaf["field"] == "traffic.global"
+    assert leaf["op"] == "compare"
+    assert leaf["value"]["compare"] == "abs_gt"
+    assert leaf["value"]["threshold"] == 1000
+
+
+def test_traffic_llm_alias_qps_normalized():
+    cond = validate_condition({
+        "field": "traffic.site.qps",
+        "op": "gt",
+        "value": 50,
+    })
+    leaf = cond["conditions"][0]
+    assert leaf["field"] == "traffic.site"
+    assert leaf["value"]["compare"] == "qps_gt"
+
+
 def test_traffic_baseline_short_window_rejected():
     with pytest.raises(ValueError):
         validate_condition({

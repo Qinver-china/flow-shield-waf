@@ -36,9 +36,12 @@ def _validate_https(
     *,
     listen_https: bool,
     certificate_id: int | None,
+    force_https: bool = False,
 ) -> None:
     if listen_https and not certificate_id:
         raise HTTPException(status_code=400, detail="开启 HTTPS 时必须选择 SSL 证书")
+    if force_https and not listen_https:
+        raise HTTPException(status_code=400, detail="开启强制 HTTPS 需要先开启 HTTPS 监听")
 
 
 async def _ensure_certificate(db: AsyncSession, certificate_id: int) -> None:
@@ -132,7 +135,11 @@ async def create_site(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _validate_listen(listen_http=body.listen_http, listen_https=body.listen_https)
-    _validate_https(listen_https=body.listen_https, certificate_id=body.certificate_id)
+    _validate_https(
+        listen_https=body.listen_https,
+        certificate_id=body.certificate_id,
+        force_https=body.force_https,
+    )
     if body.certificate_id:
         await _ensure_certificate(db, body.certificate_id)
     payload = body.model_dump()
@@ -167,9 +174,14 @@ async def update_site(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     listen_http = data.get("listen_http", site.listen_http)
     listen_https = data.get("listen_https", site.listen_https)
+    force_https = data.get("force_https", site.force_https)
     certificate_id = data.get("certificate_id", site.certificate_id)
     _validate_listen(listen_http=listen_http, listen_https=listen_https)
-    _validate_https(listen_https=listen_https, certificate_id=certificate_id)
+    _validate_https(
+        listen_https=listen_https,
+        certificate_id=certificate_id,
+        force_https=force_https,
+    )
     if certificate_id:
         await _ensure_certificate(db, certificate_id)
 
@@ -200,6 +212,7 @@ async def update_site(
 
     if not site.listen_https:
         site.certificate_id = None
+        site.force_https = False
 
     await db.commit()
     await db.refresh(site)
