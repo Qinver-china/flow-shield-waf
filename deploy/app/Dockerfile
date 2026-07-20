@@ -29,16 +29,22 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apk add --no-cache python3 py3-pip nginx supervisor curl redis libjpeg-turbo tzdata
 
 # OpenResty fat 镜像仅含旧版 GeoIP(.dat) 模块，不含 GeoIP2(.mmdb)；编译动态模块以启用地理字段。
+# 模块源码已 vendored（避免构建时依赖 GitHub）；nginx 版本取 openresty/x.y.z.N → x.y.z。
+COPY deploy/app/vendor/ngx_http_geoip2_module /tmp/ngx_http_geoip2_module
 RUN apk add --no-cache --virtual .geoip2-build \
-        build-base pcre-dev zlib-dev openssl-dev libmaxminddb-dev git wget \
-    && nginx_version=$(/usr/local/openresty/nginx/sbin/nginx -v 2>&1 | sed -n 's/.*nginx\///p' | cut -d' ' -f1) \
+        build-base pcre-dev zlib-dev openssl-dev linux-headers libmaxminddb-dev curl \
+    && openresty_ver=$(/usr/local/openresty/nginx/sbin/nginx -v 2>&1 | sed -n 's/.*openresty\///p' | cut -d' ' -f1) \
+    && nginx_version=$(echo "$openresty_ver" | cut -d. -f1-3) \
+    && test -n "$nginx_version" \
+    && echo "building geoip2 against nginx ${nginx_version} (openresty ${openresty_ver})" \
     && cd /tmp \
-    && wget -q "http://nginx.org/download/nginx-${nginx_version}.tar.gz" \
+    && curl -fsSL --retry 5 --retry-delay 2 \
+         -o "nginx-${nginx_version}.tar.gz" \
+         "https://nginx.org/download/nginx-${nginx_version}.tar.gz" \
     && tar xzf "nginx-${nginx_version}.tar.gz" \
-    && git clone --depth 1 --branch 3.4 https://github.com/leev/ngx_http_geoip2_module.git \
     && cd "nginx-${nginx_version}" \
     && ./configure --with-compat --add-dynamic-module=/tmp/ngx_http_geoip2_module \
-    && make modules \
+    && make -j"$(nproc)" modules \
     && cp objs/ngx_http_geoip2_module.so /usr/local/openresty/nginx/modules/ \
     && cd / \
     && rm -rf /tmp/nginx-* /tmp/ngx_http_geoip2_module \
