@@ -2,11 +2,13 @@
   <teleport to="body">
     <transition name="ai-fab-fade">
       <button
-        v-if="!floating.open"
+        v-if="showFab"
         type="button"
         class="ai-fab"
-        aria-label="打开 AI 助手"
-        @click="openPanel"
+        :class="{ 'ai-fab--dragging': isDragging }"
+        :style="fabStyle"
+        aria-label="打开 AI 助手（可拖动）"
+        @pointerdown="onFabPointerDown"
       >
         <span class="ai-fab-ring" aria-hidden="true" />
         <span class="ai-fab-glow" aria-hidden="true" />
@@ -18,7 +20,7 @@
 
     <transition name="ai-panel-slide">
       <div
-        v-show="floating.open"
+        v-show="showFloatPanel"
         class="ai-float-panel"
         :class="{ 'ai-float-panel--mobile': isMobile }"
       >
@@ -49,20 +51,40 @@
 </template>
 
 <script setup lang="ts">
+import { computed, watch } from "vue";
 import { CloseOutlined } from "@ant-design/icons-vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import AiChatPanel from "@/components/ai-chat/AiChatPanel.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
+import { useFabDragPosition } from "@/composables/useFabDragPosition";
 import { BRAND } from "@/constants/brand";
 import { useFloatingAiChatStore } from "@/stores/floatingAiChat";
 
 const floating = useFloatingAiChatStore();
+const route = useRoute();
 const router = useRouter();
 const { isMobile } = useBreakpoint();
 
-function openPanel() {
-  floating.show();
-}
+const isOnAiGuardPage = computed(
+  () => route.path === "/ai-guard" || route.path.startsWith("/ai-guard/"),
+);
+const showFab = computed(() => !floating.open && !isOnAiGuardPage.value);
+const showFloatPanel = computed(() => floating.open && !isOnAiGuardPage.value);
+
+watch(isOnAiGuardPage, (onPage) => {
+  if (onPage && floating.open) {
+    floating.hide();
+  }
+});
+
+const { fabPos, isDragging, onFabPointerDown } = useFabDragPosition({
+  onTap: () => floating.show(),
+});
+
+const fabStyle = computed(() => ({
+  left: `${fabPos.value.x}px`,
+  top: `${fabPos.value.y}px`,
+}));
 
 function goFullPage() {
   floating.hide();
@@ -73,16 +95,24 @@ function goFullPage() {
 <style scoped>
 .ai-fab {
   position: fixed;
-  right: 22px;
-  bottom: 22px;
   z-index: 1100;
   width: 48px;
   height: 48px;
   padding: 0;
   border: none;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
   outline: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.ai-fab--dragging {
+  cursor: grabbing;
+}
+
+.ai-fab--dragging .ai-fab-core {
+  transform: scale(1.02);
 }
 
 .ai-fab-ring {

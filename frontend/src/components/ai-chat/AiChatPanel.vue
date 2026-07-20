@@ -5,30 +5,30 @@
       :class="{
         'ai-chat-panel--embedded': embedded,
         'ai-chat-panel--compact': compact,
-        'ai-chat-panel--sider-collapsed': collapsibleSider && !siderVisible,
+        'ai-chat-panel--sider-collapsed': effectiveCollapsibleSider && !siderVisible,
       }"
     >
       <div
-        v-if="collapsibleSider && siderVisible"
+        v-if="effectiveCollapsibleSider && siderVisible"
         class="ai-chat-sider-backdrop"
         @click="siderVisible = false"
       />
 
       <aside
-        v-show="!collapsibleSider || siderVisible"
+        v-show="!effectiveCollapsibleSider || siderVisible"
         class="ai-chat-sider"
-        :class="{ 'ai-chat-sider--overlay': collapsibleSider }"
+        :class="{ 'ai-chat-sider--overlay': effectiveCollapsibleSider }"
       >
         <div class="ai-chat-sider-head">
           <div class="ai-chat-logo">
             <app-logo variant="square" :show-text="false" :collapsed="false" />
             <div class="ai-chat-logo-text">
               <strong>{{ BRAND.name }}</strong>
-              <span>智能助手</span>
+              <span>AI智能助手</span>
             </div>
           </div>
           <a-button
-            v-if="collapsibleSider"
+            v-if="effectiveCollapsibleSider"
             type="text"
             size="small"
             class="ai-chat-sider-close"
@@ -75,7 +75,7 @@
       </aside>
 
       <section class="ai-chat-main">
-        <div v-if="collapsibleSider" class="ai-chat-toolbar">
+        <div v-if="effectiveCollapsibleSider" class="ai-chat-toolbar">
           <a-tooltip title="会话列表">
             <a-button type="text" class="ai-chat-toolbar-btn" @click="siderVisible = true">
               <unordered-list-outlined />
@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref } from "vue";
+import { computed, h, ref, watch } from "vue";
 import {
   MenuFoldOutlined,
   PlusOutlined,
@@ -181,6 +181,7 @@ import ChatAssistantContent from "@/components/ai-chat/ChatAssistantContent.vue"
 import ChatMarkdownContent from "@/components/ai-chat/ChatMarkdownContent.vue";
 import PendingActionCard from "@/views/ai-guard/components/PendingActionCard.vue";
 import { useAiGuardChat } from "@/composables/useAiGuardChat";
+import { useBreakpoint } from "@/composables/useBreakpoint";
 import { BRAND } from "@/constants/brand";
 import { useFloatingAiChatStore } from "@/stores/floatingAiChat";
 
@@ -199,8 +200,22 @@ const props = withDefaults(
   },
 );
 
-const siderVisible = ref(!props.collapsibleSider);
-const floatingStore = props.collapsibleSider ? useFloatingAiChatStore() : null;
+const siderVisible = ref(true);
+const floatingStore = useFloatingAiChatStore();
+const { width } = useBreakpoint();
+
+const isNarrowLayout = computed(() => width.value <= 900);
+const effectiveCollapsibleSider = computed(
+  () => props.collapsibleSider || (props.embedded && isNarrowLayout.value),
+);
+
+watch(
+  effectiveCollapsibleSider,
+  (collapsible) => {
+    siderVisible.value = !collapsible;
+  },
+  { immediate: true },
+);
 
 const welcomeIcon = () =>
   h("img", {
@@ -233,23 +248,23 @@ const {
   clearPending,
 } = useAiGuardChat({
   autoLoadSessions: props.autoLoadSessions,
-  restoreLatestSession: props.collapsibleSider,
-  getPreferredSessionId: () => floatingStore?.lastSessionId ?? null,
+  restoreLatestSession: props.autoLoadSessions !== false,
+  getPreferredSessionId: () => floatingStore.lastSessionId,
   onSessionIdChange: (id) => {
-    floatingStore?.setLastSessionId(id);
+    floatingStore.setLastSessionId(id);
   },
 });
 
 function onNewSession() {
   newSession();
-  if (props.collapsibleSider) {
+  if (effectiveCollapsibleSider.value) {
     siderVisible.value = false;
   }
 }
 
 function onConversationSelect(key: string) {
   onConversationChange(key);
-  if (props.collapsibleSider) {
+  if (effectiveCollapsibleSider.value) {
     siderVisible.value = false;
   }
 }
@@ -449,6 +464,38 @@ function onConversationSelect(key: string) {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding: 0;
+  gap: 2px;
+}
+
+.ai-chat-conversations :deep(.ant-conversations-list) {
+  gap: 2px;
+}
+
+.ai-chat-conversations :deep(.ant-conversations-list .ant-conversations-item) {
+  padding-inline-start: 8px;
+}
+
+.ai-chat-conversations :deep(.ant-conversations-group-title) {
+  padding: 0 4px;
+  min-height: 32px;
+  height: 32px;
+}
+
+.ai-chat-conversations :deep(.ant-conversations-item) {
+  border: 1px solid transparent;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.ai-chat-conversations :deep(.ant-conversations-item:hover:not(.ant-conversations-item-active)) {
+  background: color-mix(in srgb, var(--fs-bg-muted) 45%, transparent);
+}
+
+.ai-chat-conversations :deep(.ant-conversations-item-active) {
+  background: color-mix(in srgb, var(--fs-color-primary) 5%, var(--fs-bg-surface));
+  border-color: color-mix(in srgb, var(--fs-color-primary) 24%, var(--fs-border));
 }
 
 .ai-chat-clear-all-btn {
@@ -552,7 +599,48 @@ function onConversationSelect(key: string) {
 }
 
 .ai-chat-prompt-grid {
-  margin-top: 16px;
+  margin-top: 12px;
+}
+
+.ai-chat-prompt-grid :deep(> .ant-prompts > .ant-prompts-list-wrap) {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.ai-chat-prompt-grid :deep(> .ant-prompts > .ant-prompts-list-wrap > .ant-prompts-item-has-nest) {
+  width: 100%;
+  flex: none;
+}
+
+@media (min-width: 520px) {
+  .ai-chat-prompt-grid :deep(> .ant-prompts > .ant-prompts-list-wrap) {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .ai-chat-prompt-grid :deep(> .ant-prompts > .ant-prompts-list-wrap > .ant-prompts-item-has-nest) {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+}
+
+.ai-chat-prompt-grid :deep(.ant-prompts-list) {
+  gap: 6px;
+}
+
+.ai-chat-prompt-grid :deep(.ant-prompts-item) {
+  padding-block: 6px;
+}
+
+.ai-chat-prompt-grid :deep(.ant-prompts-nested) {
+  margin-top: 4px;
+}
+
+.ai-chat-prompt-grid :deep(.ant-prompts-item-has-nest > .ant-prompts-content) {
+  gap: 2px;
 }
 
 .ai-chat-panel :deep(.ant-prompts .ant-prompts-item) {
@@ -583,23 +671,5 @@ function onConversationSelect(key: string) {
 
 .ai-chat-sender {
   width: 100%;
-}
-
-@media (max-width: 900px) {
-  .ai-chat-panel:not(.ai-chat-panel--compact) {
-    flex-direction: column;
-    min-height: 520px;
-  }
-
-  .ai-chat-panel:not(.ai-chat-panel--compact) .ai-chat-sider:not(.ai-chat-sider--overlay) {
-    width: 100%;
-    max-height: 180px;
-    border-right: none;
-    border-bottom: 1px solid var(--fs-border);
-  }
-
-  .ai-chat-panel:not(.ai-chat-panel--compact) .ai-chat-conversations {
-    max-height: 100px;
-  }
 }
 </style>
