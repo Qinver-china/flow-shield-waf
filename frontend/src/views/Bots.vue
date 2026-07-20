@@ -3,40 +3,6 @@
     title="Bot 库"
     description="维护 Bot 识别库与分类，在防护规则中通过 bot.name / bot.category / bot.is_known 引用；日志自动写入 bot 维度"
   >
-    <a-alert
-      v-if="vendoredInfo"
-      type="info"
-      show-icon
-      class="vendored-banner"
-    >
-      <template #message>
-        <div class="vendored-head">
-          <span>Vendored 爬虫规则（JayBizzle/Crawler-Detect）</span>
-          <a-button
-            size="small"
-            :loading="vendoredSyncing"
-            @click="syncVendored"
-          >
-            立即更新 vendored
-          </a-button>
-        </div>
-      </template>
-      <template #description>
-        <div v-if="vendoredInfo.installed" class="vendored-meta">
-          <span>上游：{{ vendoredInfo.upstream_repo }}@{{ vendoredInfo.upstream_branch }}</span>
-          <span v-if="vendoredInfo.upstream_commit">Commit：{{ shortCommit(vendoredInfo.upstream_commit) }}</span>
-          <span>爬虫规则：{{ vendoredInfo.crawlers_count }} 条</span>
-          <span>排除规则：{{ vendoredInfo.exclusions_count }} 条</span>
-          <span>上次更新：{{ formatTime(vendoredInfo.updated_at) }}</span>
-          <span>下次自动更新：{{ formatTime(vendoredInfo.next_auto_update_at) }}</span>
-          <span>自动更新周期：{{ vendoredInfo.auto_update_days }} 天</span>
-        </div>
-        <div v-else class="vendored-meta">
-          尚未安装 vendored 规则，可点击「立即更新 vendored」从上游拉取。
-        </div>
-      </template>
-    </a-alert>
-
     <template #actions>
       <a-button
         v-if="activeTab === 'bots'"
@@ -46,7 +12,7 @@
         新增 Bot
       </a-button>
       <a-button
-        v-else
+        v-else-if="activeTab === 'categories'"
         type="primary"
         @click="categoryCrudRef?.openCreate()"
       >
@@ -54,8 +20,8 @@
       </a-button>
     </template>
 
-    <a-tabs v-model:active-key="activeTab">
-      <a-tab-pane key="bots" tab="Bot 库">
+    <a-tabs v-model:active-key="activeTab" size="large" class="bots-tabs fs-tabs-animated">
+      <a-tab-pane key="bots" tab="本地 Bot 库">
         <resource-crud
           ref="botCrudRef"
           embedded
@@ -135,7 +101,7 @@
         </resource-crud>
       </a-tab-pane>
 
-      <a-tab-pane key="categories" tab="分类管理">
+      <a-tab-pane key="categories" tab="分类">
         <resource-crud
           ref="categoryCrudRef"
           embedded
@@ -186,6 +152,79 @@
           </template>
         </resource-crud>
       </a-tab-pane>
+
+      <a-tab-pane key="vendored" tab="远程 Bot 库">
+        <div class="fs-card vendored-panel">
+          <div class="vendored-panel__head">
+            <div class="vendored-panel__intro">
+              <h3 class="vendored-panel__title">Crawler-Detect 远程规则</h3>
+              <p class="vendored-panel__desc">
+                来自上游
+                <a :href="upstreamUrl" target="_blank" rel="noopener noreferrer">JayBizzle/Crawler-Detect</a>
+                的 vendored 爬虫 UA 规则，与本地 Bot 库互补；识别顺序为
+                <strong>本地 Bot 库 → 远程规则 → UA 启发式</strong>。
+              </p>
+            </div>
+            <a-button type="primary" :loading="vendoredSyncing" @click="syncVendored">
+              <template #icon><cloud-download-outlined /></template>
+              立即更新
+            </a-button>
+          </div>
+
+          <a-spin :spinning="vendoredLoading">
+            <template v-if="vendoredInfo?.installed">
+              <a-descriptions
+                class="vendored-descriptions"
+                bordered
+                size="middle"
+                :column="{ xs: 1, sm: 2, lg: 3 }"
+              >
+                <a-descriptions-item label="安装状态">
+                  <a-tag color="success">已安装</a-tag>
+                </a-descriptions-item>
+                <a-descriptions-item label="上游仓库">
+                  {{ vendoredInfo.upstream_repo }}@{{ vendoredInfo.upstream_branch }}
+                </a-descriptions-item>
+                <a-descriptions-item label="上游 Commit">
+                  <code v-if="vendoredInfo.upstream_commit">{{ vendoredInfo.upstream_commit }}</code>
+                  <span v-else class="muted">—</span>
+                </a-descriptions-item>
+                <a-descriptions-item label="爬虫规则">
+                  {{ vendoredInfo.crawlers_count ?? 0 }} 条
+                </a-descriptions-item>
+                <a-descriptions-item label="排除规则">
+                  {{ vendoredInfo.exclusions_count ?? 0 }} 条
+                </a-descriptions-item>
+                <a-descriptions-item label="数据来源">
+                  {{ vendoredInfo.source || "—" }}
+                </a-descriptions-item>
+                <a-descriptions-item label="上次更新">
+                  {{ formatTime(vendoredInfo.updated_at) }}
+                </a-descriptions-item>
+                <a-descriptions-item label="下次自动更新">
+                  {{ formatTime(vendoredInfo.next_auto_update_at) }}
+                </a-descriptions-item>
+                <a-descriptions-item label="自动更新周期">
+                  {{ vendoredInfo.auto_update_days ?? 30 }} 天
+                </a-descriptions-item>
+              </a-descriptions>
+            </template>
+
+            <a-empty
+              v-else-if="!vendoredLoading"
+              class="vendored-empty"
+              description="尚未安装远程规则"
+            >
+              <template #image>
+                <cloud-download-outlined class="vendored-empty__icon" />
+              </template>
+              <p class="vendored-empty__hint">
+                点击「立即更新」从上游拉取 Crawler-Detect 规则并下发到引擎。
+              </p>
+            </a-empty>
+          </a-spin>
+        </div>
+      </a-tab-pane>
     </a-tabs>
   </page-shell>
 </template>
@@ -193,6 +232,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { message } from "ant-design-vue";
+import { CloudDownloadOutlined } from "@ant-design/icons-vue";
 import { api } from "@/api";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
@@ -222,11 +262,12 @@ type VendoredInfo = {
 
 const vendoredInfo = ref<VendoredInfo | null>(null);
 const vendoredSyncing = ref(false);
+const vendoredLoading = ref(false);
 
-function shortCommit(commit?: string | null) {
-  if (!commit) return "—";
-  return commit.slice(0, 8);
-}
+const upstreamUrl = computed(() => {
+  const repo = vendoredInfo.value?.upstream_repo || "JayBizzle/Crawler-Detect";
+  return `https://github.com/${repo}`;
+});
 
 function formatTime(value?: string | null) {
   if (!value) return "—";
@@ -236,8 +277,13 @@ function formatTime(value?: string | null) {
 }
 
 async function loadVendoredInfo() {
-  const resp = await api.get("/api/v1/bots/vendored");
-  vendoredInfo.value = resp.data || null;
+  vendoredLoading.value = true;
+  try {
+    const resp = await api.get("/api/v1/bots/vendored");
+    vendoredInfo.value = resp.data || null;
+  } finally {
+    vendoredLoading.value = false;
+  }
 }
 
 async function syncVendored() {
@@ -247,11 +293,11 @@ async function syncVendored() {
     if (resp.data?.updated === false) {
       message.info("当前未到自动更新周期，已强制检查完成");
     } else {
-      message.success("vendored 规则已更新并下发到引擎");
+      message.success("远程 Bot 规则已更新并下发到引擎");
     }
     await loadVendoredInfo();
   } catch (err: any) {
-    message.error(err?.response?.data?.message || "更新 vendored 规则失败");
+    message.error(err?.response?.data?.message || "更新远程 Bot 规则失败");
   } finally {
     vendoredSyncing.value = false;
   }
@@ -361,37 +407,91 @@ watch(activeTab, (tab) => {
   if (tab === "bots") {
     void loadCategoryOptions();
   }
+  if (tab === "vendored" && !vendoredInfo.value) {
+    void loadVendoredInfo();
+  }
 });
 
 onMounted(() => {
   void loadCategoryOptions();
-  void loadVendoredInfo();
 });
 </script>
 
 <style scoped>
-.vendored-banner {
-  margin-bottom: 16px;
+.bots-tabs :deep(.ant-tabs-nav) {
+  margin-bottom: 0;
 }
-.vendored-head {
+
+.vendored-panel {
+  padding: 20px 24px 24px;
+}
+
+.vendored-panel__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-}
-.vendored-meta {
-  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  color: var(--fs-text-muted, #94a3b8);
-  font-size: 13px;
 }
+
+.vendored-panel__intro {
+  flex: 1;
+  min-width: 240px;
+}
+
+.vendored-panel__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fs-text-primary);
+}
+
+.vendored-panel__desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fs-text-secondary);
+}
+
+.vendored-panel__desc a {
+  color: var(--fs-color-primary);
+}
+
+.vendored-descriptions :deep(.ant-descriptions-item-label) {
+  width: 120px;
+  color: var(--fs-text-secondary);
+  background: var(--fs-bg-muted, #f8fafc);
+}
+
+.vendored-descriptions :deep(code) {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.vendored-empty {
+  padding: 32px 0 16px;
+}
+
+.vendored-empty__icon {
+  font-size: 48px;
+  color: var(--fs-text-muted, #94a3b8);
+}
+
+.vendored-empty__hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--fs-text-secondary);
+}
+
 .muted {
   color: var(--fs-text-muted, #94a3b8);
 }
+
 .reserved-tag {
   margin-left: 8px;
 }
+
 .sort-input {
   width: 120px;
 }

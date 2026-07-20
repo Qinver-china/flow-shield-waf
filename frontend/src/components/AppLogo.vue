@@ -91,7 +91,7 @@ const imageSize = computed(() => {
 .app-logo-text {
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  color: var(--fs-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

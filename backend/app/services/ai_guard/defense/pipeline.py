@@ -48,11 +48,19 @@ async def run_defense_for_policy(
     channel_ids = policy.channel_ids or []
 
     if "trigger" in notify_on:
+        from app.services.ai_guard.incident_email import build_trigger_email
+
+        plain, html_body = build_trigger_email(
+            policy_name=policy.name,
+            window_min=window_min,
+            trigger_snapshot=trigger_snapshot,
+        )
         entries = await notifier.notify_policy(
             db,
             channel_ids=channel_ids,
             subject=f"流盾 AI 防护：{policy.name}",
-            body=f"触发条件已命中，开始分析近 {window_min} 分钟日志。\n\n快照：{trigger_snapshot}",
+            body=plain,
+            html_body=html_body,
         )
         incident.notification_log = (incident.notification_log or []) + entries
         incident = await _incidents.upsert(incident)
@@ -66,11 +74,19 @@ async def run_defense_for_policy(
         incident.log_sample_meta = meta
 
         if "analyzing" in notify_on:
+            from app.services.ai_guard.incident_email import build_analyzing_email
+
+            plain, html_body = build_analyzing_email(
+                policy_name=policy.name,
+                sampled=int(meta.get("sampled", 0)),
+                blocked_count=int(meta.get("blocked_count", 0)),
+            )
             entries = await notifier.notify_policy(
                 db,
                 channel_ids=channel_ids,
                 subject="流盾 AI 防护：分析中",
-                body=f"已取样 {meta.get('sampled', 0)} 条日志（拦截 {meta.get('blocked_count', 0)} 条）",
+                body=plain,
+                html_body=html_body,
             )
             incident.notification_log = (incident.notification_log or []) + entries
             incident = await _incidents.upsert(incident)

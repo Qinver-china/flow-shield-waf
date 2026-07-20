@@ -13,6 +13,7 @@ from app.schemas.notification import (
     NotificationChannelUpdate,
 )
 from app.services.notifications.channels import mask_channel_config, send_via_channel, validate_channel_config
+from app.services.notifications.email_templates import build_test_email
 
 router = APIRouter()
 
@@ -122,10 +123,12 @@ async def test_channel(
     if row is None:
         raise HTTPException(status_code=404, detail="通知通道不存在")
     try:
+        plain, html_body = build_test_email()
         await send_via_channel(
             row,
             subject="流盾WAF 通知通道测试",
-            body="这是一封测试邮件。若您收到此消息，说明 SMTP 配置正确。",
+            body=plain,
+            html_body=html_body,
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc

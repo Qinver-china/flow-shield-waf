@@ -4,7 +4,11 @@ from app.services.ai_guard.incident_action_tokens import (
     create_incident_action_token,
     decode_incident_action_token,
 )
-from app.services.ai_guard.incident_email import build_analysis_result_email
+from app.services.ai_guard.incident_email import (
+    build_analysis_result_email,
+    build_trigger_email,
+)
+from app.services.notifications.email_templates import PRODUCT_NAME, PRODUCT_TAGLINE
 
 
 def test_incident_action_token_roundtrip():
@@ -30,3 +34,32 @@ def test_build_analysis_result_email_includes_rule_json_and_links():
     assert "应用规则" in html
     assert "忽略" in html
     assert "<pre" in html
+    assert PRODUCT_NAME in html
+    assert PRODUCT_TAGLINE in html
+
+
+def test_build_trigger_email_has_html_layout():
+    plain, html = build_trigger_email(
+        policy_name="高频拦截",
+        window_min=5,
+        trigger_snapshot={"blocked_count": 120, "threshold": 50},
+    )
+    assert "高频拦截" in plain
+    assert "触发快照" in plain
+    assert "AI 防护已触发" in html
+    assert "<pre" in html
+    assert PRODUCT_NAME in html
+
+
+def test_build_analyzing_email_has_html_layout():
+    from app.services.ai_guard.incident_email import build_analyzing_email
+
+    plain, html = build_analyzing_email(
+        policy_name="高频拦截",
+        sampled=200,
+        blocked_count=45,
+    )
+    assert "200" in plain
+    assert "45" in plain
+    assert "AI 防护分析中" in html
+    assert PRODUCT_NAME in html

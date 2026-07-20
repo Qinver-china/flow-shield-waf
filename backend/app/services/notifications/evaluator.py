@@ -14,6 +14,7 @@ from app.core.redis import get_redis
 from app.models.notification import AlertPolicy, NotificationChannel
 from app.services.analytics.alert_log_store import AlertLogStore
 from app.services.notifications.channels import send_via_channel
+from app.services.notifications.email_templates import build_alert_email
 from app.services.traffic_intel.constants import REDIS_SNAPSHOT_KEY
 from app.services.traffic_intel.detector import AnomalyDetector
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
@@ -310,10 +311,13 @@ class AlertPolicyEvaluator:
             )
             return False
         subject = f"流盾WAF 预警：{policy.name}"
+        plain, html_body = build_alert_email(policy_name=policy.name, message=message)
         any_ok = False
         for ch in channels:
             try:
-                await send_via_channel(ch, subject=subject, body=message)
+                await send_via_channel(
+                    ch, subject=subject, body=plain, html_body=html_body
+                )
                 await _alert_logs.insert(
                     policy_id=policy.id,
                     channel_id=ch.id,

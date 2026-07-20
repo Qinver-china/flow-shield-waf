@@ -4,21 +4,23 @@
       v-if="!isMobile"
       v-model:collapsed="collapsed"
       collapsible
+      :trigger="null"
       class="app-sider"
-      :width="240"
+      :width="160"
       :collapsed-width="72"
     >
       <div class="logo" :class="{ collapsed }">
         <app-logo variant="sidebar" :collapsed="collapsed" :show-text="!collapsed" />
       </div>
-      <a-menu
-        theme="dark"
-        mode="inline"
-        :selected-keys="[selectedKey]"
-        :open-keys="openKeys"
-        @click="onMenu"
-        @open-change="onOpenChange"
-      >
+      <div class="sider-menu-wrap">
+        <a-menu
+          mode="inline"
+          class="app-nav-menu"
+          :selected-keys="[selectedKey]"
+          :open-keys="openKeys"
+          @click="onMenu"
+          @open-change="onOpenChange"
+        >
         <template v-for="group in menuGroups" :key="group.key">
           <a-menu-item-group v-if="!collapsed" :title="group.label">
             <a-menu-item v-for="item in group.items" :key="item.path">
@@ -34,6 +36,20 @@
           </template>
         </template>
       </a-menu>
+      </div>
+      <div class="sider-footer">
+        <a-tooltip :title="collapsed ? '展开菜单' : '收起菜单'">
+          <a-button
+            type="text"
+            class="fs-header-icon-btn sider-collapse-btn"
+            :aria-label="collapsed ? '展开菜单' : '收起菜单'"
+            @click="collapsed = !collapsed"
+          >
+            <menu-unfold-outlined v-if="collapsed" />
+            <menu-fold-outlined v-else />
+          </a-button>
+        </a-tooltip>
+      </div>
     </a-layout-sider>
 
     <a-drawer
@@ -43,7 +59,7 @@
       :width="280"
       :closable="false"
       class="nav-drawer"
-      :body-style="{ padding: 0, background: 'var(--fs-bg-sidebar)' }"
+      :body-style="{ padding: 0, background: 'transparent' }"
     >
       <div class="drawer-head">
         <div class="logo">
@@ -54,8 +70,8 @@
         </a-button>
       </div>
       <a-menu
-        theme="dark"
         mode="inline"
+        class="app-nav-menu"
         :selected-keys="[selectedKey]"
         @click="onMenu"
       >
@@ -86,17 +102,20 @@
         <div class="header-right">
           <dashboard-live-refresh-toggle v-if="isDashboard" />
           <theme-toggle />
-          <a-dropdown>
-            <span class="user-trigger">
-              <user-outlined />
-              <span class="user-name">{{ auth.username }}</span>
-            </span>
-            <template #overlay>
-              <a-menu :selectable="false">
-                <a-menu-item @click="logout">退出登录</a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
+            <a-dropdown placement="bottomRight" :trigger="['click']">
+              <a-button type="text" class="fs-header-icon-btn" aria-label="用户菜单">
+                <user-outlined />
+              </a-button>
+              <template #overlay>
+                <a-menu :selectable="false">
+                  <a-menu-item disabled>
+                    <span class="user-menu-name">{{ auth.username }}</span>
+                  </a-menu-item>
+                  <a-menu-divider />
+                  <a-menu-item @click="logout">退出登录</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
         </div>
       </a-layout-header>
       <a-layout-content class="app-content">
@@ -128,6 +147,8 @@ import {
   FileSearchOutlined,
   GlobalOutlined,
   MenuOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
@@ -224,50 +245,84 @@ onMounted(() => {
 <style scoped>
 .app-layout {
   min-height: 100vh;
+  background: var(--fs-bg-page);
 }
 
 .app-sider {
-  background: var(--fs-bg-sidebar) !important;
+  background: transparent !important;
+  border-inline-end: none !important;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .app-sider :deep(.ant-layout-sider-children) {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.sider-menu-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sider-footer {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 10px 0 14px;
+}
+
+.sider-collapse-btn {
+  flex-shrink: 0;
 }
 
 .app-sider :deep(.ant-layout-sider-trigger) {
-  background: transparent;
+  display: none;
 }
 
-.app-sider :deep(.ant-menu-dark),
-.nav-drawer :deep(.ant-menu-dark) {
-  background: transparent;
+.app-nav-menu,
+.nav-drawer :deep(.app-nav-menu) {
+  background: transparent !important;
+  border-inline-end: none !important;
 }
 
-.app-sider :deep(.ant-menu-dark .ant-menu-item),
-.app-sider :deep(.ant-menu-dark .ant-menu-submenu-title),
-.nav-drawer :deep(.ant-menu-dark .ant-menu-item),
-.nav-drawer :deep(.ant-menu-dark .ant-menu-submenu-title) {
-  color: rgba(255, 255, 255, 0.72);
+.app-sider :deep(.app-nav-menu .ant-menu-item),
+.app-sider :deep(.app-nav-menu .ant-menu-submenu-title),
+.nav-drawer :deep(.app-nav-menu .ant-menu-item),
+.nav-drawer :deep(.app-nav-menu .ant-menu-submenu-title) {
+  color: var(--fs-text-secondary);
 }
 
-.app-sider :deep(.ant-menu-dark .ant-menu-item-group-title),
-.nav-drawer :deep(.ant-menu-dark .ant-menu-item-group-title) {
-  color: rgba(255, 255, 255, 0.45);
+.app-sider :deep(.app-nav-menu .ant-menu-item-group-title),
+.nav-drawer :deep(.app-nav-menu .ant-menu-item-group-title) {
+  color: var(--fs-text-muted);
 }
 
-.app-sider :deep(.ant-menu-dark .ant-menu-item:not(.ant-menu-item-selected):hover),
-.app-sider :deep(.ant-menu-dark .ant-menu-submenu-title:hover),
-.nav-drawer :deep(.ant-menu-dark .ant-menu-item:not(.ant-menu-item-selected):hover),
-.nav-drawer :deep(.ant-menu-dark .ant-menu-submenu-title:hover) {
-  color: #f8fafc !important;
-  background: var(--fs-bg-sidebar-hover) !important;
+.app-sider :deep(.app-nav-menu .ant-menu-item:not(.ant-menu-item-selected):hover),
+.app-sider :deep(.app-nav-menu .ant-menu-submenu-title:hover),
+.nav-drawer :deep(.app-nav-menu .ant-menu-item:not(.ant-menu-item-selected):hover),
+.nav-drawer :deep(.app-nav-menu .ant-menu-submenu-title:hover) {
+  color: var(--fs-text-primary) !important;
+  background: var(--fs-bg-muted) !important;
 }
 
-.app-sider :deep(.ant-menu-dark .ant-menu-item-selected),
-.nav-drawer :deep(.ant-menu-dark .ant-menu-item-selected) {
-  color: #fff !important;
+.app-sider :deep(.app-nav-menu .ant-menu-item-selected),
+.nav-drawer :deep(.app-nav-menu .ant-menu-item-selected) {
+  color: var(--fs-text-inverse) !important;
   background: var(--fs-color-primary) !important;
+}
+
+.app-sider :deep(.app-nav-menu .ant-menu-item-selected .anticon),
+.nav-drawer :deep(.app-nav-menu .ant-menu-item-selected .anticon) {
+  color: var(--fs-text-inverse) !important;
 }
 
 .logo {
@@ -275,7 +330,6 @@ onMounted(() => {
   align-items: center;
   min-height: 56px;
   margin: 12px;
-  padding: 8px 10px;
   border-radius: var(--fs-radius-md);
   background: transparent;
 }
@@ -287,6 +341,7 @@ onMounted(() => {
 
 .app-main {
   min-width: 0;
+  background: transparent;
 }
 
 .app-header {
@@ -296,8 +351,8 @@ onMounted(() => {
   padding: 0 16px;
   height: 56px;
   line-height: 56px;
-  background: var(--fs-bg-surface);
-  border-bottom: 1px solid var(--fs-border);
+  background: transparent;
+  border-bottom: none;
 }
 
 .header-left,
@@ -319,28 +374,17 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.user-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: var(--fs-radius-sm);
-  cursor: pointer;
   color: var(--fs-text-secondary);
-  transition: background var(--fs-transition);
 }
 
-.user-trigger:hover {
+.menu-trigger:hover {
+  color: var(--fs-color-primary);
   background: var(--fs-bg-muted);
 }
 
-.user-name {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.user-menu-name {
+  color: var(--fs-text-primary);
+  font-weight: 500;
 }
 
 .app-content {
@@ -358,16 +402,21 @@ onMounted(() => {
 }
 
 .drawer-close {
-  color: #fff;
+  color: var(--fs-text-secondary);
+}
+
+.drawer-close:hover {
+  color: var(--fs-color-primary);
+  background: var(--fs-bg-muted);
+}
+
+:deep(.nav-drawer .ant-drawer-content) {
+  background: var(--fs-bg-page);
 }
 
 @media (max-width: 767px) {
   .app-content {
     padding: 12px;
-  }
-
-  .user-name {
-    display: none;
   }
 }
 </style>

@@ -55,6 +55,46 @@ code,
   color: var(--fs-text-muted);
 }
 
+/* Header / sidebar icon buttons (transparent chrome) */
+.fs-header-icon-btn.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--fs-radius-sm);
+  color: var(--fs-text-secondary);
+  transition: background var(--fs-transition), color var(--fs-transition);
+}
+
+.fs-header-icon-btn.ant-btn:hover {
+  background: var(--fs-bg-muted) !important;
+  color: var(--fs-color-primary) !important;
+}
+
+.fs-header-icon-btn--active.ant-btn {
+  color: var(--fs-color-primary);
+  background: color-mix(in srgb, var(--fs-color-primary) 10%, transparent);
+}
+
+.fs-header-icon-btn--active.ant-btn:hover {
+  background: color-mix(in srgb, var(--fs-color-primary) 16%, transparent) !important;
+}
+
+.fs-icon-spin {
+  animation: fs-icon-spin 1.2s linear infinite;
+}
+
+@keyframes fs-icon-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .fs-danger {
   color: var(--fs-color-danger);
 }
