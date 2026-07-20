@@ -71,11 +71,6 @@ end
 
 local function merge_baseline(entry, baseline)
     entry.payload = baseline
-    for k, v in pairs(baseline) do
-        if entry[k] == nil then
-            entry[k] = v
-        end
-    end
 end
 
 local function enrich_bot_dimensions(entry, cfg, ext, site_id)
@@ -108,7 +103,6 @@ function _M.emit(cfg, ctx, meta, mode, blocked, trace, ext)
 
     if log_policy.include_detail(cfg, mode) then
         entry.evaluated = log_snapshot.evaluated_fields(trace)
-        entry.payload.evaluated = entry.evaluated
     end
 
     local ok, err = ngx.timer.at(0, function(premature)

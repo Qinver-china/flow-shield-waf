@@ -24,8 +24,8 @@ COMMON_FIELDS = [
 
 # registry: log_type -> extra payload fields (nested under log.payload)
 _REGISTRY: dict[str, list[str]] = {
-    LogType.PROTECTION.value: ["evaluated", "rule", "request", "client", "client_ip", "headers", "cookies", "cookie_raw", "query"],
-    LogType.ACCESS_CONTROL.value: ["evaluated", "rule", "request", "client", "client_ip", "headers", "cookies", "cookie_raw", "query"],
+    LogType.PROTECTION.value: ["headers", "cookies", "query", "client"],
+    LogType.ACCESS_CONTROL.value: ["headers", "cookies", "query", "client"],
     LogType.AUDIT.value: ["actor", "target", "changes"],
 }
 

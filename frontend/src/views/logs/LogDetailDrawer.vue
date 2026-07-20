@@ -21,8 +21,8 @@
       </fs-detail-section>
 
       <fs-detail-section
-        v-if="cookieRows.length || detail.payload?.cookie_raw"
-        :title="`Cookie（${cookieRows.length || 1}）`"
+        v-if="cookieRows.length"
+        :title="`Cookie（${cookieRows.length}）`"
       >
         <fs-detail-kv :items="cookieKvItems" />
       </fs-detail-section>
@@ -87,6 +87,18 @@ const kvColumns = [
   { title: "取值", dataIndex: "value", ellipsis: true },
 ];
 
+function buildFullUrl(d: Record<string, unknown> | null | undefined): string {
+  if (!d) return "-";
+  const payload = d.payload as Record<string, unknown> | undefined;
+  const request = payload?.request as Record<string, unknown> | undefined;
+  if (typeof request?.url === "string" && request.url) return request.url;
+  const scheme = (d.scheme as string) || (request?.scheme as string);
+  const domain = (d.domain as string) || (request?.host as string);
+  const uri = (d.request_uri as string) || (d.uri as string) || (request?.uri as string);
+  if (scheme && domain && uri) return `${scheme}://${domain}${uri}`;
+  return "-";
+}
+
 function mapToRows(map: Record<string, unknown> | undefined | null) {
   if (!map || typeof map !== "object") return [];
   return Object.keys(map)
@@ -133,12 +145,15 @@ const summaryItems = computed(() => {
 const requestItems = computed(() => {
   const d = detail.value;
   if (!d) return [];
+  const payload = d.payload as Record<string, unknown> | undefined;
+  const client = payload?.client as Record<string, unknown> | undefined;
+  const request = payload?.request as Record<string, unknown> | undefined;
   return [
-    { label: "客户端 IP", value: d.payload?.client?.ip || d.client_ip || "-" },
-    { label: "客户端端口", value: d.payload?.client?.port ?? "-" },
-    { label: "协议", value: d.payload?.request?.scheme || "-" },
-    { label: "完整 URL", value: d.payload?.request?.url || "-" },
-    { label: "HTTP 版本", value: d.payload?.request?.http_version || "-" },
+    { label: "客户端 IP", value: d.client_ip || client?.ip || "-" },
+    { label: "客户端端口", value: client?.port ?? "-" },
+    { label: "协议", value: d.scheme || request?.scheme || "-" },
+    { label: "完整 URL", value: buildFullUrl(d) },
+    { label: "HTTP 版本", value: d.http_version || request?.http_version || "-" },
   ];
 });
 
@@ -146,13 +161,9 @@ const headerKvItems = computed(() =>
   headerRows.value.map((row) => ({ label: row.name, value: row.value })),
 );
 
-const cookieKvItems = computed(() => {
-  const items = cookieRows.value.map((row) => ({ label: row.name, value: row.value }));
-  if (detail.value?.payload?.cookie_raw) {
-    items.push({ label: "原始 Cookie", value: detail.value.payload.cookie_raw });
-  }
-  return items;
-});
+const cookieKvItems = computed(() =>
+  cookieRows.value.map((row) => ({ label: row.name, value: row.value })),
+);
 
 function fieldLabel(field: string, arg?: string | null) {
   const meta = fieldMeta.value[field];

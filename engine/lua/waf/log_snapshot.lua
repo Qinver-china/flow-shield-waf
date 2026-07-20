@@ -116,6 +116,29 @@ local function parse_cookies(raw)
     return map
 end
 
+-- Request headers already promoted to top-level log columns (omit from payload).
+local PROMOTED_HEADERS = {
+    ["user-agent"] = true,
+    ["referer"] = true,
+    ["cookie"] = true,
+    ["x-forwarded-for"] = true,
+    ["host"] = true,
+}
+
+local function slim_headers(headers)
+    local out = {}
+    if type(headers) ~= "table" then
+        return out
+    end
+    for k, v in pairs(headers) do
+        local key = tostring(k)
+        if not PROMOTED_HEADERS[key:lower()] then
+            out[key] = v
+        end
+    end
+    return out
+end
+
 local function header_lookup(headers, name)
     if type(headers) ~= "table" then
         return nil
@@ -260,30 +283,25 @@ function _M.summary_columns(trace, ext, captured)
     }
 end
 
-function _M.build_baseline(trace, meta, ext, captured)
-    meta = meta or {}
-    local baseline = captured or _M.capture_baseline(ext, trace)
-    return {
-        client_ip = baseline.client_ip,
-        client = baseline.client,
-        request = baseline.request,
-        headers = baseline.headers,
+function _M.build_baseline(_trace, _meta, ext, captured)
+    local baseline = captured or _M.capture_baseline(ext, _trace)
+    local port = baseline.client and baseline.client.port
+    local out = {
+        headers = slim_headers(baseline.headers),
         cookies = baseline.cookies,
-        cookie_raw = baseline.cookie_raw,
         query = baseline.query,
-        rule = {
-            source = meta.source,
-            id = meta.id,
-            name = meta.name,
-            keys = meta.keys,
-        },
     }
+    if port ~= nil then
+        out.client = { port = port }
+    end
+    return out
 end
 
 function _M.build(trace, meta, ext)
-    local out = _M.build_baseline(trace, meta, ext)
-    out.evaluated = _M.evaluated_fields(trace)
-    return out
+    return {
+        payload = _M.build_baseline(trace, meta, ext),
+        evaluated = _M.evaluated_fields(trace),
+    }
 end
 
 return _M

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from app.core.clickhouse import get_clickhouse, get_clickhouse_ingest
 from app.services.logging.enrich import enrich_entries
+from app.services.logging.payload_slim import payload_for_storage
 
 log = logging.getLogger("waf.clickhouse_store")
 
@@ -92,10 +93,7 @@ def _row_from_enriched(e: dict) -> list:
         e.get("log_type") or "protection",
         e.get("request_id") or "",
         _json_str(e.get("evaluated")),
-        _json_str(e.get("payload") if e.get("payload") is not None else {
-            k: e[k] for k in ("client", "request", "headers", "cookies", "query")
-            if k in e
-        }),
+        _json_str(payload_for_storage(e)),
     ]
 
 
