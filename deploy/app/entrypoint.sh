@@ -12,13 +12,14 @@ SNIP_HTTP="/etc/nginx/snippets/geoip2-http.conf"
 : >"$SNIP_HTTP"
 
 if [ -f "$GEOIP_MODULE" ] && compgen -G "$GEOIP_DIR/*.mmdb" >/dev/null; then
+  echo "GeoIP2 enabled: using MaxMind databases from ${GEOIP_DIR}" >&2
   echo "load_module modules/ngx_http_geoip2_module.so;" >"$SNIP_LOAD"
   {
     if [ -f "$GEOIP_DIR/GeoLite2-Country.mmdb" ]; then
       cat <<'NGX'
 geoip2 /etc/nginx/geoip/GeoLite2-Country.mmdb {
     auto_reload 60m;
-    $geoip2_country source=$remote_addr country iso_code;
+    $geoip2_country source=$waf_geoip_client country iso_code;
 }
 NGX
     fi
@@ -26,8 +27,8 @@ NGX
       cat <<'NGX'
 geoip2 /etc/nginx/geoip/GeoLite2-City.mmdb {
     auto_reload 60m;
-    $geoip2_region source=$remote_addr subdivisions 0 iso_code;
-    $geoip2_city   source=$remote_addr city names en;
+    $geoip2_region source=$waf_geoip_client subdivisions 0 iso_code;
+    $geoip2_city   source=$waf_geoip_client city names en;
 }
 NGX
     fi
@@ -35,12 +36,14 @@ NGX
       cat <<'NGX'
 geoip2 /etc/nginx/geoip/GeoLite2-ASN.mmdb {
     auto_reload 60m;
-    $geoip2_asn source=$remote_addr autonomous_system_number;
-    $geoip2_isp source=$remote_addr autonomous_system_organization;
+    $geoip2_asn source=$waf_geoip_client autonomous_system_number;
+    $geoip2_isp source=$waf_geoip_client autonomous_system_organization;
 }
 NGX
     fi
   } >"$SNIP_HTTP"
+elif compgen -G "$GEOIP_DIR/*.mmdb" >/dev/null; then
+  echo "WARN: GeoLite2 .mmdb found in ${GEOIP_DIR} but ${GEOIP_MODULE} is missing; geo fields disabled" >&2
 fi
 
 cat >/etc/flowshield/env <<EOF

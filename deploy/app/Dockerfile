@@ -28,6 +28,23 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN apk add --no-cache python3 py3-pip nginx supervisor curl redis libjpeg-turbo tzdata
 
+# OpenResty fat 镜像仅含旧版 GeoIP(.dat) 模块，不含 GeoIP2(.mmdb)；编译动态模块以启用地理字段。
+RUN apk add --no-cache --virtual .geoip2-build \
+        build-base pcre-dev zlib-dev openssl-dev libmaxminddb-dev git wget \
+    && nginx_version=$(/usr/local/openresty/nginx/sbin/nginx -v 2>&1 | sed -n 's/.*nginx\///p' | cut -d' ' -f1) \
+    && cd /tmp \
+    && wget -q "http://nginx.org/download/nginx-${nginx_version}.tar.gz" \
+    && tar xzf "nginx-${nginx_version}.tar.gz" \
+    && git clone --depth 1 --branch 3.4 https://github.com/leev/ngx_http_geoip2_module.git \
+    && cd "nginx-${nginx_version}" \
+    && ./configure --with-compat --add-dynamic-module=/tmp/ngx_http_geoip2_module \
+    && make modules \
+    && cp objs/ngx_http_geoip2_module.so /usr/local/openresty/nginx/modules/ \
+    && cd / \
+    && rm -rf /tmp/nginx-* /tmp/ngx_http_geoip2_module \
+    && apk del .geoip2-build \
+    && apk add --no-cache libmaxminddb
+
 # 后端：分层安装 Python 依赖——base 层缓存稳定包，extra 层仅装新增包
 WORKDIR /app/backend
 COPY backend/requirements-base.txt backend/requirements-extra.txt ./

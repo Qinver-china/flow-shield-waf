@@ -1,5 +1,14 @@
 # 更新日志
 
+## [0.3.4] - 2026-07-20
+
+### 修复
+
+- 修复日志国家/地区/运营商为空：OpenResty 镜像缺少 GeoIP2 动态模块导致 entrypoint 静默跳过 `.mmdb` 配置
+- 构建阶段编译并安装 `ngx_http_geoip2_module.so`，启动时启用 GeoLite2 Country/City/ASN
+- GeoIP 查询源改为站点解析后的真实客户端 IP（`waf_geoip_client`），避免 CDN 场景下误查边缘节点
+- 若检测到 `.mmdb` 但模块缺失，启动日志输出明确 WARN，不再静默失败
+
 ## [0.3.3] - 2026-07-20
 
 ### 界面与交互

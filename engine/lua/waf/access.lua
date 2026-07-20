@@ -10,6 +10,7 @@ local log_trace = require "waf.log_trace"
 local log_emit = require "waf.log_emit"
 local traffic_counter = require "waf.traffic_counter"
 local debug_headers = require "waf.debug_headers"
+local util = require "waf.util"
 
 local _M = {}
 
@@ -139,6 +140,10 @@ function _M.run()
     local site = sync.site_by_domain(domain)
     local site_id = site and site.id or tonumber(ngx.var.waf_site_id)
     ngx.ctx.waf_client_ip_source = (site and site.client_ip_source) or "remote_addr"
+    local client_ip = util.client_ip()
+    if client_ip and client_ip ~= "" then
+        ngx.var.waf_geoip_client = client_ip
+    end
     ext.cache.site_id = site_id
     local ctx = make_ctx(site_id, domain, cfg.settings)
 
