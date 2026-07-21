@@ -26,6 +26,7 @@ class Site(Base, TimestampMixin):
     listen_http: Mapped[bool] = mapped_column(Boolean, default=True)
     listen_https: Mapped[bool] = mapped_column(Boolean, default=False)
     force_https: Mapped[bool] = mapped_column(Boolean, default=False)
+    disable_content_buffering: Mapped[bool] = mapped_column(Boolean, default=False)
     certificate_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("certificate.id"), nullable=True
     )

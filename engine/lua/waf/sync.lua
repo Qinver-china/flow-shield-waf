@@ -114,7 +114,7 @@ function _M.load(force)
     local ver, verr = red:get(VERSION_KEY)
     if ver == nil then
         rc.release(red)
-        ngx.log(ngx.WARN, "waf sync: get version failed: ", verr)
+        ngx.log(ngx.ERR, "waf sync: get version failed: ", verr)
         mark_failure()
         return has_cached_config()
     end
@@ -131,7 +131,7 @@ function _M.load(force)
     local raw, rerr = red:get(CONFIG_KEY)
     rc.release(red)
     if raw == nil or raw == ngx.null then
-        ngx.log(ngx.WARN, "waf sync: get config failed or empty: ", rerr)
+        ngx.log(ngx.ERR, "waf sync: get config failed or empty: ", rerr)
         mark_failure()
         return has_cached_config()
     end

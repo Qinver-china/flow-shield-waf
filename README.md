@@ -74,7 +74,7 @@
 |----|------|
 | 拦截引擎 | OpenResty（Nginx + Lua） |
 | 管理后端 | Python FastAPI + SQLAlchemy 2.0 + Pydantic v2 |
-| 配置与计数 | SQLite + Redis 7（默认 Unix Socket） |
+| 配置与计数 | SQLite + Redis 7（Compose 默认 TCP） |
 | 日志存储 | ClickHouse 24 |
 | 前端面板 | Vue 3 + Vite + TypeScript + Ant Design Vue |
 | 部署 | Docker Compose（3 服务 + SQLite 内嵌于 app） |
@@ -98,8 +98,9 @@ flow-shield-waf/
 │   ├── baota/              # 宝塔一键部署
 │   └── smoke_test.sh       # 集成回归脚本
 ├── scripts/
-│   ├── fresh-start.sh      # 清空数据卷并重建（开发/测试用）
-│   └── stress_test.py      # 防护分阶段 QPS 压测
+│   ├── fresh-start.sh         # 清空数据卷并重建（开发/测试用）
+│   ├── migrate-app-volume.sh  # 旧六卷 → app_data 一次性迁移
+│   └── stress_test.py         # 防护分阶段 QPS 压测
 └── docs/                   # 架构 / 规则 DSL / API / 压测文档
 ```
 
@@ -155,7 +156,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-编排为 **3 个容器**（SQLite 配置库挂载在 `app` 的 `waf_sqlite` 卷）：
+编排为 **3 个容器**（业务数据挂载在 `app` 的 `app_data` 卷 `/data`）：
 
 | 容器 | 说明 |
 |------|------|
@@ -333,11 +334,11 @@ docker compose down                  # 停止所有服务
 
 | 卷名 | 内容 |
 |------|------|
-| `flowshield-waf_waf_sqlite` | SQLite 业务配置（`/data/waf.db`） |
-| `flowshield-waf_redis_data` | Redis 持久化 |
-| `flowshield-waf_clickhouse_data` | 防护日志 |
-| `flowshield-waf_engine_conf` | 引擎 per-site Nginx 配置 |
-| `flowshield-waf_engine_certs` | SSL 证书文件 |
+| `flowshield-waf_app_data` | 业务数据：`/data/waf.db`、引擎 conf/certs |
+| `flowshield-waf_redis_data` | Redis 持久化（可空卷重建） |
+| `flowshield-waf_clickhouse_data` | 防护日志（可空卷重建） |
+
+从旧六卷布局升级时，先执行：`./scripts/migrate-app-volume.sh`（详见 [`docs/upgrade.md`](docs/upgrade.md)）。
 
 ---
 

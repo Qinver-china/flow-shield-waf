@@ -85,7 +85,7 @@ function _M.verify_and_store(encoded, opts)
 
     local red, err = redis_client.connect()
     if not red then
-        ngx.log(ngx.WARN, "waf motion: redis unavailable, skipping replay check: ", err or "unknown")
+        ngx.log(ngx.ERR, "waf motion: redis unavailable, skipping replay check: ", err or "unknown")
         return true, nil
     end
 
@@ -97,7 +97,7 @@ function _M.verify_and_store(encoded, opts)
     local list, lerr = red:lrange(REDIS_KEY, 0, limit)
     if not list and lerr then
         redis_client.release(red)
-        ngx.log(ngx.WARN, "waf motion: redis lrange failed: ", lerr)
+        ngx.log(ngx.ERR, "waf motion: redis lrange failed: ", lerr)
         return true, nil
     end
 
@@ -111,7 +111,7 @@ function _M.verify_and_store(encoded, opts)
     local _, perr = red:lpush(REDIS_KEY, hash)
     if perr then
         redis_client.close(red)
-        ngx.log(ngx.WARN, "waf motion: redis lpush failed: ", perr)
+        ngx.log(ngx.ERR, "waf motion: redis lpush failed: ", perr)
         return true, nil
     end
     red:ltrim(REDIS_KEY, 0, limit)

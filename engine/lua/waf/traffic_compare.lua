@@ -17,7 +17,7 @@ local function baselines_payload()
     end
     local red, err = rc.connect()
     if not red then
-        ngx.log(ngx.WARN, "waf traffic_compare: redis connect failed: ", err)
+        ngx.log(ngx.ERR, "waf traffic_compare: redis connect failed: ", err)
         return cache.data
     end
     local raw = red:get(BASELINE_KEY)

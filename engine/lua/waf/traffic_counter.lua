@@ -248,7 +248,7 @@ function _M.tick(cfg)
 
     local red, err = rc.connect()
     if not red then
-        ngx.log(ngx.WARN, "waf traffic: redis connect failed: ", err)
+        ngx.log(ngx.ERR, "waf traffic: redis connect failed: ", err)
         return
     end
     red:set(SNAPSHOT_KEY, payload, "EX", 10)

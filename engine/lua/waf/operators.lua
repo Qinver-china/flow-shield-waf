@@ -179,12 +179,12 @@ OPS.key_absent = function(v) return v == nil end
 function _M.apply(op, value, target)
     local fn = OPS[op]
     if not fn then
-        ngx.log(ngx.WARN, "waf operators: unknown op ", tostring(op))
+        ngx.log(ngx.ERR, "waf operators: unknown op ", tostring(op))
         return false
     end
     local ok, res = pcall(fn, value, target)
     if not ok then
-        ngx.log(ngx.WARN, "waf operators: op ", op, " error: ", res)
+        ngx.log(ngx.ERR, "waf operators: op ", op, " error: ", res)
         return false
     end
     return res and true or false

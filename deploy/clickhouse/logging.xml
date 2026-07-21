@@ -1,8 +1,10 @@
 <clickhouse>
     <!--
-      Production logging profile for Docker:
-      - warning: only warnings/errors go to container stdout (captured as json.log)
-      - disable internal *_log system tables: they grow quickly under high ingest
+      Container stdout policy:
+      - warning+: real CH warnings/errors (schema, memory, query failures)
+      - not info/debug (startup chatter, query traces)
+      Note: get_mempolicy stderr is from libnuma, not this logger — fixed via
+      docker-compose cap_add: SYS_NICE.
     -->
     <logger>
         <level>warning</level>

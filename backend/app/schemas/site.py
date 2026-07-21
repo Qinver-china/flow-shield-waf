@@ -38,6 +38,7 @@ class SiteBase(BaseModel):
     listen_http: bool = True
     listen_https: bool = False
     force_https: bool = False
+    disable_content_buffering: bool = False
     certificate_id: int | None = None
     enabled: bool = True
     custom_block_page_enabled: bool = False
@@ -128,6 +129,7 @@ class SiteUpdate(BaseModel):
     listen_http: bool | None = None
     listen_https: bool | None = None
     force_https: bool | None = None
+    disable_content_buffering: bool | None = None
     certificate_id: int | None = None
     enabled: bool | None = None
     custom_block_page_enabled: bool | None = None
@@ -211,6 +213,7 @@ class SiteOut(SiteBase):
                 "listen_http": data.listen_http,
                 "listen_https": data.listen_https,
                 "force_https": getattr(data, "force_https", False),
+                "disable_content_buffering": getattr(data, "disable_content_buffering", False),
                 "certificate_id": data.certificate_id,
                 "enabled": data.enabled,
                 "custom_block_page_enabled": data.custom_block_page_enabled,

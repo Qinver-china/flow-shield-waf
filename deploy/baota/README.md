@@ -40,7 +40,7 @@ bash deploy/baota/install.sh
 docker compose up -d --build
 ```
 
-将启动 **3 个容器**：`redis`、`clickhouse`、`app`（后端 + Worker + 引擎 + 面板；SQLite 配置库位于 `waf_sqlite` 卷 `/data/waf.db`）。
+将启动 **3 个容器**：`redis`、`clickhouse`、`app`（后端 + Worker + 引擎 + 面板；业务数据位于 `app_data` 卷 `/data`）。
 
 ## 四、访问
 
@@ -100,11 +100,11 @@ docker compose down               # 停止（勿加 -v，否则会删数据卷�
 
 | 数据卷 | 内容 |
 |--------|------|
-| `flowshield-waf_waf_sqlite` | SQLite 业务配置（`/data/waf.db`） |
-| `flowshield-waf_redis_data` | Redis 持久化 |
-| `flowshield-waf_clickhouse_data` | 防护日志与流水事件 |
-| `flowshield-waf_engine_conf` | 引擎 per-site Nginx 配置 |
-| `flowshield-waf_engine_certs` | SSL 证书（容器内路径 `/data/engine/certs/`） |
+| `flowshield-waf_app_data` | 业务数据：`/data/waf.db`、引擎 conf/certs |
+| `flowshield-waf_redis_data` | Redis 持久化（可空卷重建） |
+| `flowshield-waf_clickhouse_data` | 防护日志与流水事件（可空卷重建） |
+
+从旧六卷布局升级时，先执行：`bash scripts/migrate-app-volume.sh`。
 
 备份示例：
 
@@ -113,7 +113,7 @@ docker compose down               # 停止（勿加 -v，否则会删数据卷�
 docker compose exec -T app cp /data/waf.db /tmp/waf_backup_$(date +%Y%m%d).db
 docker cp flowshield-waf-app:/tmp/waf_backup_$(date +%Y%m%d).db ./
 
-# 数据卷打包
-docker run --rm -v flowshield-waf_waf_sqlite:/data -v $PWD:/backup alpine \
-  tar czf /backup/waf_sqlite_$(date +%Y%m%d).tgz /data
+# 业务数据卷打包
+docker run --rm -v flowshield-waf_app_data:/data -v $PWD:/backup alpine \
+  tar czf /backup/app_data_$(date +%Y%m%d).tgz /data
 ```

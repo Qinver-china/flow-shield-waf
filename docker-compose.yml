@@ -11,25 +11,24 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    user: root
-    entrypoint: ["/bin/sh", "-ec"]
     command:
-      - |
-        mkdir -p /run/redis
-        chown redis:redis /run/redis
-        exec su -s /bin/sh redis -c 'exec redis-server \
-          --requirepass "$REDIS_PASSWORD" \
-          --appendonly yes \
-          --unixsocket /run/redis/redis.sock \
-          --unixsocketperm 777 \
-          --maxclients 10000 \
-          --tcp-keepalive 300 \
-          --timeout 0'
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - "yes"
+      - --maxclients
+      - "10000"
+      - --tcp-keepalive
+      - "300"
+      - --timeout
+      - "0"
+      - --loglevel
+      - warning
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
-      - redis_run:/run/redis
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -42,6 +41,12 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24-alpine
     restart: unless-stopped
+    # SYS_NICE：允许 get_mempolicy（缺省 Docker seccomp 会拦，刷屏 stderr）
+    # IPC_LOCK / NET_ADMIN：官方镜像建议的可选能力，避免相关能力告警
+    cap_add:
+      - SYS_NICE
+      - IPC_LOCK
+      - NET_ADMIN
     environment:
       CLICKHOUSE_DB: waf
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
@@ -81,7 +86,6 @@ services:
       DB_PATH: /data/waf.db
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      REDIS_SOCKET_PATH: /var/run/redis/redis.sock
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_POOL_SIZE: "256"
       REDIS_KEEPALIVE_MS: "60000"
@@ -112,12 +116,9 @@ services:
       - "${WAF_HTTPS_PORT:-443}:443"
       - "${PANEL_PORT:-9000}:9000"
     volumes:
-      - engine_conf:/data/engine/conf.d
-      - engine_certs:/data/engine/certs
+      - app_data:/data
       - ./deploy/geoip:/etc/nginx/geoip:ro
       - ./slide_captcha:/data/slide_captcha
-      - redis_run:/var/run/redis
-      - waf_sqlite:/data
     depends_on:
       redis:
         condition: service_healthy
@@ -140,9 +141,6 @@ networks:
     driver: bridge
 
 volumes:
-  waf_sqlite:
+  app_data:
   redis_data:
-  redis_run:
   clickhouse_data:
-  engine_conf:
-  engine_certs:

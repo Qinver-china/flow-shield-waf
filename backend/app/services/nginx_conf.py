@@ -54,7 +54,7 @@ server {{
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_pass $waf_upstream_{site_id};
+{proxy_buffering_line}        proxy_pass $waf_upstream_{site_id};
     }}
 }}
 """
@@ -74,7 +74,7 @@ server {{
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_pass {upstream};
+{proxy_buffering_line}        proxy_pass {upstream};
     }}
 }}
 """
@@ -131,6 +131,13 @@ def _http_redirect_block(site: Site, server_names: str, has_ssl: bool) -> str:
     return _HTTP_REDIRECT_TEMPLATE.format(domain=server_names)
 
 
+def _proxy_buffering_line(site: Site) -> str:
+    """Emit proxy_buffering off when the site opts out of response buffering."""
+    if bool(getattr(site, "disable_content_buffering", False)):
+        return "        proxy_buffering off;\n"
+    return ""
+
+
 def render_site(site: Site) -> str:
     cert_path, key_path = _resolve_ssl_paths(site)
     has_ssl = bool(cert_path and key_path)
@@ -163,6 +170,7 @@ def render_site(site: Site) -> str:
         site.origin_host, "https", site.origin_https_port
     )
     real_ip_block = _real_ip_block(site)
+    proxy_buffering_line = _proxy_buffering_line(site)
 
     if site.origin_protocol == "follow":
         main_block = _FOLLOW_TEMPLATE.format(
@@ -171,6 +179,7 @@ def render_site(site: Site) -> str:
             listen_lines=listen_lines,
             ssl_block=ssl_block,
             real_ip_block=real_ip_block,
+            proxy_buffering_line=proxy_buffering_line,
             upstream_http=upstream_http,
             upstream_https=upstream_https,
         )
@@ -185,6 +194,7 @@ def render_site(site: Site) -> str:
             listen_lines=listen_lines,
             ssl_block=ssl_block,
             real_ip_block=real_ip_block,
+            proxy_buffering_line=proxy_buffering_line,
             upstream=upstream,
         )
 

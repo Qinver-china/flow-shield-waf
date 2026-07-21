@@ -102,6 +102,14 @@
                 />
               </a-form-item>
             </a-col>
+            <a-col :span="24">
+              <a-form-item
+                label="关闭内容缓冲"
+                extra="如果源站在本机，建议关闭内容缓冲（开启本开关）。"
+              >
+                <a-switch v-model:checked="record.disable_content_buffering" :disabled="readonly" />
+              </a-form-item>
+            </a-col>
           </a-row>
           <a-row :gutter="16" style="margin-bottom: 12px;">
             <a-col :span="12">
@@ -309,6 +317,7 @@ const defaultRecord = () => ({
   listen_http: true,
   listen_https: false,
   force_https: false,
+  disable_content_buffering: false,
   certificate_id: null as number | null,
   enabled: true,
   custom_block_page_enabled: false,

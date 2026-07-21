@@ -232,6 +232,10 @@ TOOL_DEFINITIONS: list[dict] = [
                     "listen_http": {"type": "boolean"},
                     "listen_https": {"type": "boolean"},
                     "force_https": {"type": "boolean"},
+                    "disable_content_buffering": {
+                        "type": "boolean",
+                        "description": "关闭反代响应内容缓冲（源站在本机时建议开启）",
+                    },
                     "certificate_id": {"type": "integer"},
                     "enabled": {"type": "boolean"},
                 },

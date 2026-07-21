@@ -13,7 +13,7 @@ local _loaded = false
 function _M.load()
     local f = io.open(PATH, "r")
     if not f then
-        ngx.log(ngx.WARN, "waf catalog: file not found: ", PATH)
+        ngx.log(ngx.ERR, "waf catalog: file not found: ", PATH)
         return false
     end
     local content = f:read("*a")

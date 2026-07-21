@@ -46,7 +46,8 @@ class LogNotifyHandler(ActionHandler):
         anomaly: AnomalyResult,
         config: TrafficIntelConfig,
     ) -> None:
-        log.warning(
+        # Persisted via PersistAlertHandler; keep container logs quiet at WARNING+.
+        log.info(
             "TRAFFIC_ALERT site=%s window=%ss severity=%s ratio=%.2f msg=%s",
             anomaly.site_id,
             anomaly.window_sec,

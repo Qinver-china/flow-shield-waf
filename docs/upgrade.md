@@ -34,12 +34,14 @@ cp .env .env.bak.$(date +%Y%m%d)
 docker compose exec -T app cp /data/waf.db /tmp/waf_backup_$(date +%Y%m%d).db
 docker cp flowshield-waf-app:/tmp/waf_backup_$(date +%Y%m%d).db ./
 
-# 或打包数据卷（可选）
+# 或打包业务数据卷（可选）
 docker run --rm \
-  -v flowshield-waf_waf_sqlite:/data \
+  -v flowshield-waf_app_data:/data \
   -v "$(pwd)":/backup alpine \
-  tar czf /backup/waf_sqlite_$(date +%Y%m%d).tgz /data
+  tar czf /backup/app_data_$(date +%Y%m%d).tgz /data
 ```
+
+> 若机器上仍是旧卷名 `flowshield-waf_waf_sqlite`，备份时把上面的卷名换成它；升级前请先做 [一次性卷迁移](#一次性卷迁移六卷--三卷)。
 
 ### 2. 拉取新版本代码
 
@@ -106,6 +108,55 @@ bash deploy/smoke_test.sh http://127.0.0.1:9000 http://127.0.0.1
 1. 打开管理面板，确认可正常登录
 2. **总览** 页查看配置版本号是否递增
 3. 抽查站点访问与一条测试规则是否生效
+
+---
+
+## 一次性卷迁移（六卷 → 三卷）
+
+命名卷布局已收敛为：
+
+| 新卷 | 内容 |
+|------|------|
+| `flowshield-waf_app_data` | `/data`：`waf.db` + `engine/conf.d` + `engine/certs` |
+| `flowshield-waf_redis_data` | Redis（可空卷重建） |
+| `flowshield-waf_clickhouse_data` | ClickHouse（可空卷重建） |
+
+旧卷 `waf_sqlite` / `engine_conf` / `engine_certs` / `redis_run` 不再使用。
+
+**已有环境升级时必须先迁移，否则会挂上空白 `app_data`。**
+
+推荐一键脚本（幂等）：
+
+```bash
+cd /path/to/flow-shield-waf
+bash scripts/migrate-app-volume.sh
+docker compose up -d --build
+```
+
+`deploy/baota/upgrade.sh` 会在检测到旧卷且 `app_data` 尚无 `waf.db` 时自动调用该脚本。
+
+手工步骤与验证见仓库 README「数据卷」说明，或脚本输出中的后续命令。
+
+迁移并验证通过后，可删除旧卷（可选）：
+
+```bash
+docker volume rm \
+  flowshield-waf_waf_sqlite \
+  flowshield-waf_engine_conf \
+  flowshield-waf_engine_certs \
+  flowshield-waf_redis_run 2>/dev/null || true
+
+# 确认已不用 MySQL 后：
+docker volume rm flowshield-waf_mysql_data 2>/dev/null || true
+```
+
+Redis / ClickHouse 卷可保留；若只要业务配置、不要历史日志与计数，也可在停服后删除并让 Compose 重建空卷：
+
+```bash
+docker compose stop
+docker volume rm flowshield-waf_redis_data flowshield-waf_clickhouse_data
+docker compose up -d
+```
 
 ---
 

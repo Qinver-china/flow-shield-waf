@@ -104,7 +104,7 @@ local function snapshot_payload()
         local err
         raw, err = fetch_redis_raw()
         if err then
-            ngx.log(ngx.WARN, "waf system_compare: redis get failed: ", err)
+            ngx.log(ngx.ERR, "waf system_compare: redis get failed: ", err)
             -- Prefer stale local/shared data over blocking or failing closed hard.
             if cache.data and not cache.negative then
                 -- Hold stale briefly so workers do not stampede Redis on outage.

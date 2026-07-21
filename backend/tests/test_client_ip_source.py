@@ -95,3 +95,45 @@ def test_render_site_force_https_redirect():
     assert "listen 443 ssl;" in conf
     assert conf.count("listen 80;") == 1
     assert "/etc/nginx/certs/example.crt" in conf
+
+
+def test_render_site_disable_content_buffering():
+    site = SimpleNamespace(
+        id=3,
+        domain="local.example.com",
+        extra_domains=None,
+        origin_host="127.0.0.1",
+        origin_protocol="http",
+        origin_http_port=80,
+        origin_https_port=443,
+        client_ip_source="remote_addr",
+        listen_http=True,
+        listen_https=False,
+        force_https=False,
+        disable_content_buffering=True,
+        certificate_id=None,
+        certificate=None,
+    )
+    conf = render_site(site)
+    assert "proxy_buffering off;" in conf
+
+
+def test_render_site_keeps_default_buffering():
+    site = SimpleNamespace(
+        id=4,
+        domain="remote.example.com",
+        extra_domains=None,
+        origin_host="10.0.0.2",
+        origin_protocol="http",
+        origin_http_port=80,
+        origin_https_port=443,
+        client_ip_source="remote_addr",
+        listen_http=True,
+        listen_https=False,
+        force_https=False,
+        disable_content_buffering=False,
+        certificate_id=None,
+        certificate=None,
+    )
+    conf = render_site(site)
+    assert "proxy_buffering" not in conf

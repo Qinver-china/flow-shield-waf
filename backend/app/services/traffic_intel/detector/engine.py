@@ -93,7 +93,7 @@ class AnomalyDetector:
             f"{scope} {win} 请求量 {current}，"
             f"高于基线 {baseline.avg_requests:.0f} 的 {pct}%（阈值 +{int(config.spike_ratio * 100)}%）"
         )
-        log.warning("traffic anomaly: %s", message)
+        log.info("traffic anomaly: %s", message)
         return AnomalyResult(
             site_id=baseline.site_id,
             window_sec=baseline.window_sec,

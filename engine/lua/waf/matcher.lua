@@ -16,7 +16,7 @@ end
 
 local function match_leaf(node, ext)
     if catalog.loaded() and not catalog.is_valid(node.field) then
-        ngx.log(ngx.WARN, "waf matcher: unknown field (not in catalog): ",
+        ngx.log(ngx.ERR, "waf matcher: unknown field (not in catalog): ",
             tostring(node.field))
     end
     if node.field == "traffic.global" and node.op == "compare" then
@@ -69,7 +69,7 @@ function _M.match(condition, ext)
     if type(condition) ~= "table" then return false end
     local ok, res = pcall(match_node, condition, ext)
     if not ok then
-        ngx.log(ngx.WARN, "waf matcher error: ", res)
+        ngx.log(ngx.ERR, "waf matcher error: ", res)
         return false
     end
     return res
