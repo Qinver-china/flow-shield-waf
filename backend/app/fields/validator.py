@@ -11,7 +11,15 @@ from __future__ import annotations
 from typing import Any
 
 from app.constants.traffic_windows import TRAFFIC_BASELINE_MIN_WINDOW_SEC
-from app.fields.catalog import TRAFFIC, TRAFFIC_COMPARE_MODES, TRAFFIC_RULE_WINDOWS, field_map
+from app.constants.system_metrics import SYSTEM_METRIC_WINDOWS_SEC
+from app.fields.catalog import (
+    SYSTEM,
+    SYSTEM_CPU_COMPARE_MODES,
+    TRAFFIC,
+    TRAFFIC_COMPARE_MODES,
+    TRAFFIC_RULE_WINDOWS,
+    field_map,
+)
 
 _MAP = field_map()
 # operators that don't need a value
@@ -25,9 +33,11 @@ _OP_ALIASES = {
     "neq": "not_equals",
 }
 _TRAFFIC_COMPARES = {m["value"] for m in TRAFFIC_COMPARE_MODES}
+_SYSTEM_CPU_COMPARES = {m["value"] for m in SYSTEM_CPU_COMPARE_MODES}
 _BASELINE_COMPARES = {"baseline_gt", "baseline_lt"}
 _QPS_COMPARES = {"qps_gt", "qps_lt"}
 _TRAFFIC_FIELDS = {"traffic.global", "traffic.site"}
+_SYSTEM_CPU_FIELDS = {"system.cpu"}
 _TRAFFIC_COMPARE_OPS = {
     "gt": "abs_gt",
     "gte": "abs_gt",
@@ -137,6 +147,26 @@ def _validate_traffic_value(value: Any, field: str) -> None:
         pass
 
 
+def _validate_system_cpu_value(value: Any) -> None:
+    if not isinstance(value, dict):
+        raise ValueError("系统 CPU/负载条件的 value 必须是对象")
+    try:
+        window_sec = int(value.get("window_sec"))
+    except (TypeError, ValueError):
+        raise ValueError("系统 CPU/负载必须选择时间窗口 window_sec") from None
+    if window_sec not in SYSTEM_METRIC_WINDOWS_SEC:
+        allowed = ", ".join(str(w) for w in SYSTEM_METRIC_WINDOWS_SEC)
+        raise ValueError(f"不支持的时间窗口 {window_sec}，可选: {allowed}")
+
+    compare = value.get("compare")
+    if compare not in _SYSTEM_CPU_COMPARES:
+        raise ValueError("系统 CPU/负载必须选择比较方式 compare")
+
+    threshold = value.get("threshold")
+    if threshold is None or not isinstance(threshold, (int, float)) or threshold < 0:
+        raise ValueError("系统 CPU/负载比较需要提供非负 threshold")
+
+
 def _normalize_op(op: str, allowed: list[str] | tuple[str, ...] | set[str]) -> str | None:
     """Return op if allowed, or its alias if that is allowed; else None."""
     if op in allowed:
@@ -180,6 +210,14 @@ def _validate_leaf(node: dict[str, Any]) -> None:
         if field not in _TRAFFIC_FIELDS:
             raise ValueError(f"未知请求量字段: {field}")
         _validate_traffic_value(node.get("value"), field)
+        return
+
+    if meta["value_type"] == SYSTEM:
+        if op != "compare":
+            raise ValueError(f"字段 {field} 仅支持 compare 操作符")
+        if field not in _SYSTEM_CPU_FIELDS:
+            raise ValueError(f"未知系统指标字段: {field}")
+        _validate_system_cpu_value(node.get("value"))
         return
 
     if op == "between":

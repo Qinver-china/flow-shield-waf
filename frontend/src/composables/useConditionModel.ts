@@ -43,12 +43,28 @@ export const STRING_MULTI_OPS = ["contains", "not_contains"];
 export const IP_GROUP_OPS = ["in_ip_group", "not_in_ip_group"];
 export const NUMBER_OPS = ["len_gt", "len_lt"];
 export const TRAFFIC_FIELDS = ["traffic.global", "traffic.site"] as const;
+export const SYSTEM_CPU_FIELD = "system.cpu";
 export const TRAFFIC_BASELINE_COMPARES = ["baseline_gt", "baseline_lt"];
 export const TRAFFIC_QPS_COMPARES = ["qps_gt", "qps_lt"];
+export const SYSTEM_CPU_PCT_COMPARES = [
+  "container_cpu_gt",
+  "container_cpu_lt",
+  "host_cpu_gt",
+  "host_cpu_lt",
+];
 export const MAX_GROUP_DEPTH = 10;
 
 export function isTrafficField(fieldKey?: string) {
   return !!fieldKey && (TRAFFIC_FIELDS as readonly string[]).includes(fieldKey);
+}
+
+export function isSystemCpuField(fieldKey?: string) {
+  return fieldKey === SYSTEM_CPU_FIELD;
+}
+
+/** Traffic / system CPU share the window+compare+threshold editor. */
+export function isWindowCompareField(fieldKey?: string) {
+  return isTrafficField(fieldKey) || isSystemCpuField(fieldKey);
 }
 
 export function isTrafficBaselineCompare(compare?: string) {
@@ -57,6 +73,10 @@ export function isTrafficBaselineCompare(compare?: string) {
 
 export function isTrafficQpsCompare(compare?: string) {
   return !!compare && TRAFFIC_QPS_COMPARES.includes(compare);
+}
+
+export function isSystemCpuPctCompare(compare?: string) {
+  return !!compare && SYSTEM_CPU_PCT_COMPARES.includes(compare);
 }
 
 export function emptyLeaf(): UiLeaf {
@@ -69,8 +89,8 @@ export function emptyLeaf(): UiLeaf {
     valueList: [],
     valueNumber: null,
     trafficWindow: 300,
-    trafficCompare: "abs_gt",
-    trafficThreshold: 1000,
+    trafficCompare: undefined,
+    trafficThreshold: null,
     trafficPercent: 50,
   };
 }
@@ -85,9 +105,9 @@ function parseLeaf(node: any): UiLeaf {
   leaf.arg = node.arg;
   leaf.op = node.op;
 
-  if (isTrafficField(node.field) && node.op === "compare" && node.value && typeof node.value === "object") {
-    leaf.trafficWindow = Number(node.value.window_sec) || 300;
-    leaf.trafficCompare = node.value.compare || "abs_gt";
+  if (isWindowCompareField(node.field) && node.op === "compare" && node.value && typeof node.value === "object") {
+    leaf.trafficWindow = Number(node.value.window_sec) || (isSystemCpuField(node.field) ? 300 : 300);
+    leaf.trafficCompare = node.value.compare || (isSystemCpuField(node.field) ? "container_cpu_gt" : "abs_gt");
     if (isTrafficBaselineCompare(leaf.trafficCompare)) {
       leaf.trafficPercent = Number(node.value.percent ?? 50);
     } else {
@@ -136,7 +156,7 @@ export function parseConditionTree(value: any): UiGroup {
 export function serializeLeaf(row: UiLeaf, fieldMap: Record<string, Field>): any | null {
   if (!row.field) return null;
 
-  if (isTrafficField(row.field)) {
+  if (isWindowCompareField(row.field)) {
     if (!row.trafficWindow || !row.trafficCompare) return null;
     const value: Record<string, unknown> = {
       window_sec: row.trafficWindow,
@@ -233,12 +253,34 @@ export function isNumberOp(op?: string) {
 }
 
 export function onFieldChange(row: UiLeaf, fieldMap: Record<string, Field>) {
+  if (isSystemCpuField(row.field)) {
+    row.op = "compare";
+    // Only keep window if it is a valid system window; otherwise default 5 min.
+    const sysWindows = new Set(
+      (optionsFor(fieldMap, row.field) || []).map((o) => Number(o.value)),
+    );
+    if (!row.trafficWindow || (sysWindows.size > 0 && !sysWindows.has(Number(row.trafficWindow)))) {
+      row.trafficWindow = 300;
+    }
+    if (!isSystemCpuPctCompare(row.trafficCompare)) {
+      row.trafficCompare = "container_cpu_gt";
+      row.trafficThreshold = 80;
+    } else if (row.trafficThreshold == null) {
+      row.trafficThreshold = 80;
+    }
+    return;
+  }
   if (isTrafficField(row.field)) {
     row.op = "compare";
     row.trafficWindow = row.trafficWindow ?? 300;
-    row.trafficCompare = row.trafficCompare ?? "abs_gt";
-    row.trafficThreshold = row.trafficThreshold ?? 1000;
-    row.trafficPercent = row.trafficPercent ?? 50;
+    if (isSystemCpuPctCompare(row.trafficCompare) || !row.trafficCompare) {
+      row.trafficCompare = "abs_gt";
+      row.trafficThreshold = 1000;
+      row.trafficPercent = 50;
+    } else {
+      row.trafficThreshold = row.trafficThreshold ?? 1000;
+      row.trafficPercent = row.trafficPercent ?? 50;
+    }
     return;
   }
   const ops = opsFor(fieldMap, row.field);
@@ -249,7 +291,7 @@ export function onFieldChange(row: UiLeaf, fieldMap: Record<string, Field>) {
 }
 
 export function onOpChange(row: UiLeaf, fieldMap: Record<string, Field>) {
-  if (isTrafficField(row.field)) {
+  if (isWindowCompareField(row.field)) {
     row.op = "compare";
     return;
   }
@@ -322,7 +364,7 @@ export function displayLeafValue(
   fieldMap: Record<string, Field>,
   ipGroupLabel?: (id: string) => string,
 ): string | null {
-  if (isTrafficField(row.field)) {
+  if (isWindowCompareField(row.field)) {
     const win = optionsFor(fieldMap, row.field).find(
       (o) => Number(o.value) === row.trafficWindow,
     );
@@ -335,6 +377,8 @@ export function displayLeafValue(
       parts.push(`${row.trafficPercent ?? 0}%`);
     } else if (isTrafficQpsCompare(row.trafficCompare)) {
       parts.push(`${row.trafficThreshold ?? 0} QPS`);
+    } else if (isSystemCpuPctCompare(row.trafficCompare)) {
+      parts.push(`${row.trafficThreshold ?? 0}%`);
     } else {
       parts.push(String(row.trafficThreshold ?? 0));
     }
@@ -368,7 +412,7 @@ export function formatLeafRow(
   ipGroupLabel?: (id: string) => string,
 ): string {
   const fieldLabel = fieldMap[row.field || ""]?.label || row.field || "-";
-  if (isTrafficField(row.field)) {
+  if (isTrafficField(row.field) || isSystemCpuField(row.field)) {
     const val = displayLeafValue(row, fieldMap, ipGroupLabel);
     return [fieldLabel, val].filter(Boolean).join(" · ");
   }

@@ -120,6 +120,50 @@ async def health(
     )
 
 
+@router.get("/system-metrics")
+async def system_metrics(_user: User = Depends(get_current_user)):
+    """CPU window averages for the dashboard card (shortest window is primary)."""
+    from app.constants.system_metrics import (
+        SYSTEM_METRIC_WINDOW_LABELS,
+        SYSTEM_METRIC_WINDOWS_SEC,
+    )
+    from app.services.system_metrics import read_system_metrics_snapshot, window_metric_value
+
+    primary_sec = int(SYSTEM_METRIC_WINDOWS_SEC[0])
+    snapshot = await read_system_metrics_snapshot()
+    instant = (snapshot or {}).get("instant") or {}
+
+    windows_out: list[dict] = []
+    for sec in SYSTEM_METRIC_WINDOWS_SEC:
+        windows_out.append({
+            "sec": int(sec),
+            "label": SYSTEM_METRIC_WINDOW_LABELS.get(sec, f"{sec} 秒"),
+            "container_cpu_pct": window_metric_value(
+                snapshot, window_sec=int(sec), metric="container_cpu_pct"
+            ),
+            "host_cpu_pct": window_metric_value(
+                snapshot, window_sec=int(sec), metric="host_cpu_pct"
+            ),
+            "samples": ((snapshot or {}).get("windows") or {}).get(str(sec), {}).get("samples"),
+        })
+
+    primary = next((w for w in windows_out if w["sec"] == primary_sec), None) or {}
+    return ok({
+        "window_sec": primary_sec,
+        "window_label": SYSTEM_METRIC_WINDOW_LABELS.get(primary_sec, f"{primary_sec} 秒"),
+        "container_cpu_pct": primary.get("container_cpu_pct"),
+        "host_cpu_pct": primary.get("host_cpu_pct"),
+        "windows": windows_out,
+        "cpu_cores": instant.get("cpu_cores"),
+        "source": instant.get("source"),
+        "updated_at": (snapshot or {}).get("updated_at"),
+        "available": bool(snapshot) and any(
+            w.get("container_cpu_pct") is not None or w.get("host_cpu_pct") is not None
+            for w in windows_out
+        ),
+    })
+
+
 @router.get("/summary")
 async def summary(_user: User = Depends(get_current_user)):
     now = datetime.utcnow()

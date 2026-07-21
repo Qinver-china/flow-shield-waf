@@ -4,7 +4,7 @@
       type="info"
       show-icon
       style="margin-bottom: 16px"
-      message="当流量或拦截率达到阈值时，AI 将自动分析近期日志并生成防护规则。触发条件与「预警通知」对齐，可配置仅建议、自动观察或自动拦截。"
+      message="当流量或拦截率达到阈值时，AI 将自动分析近期日志和请求数据并生成防护规则。"
     />
 
     <fs-data-table
@@ -54,6 +54,7 @@
         :channels="channels"
         :traffic-windows="trafficWindows"
         :block-windows="blockWindows"
+        :system-windows="systemWindows"
       />
     </fs-form-drawer>
   </div>
@@ -92,6 +93,11 @@ const blockWindows = ref([
   { value: 30, label: "30 分钟" },
   { value: 60, label: "60 分钟" },
 ]);
+const systemWindows = ref([
+  { value: 60, label: "1 分钟" },
+  { value: 300, label: "5 分钟" },
+  { value: 1800, label: "30 分钟" },
+]);
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
@@ -126,6 +132,8 @@ function defaultParamsFor(type: string): Record<string, unknown> {
   if (type.startsWith("traffic.qps")) return { window_sec: 60, threshold: 100 };
   if (type === "security.block_count") return { window_min: 5, threshold: 100 };
   if (type === "security.block_rate") return { window_min: 5, percent: 30 };
+  if (type === "system.container_cpu_gt") return { window_sec: 300, threshold: 80 };
+  if (type === "system.host_cpu_gt") return { window_sec: 300, threshold: 85 };
   return {};
 }
 
@@ -172,6 +180,8 @@ function formatTriggerParams(record: any) {
     let display = String(value);
     if (p.kind === "traffic_window" || p.key === "window_sec") {
       display = trafficWindows.value.find((x) => x.value === Number(value))?.label || `${value} 秒`;
+    } else if (p.kind === "system_window") {
+      display = systemWindows.value.find((x) => x.value === Number(value))?.label || `${value} 秒`;
     } else if (p.kind === "block_window" || p.key === "window_min") {
       display = blockWindows.value.find((x) => x.value === Number(value))?.label || `${value} 分钟`;
     } else if (p.key === "percent") {
@@ -223,6 +233,9 @@ async function loadMeta() {
   }
   if (tRes.data.block_windows?.length) {
     blockWindows.value = tRes.data.block_windows;
+  }
+  if (tRes.data.system_windows?.length) {
+    systemWindows.value = tRes.data.system_windows;
   }
   channels.value = cRes.data || [];
 }

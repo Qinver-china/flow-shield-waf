@@ -47,6 +47,8 @@
 | `ip` | eq, in_cidr, in_list, geo_in, exists |
 | `enum` | eq, neq, in_list |
 | `bool` | eq |
+| `traffic` | compare |
+| `system` | compare |
 
 `requires_arg=true` 的字段额外支持 `key_exists` / `key_absent`（判断键本身是否存在）。
 
@@ -66,9 +68,11 @@
 | is_empty | 为空 | key_exists | 键存在 |
 | exists | 存在 | key_absent | 键不存在 |
 | len_gt | 长度大于 | len_lt | 长度小于 |
+| compare | 窗口比较（流量 / 系统 CPU） | | |
 
 - `in_list` / `not_in` 的 `value` 为数组或换行/逗号分隔字符串。
 - `between` 的 `value` 为 `[min, max]`。
+- `compare` 用于 `traffic.*` / `system.cpu`：`value` 为对象（见下文）。
 
 ## 3. 字段目录
 
@@ -175,6 +179,31 @@
 | derived.time.hour | 当前小时 | number |
 | derived.time.weekday | 星期几 | number |
 | derived.fingerprint | 请求指纹 | string |
+
+### 时间与流量 / 系统 CPU
+
+| key | 说明 | 类型 |
+| --- | --- | --- |
+| traffic.global | 全站请求量（窗口比较） | traffic |
+| traffic.site | 当前站点请求量（窗口比较） | traffic |
+| system.cpu | 系统 CPU（窗口均值比较） | system |
+
+`system.cpu` 示例（后台每 5 秒采样，写入 Redis `waf:system:metrics`，提供 1/5/30 分钟窗口均值）：
+
+```json
+{
+  "field": "system.cpu",
+  "op": "compare",
+  "value": {
+    "window_sec": 300,
+    "compare": "container_cpu_gt",
+    "threshold": 80
+  }
+}
+```
+
+`compare` 可选：`container_cpu_gt/lt`、`host_cpu_gt/lt`。  
+`window_sec` 仅支持 `60` / `300` / `1800`。容器 CPU% 来自 cgroup，宿主机 CPU% 来自 `/proc/stat`。
 
 ## 4. 防护动作（自定义规则 mode）
 

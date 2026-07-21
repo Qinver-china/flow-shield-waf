@@ -53,12 +53,39 @@ async def run_defense_for_policy(
     channel_ids = policy.channel_ids or []
 
     if "trigger" in notify_on:
+        from app.services.ai_guard.defense.traffic_context import build_defense_traffic_overview
         from app.services.ai_guard.incident_email import build_trigger_email
+
+        focus_window_sec = trigger_snapshot.get("window_sec")
+        try:
+            focus_window_sec = int(focus_window_sec) if focus_window_sec not in (None, "") else None
+        except (TypeError, ValueError):
+            focus_window_sec = None
+        try:
+            traffic_overview = await build_defense_traffic_overview(
+                db,
+                focus_site_id=site_id,
+                focus_window_sec=focus_window_sec,
+                log_window_min=max(window_min, DEFENSE_INITIAL_WINDOW_MIN),
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("ai guard trigger email traffic overview failed policy=%s", policy.id)
+            traffic_overview = None
+
+        try:
+            from app.services.system_metrics import read_system_metrics_snapshot
+
+            system_metrics = await read_system_metrics_snapshot()
+        except Exception:  # noqa: BLE001
+            log.exception("ai guard trigger email system metrics failed policy=%s", policy.id)
+            system_metrics = None
 
         plain, html_body = build_trigger_email(
             policy_name=policy.name,
             window_min=window_min,
             trigger_snapshot=trigger_snapshot,
+            traffic_overview=traffic_overview,
+            system_metrics=system_metrics,
         )
         entries = await notifier.notify_policy(
             db,

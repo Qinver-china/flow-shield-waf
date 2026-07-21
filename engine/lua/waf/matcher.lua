@@ -5,6 +5,7 @@
 local operators = require "waf.operators"
 local catalog = require "waf.catalog"
 local traffic_compare = require "waf.traffic_compare"
+local system_compare = require "waf.system_compare"
 local ip_groups = require "waf.ip_groups"
 
 local _M = {}
@@ -23,6 +24,9 @@ local function match_leaf(node, ext)
     end
     if node.field == "traffic.site" and node.op == "compare" then
         return traffic_compare.match(node.value, "site", ext.cache.site_id)
+    end
+    if node.field == "system.cpu" and node.op == "compare" then
+        return system_compare.match(node.value)
     end
     if node.op == "in_ip_group" or node.op == "not_in_ip_group" then
         local ip = ext:get(node.field, node.arg)

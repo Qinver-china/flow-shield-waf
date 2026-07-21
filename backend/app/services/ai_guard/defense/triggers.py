@@ -11,6 +11,7 @@ from typing import Any
 from app.constants.alert_conditions import (
     ALERT_CONDITION_TYPES,
     BLOCK_WINDOWS_MIN,
+    SYSTEM_WINDOWS,
     TRAFFIC_WINDOWS,
 )
 from app.models.ai_guard import APPLY_MODES
@@ -53,6 +54,7 @@ NOTIFY_STAGES = ("trigger", "analyzing", "result")
 __all__ = (
     "BLOCK_WINDOWS_MIN",
     "NOTIFY_STAGES",
+    "SYSTEM_WINDOWS",
     "TRAFFIC_WINDOWS",
     "TRIGGER_TYPES",
     "TRIGGER_TYPE_MAP",

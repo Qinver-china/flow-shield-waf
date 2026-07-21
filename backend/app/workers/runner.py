@@ -5,6 +5,7 @@ import logging
 from app.core.logging import setup_logging
 from app.services.ai_guard.worker import run_ai_guard_loop
 from app.services.logging.collector import run_consumer
+from app.services.system_metrics.worker import run_system_metrics_loop
 from app.services.traffic_intel.pipeline import run_pipeline_loop
 from app.workers.alerts import run_alert_loop
 from app.workers.retention import run_retention
@@ -22,6 +23,7 @@ async def main() -> None:
         run_pipeline_loop(stop),
         run_ai_guard_loop(stop),
         run_alert_loop(stop),
+        run_system_metrics_loop(stop),
     )
 
 

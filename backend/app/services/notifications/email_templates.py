@@ -55,7 +55,7 @@ def build_email_html(
 <body style="margin:0;padding:24px 16px;background:{_COLOR_BG_PAGE};color:{_COLOR_TEXT};
 font-family:{_FONT_FAMILY};line-height:1.6;-webkit-text-size-adjust:100%;">
   {preheader_html}
-  <div style="max-width:640px;margin:0 auto;background:{_COLOR_BG_SURFACE};
+  <div style="max-width:720px;margin:0 auto;background:{_COLOR_BG_SURFACE};
   border:1px solid {_COLOR_BORDER};border-radius:12px;overflow:hidden;
   box-shadow:0 4px 12px rgba(15,23,42,0.06);">
     <div style="padding:18px 24px;background:{_COLOR_PRIMARY};color:#ffffff;">
@@ -177,15 +177,340 @@ def html_status_message(text: str, *, success: bool = False, danger: bool = Fals
     )
 
 
-def build_alert_email(*, policy_name: str, message: str) -> tuple[str, str]:
+# Windows highlighted in alert / AI-trigger emails (1m / 5m / 30m / 1h).
+_EMAIL_TRAFFIC_WINDOWS: tuple[tuple[int, str], ...] = (
+    (60, "1分钟"),
+    (300, "5分钟"),
+    (1800, "30分钟"),
+    (3600, "1小时"),
+)
+
+
+def _window_lookup(windows: list[dict] | None) -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    for row in windows or []:
+        try:
+            out[int(row["window_sec"])] = row
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _fmt_int(value: object) -> str:
+    try:
+        return f"{int(value):,}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _fmt_qps(value: object) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _site_display_name(site: dict) -> str:
+    name = str(site.get("name") or "").strip() or f"站点 #{site.get('site_id', '?')}"
+    domains = site.get("domains") or []
+    domain = site.get("domain") or (domains[0] if domains else None)
+    if domain:
+        return f"{name}（{domain}）"
+    return name
+
+
+def format_traffic_overview_plain(overview: dict | None) -> str:
+    """Render a plain-text multi-site traffic / block summary for emails."""
+    if not overview or overview.get("error"):
+        return "（暂无实时流量汇总）"
+
+    lines: list[str] = []
+    global_windows = _window_lookup((overview.get("global") or {}).get("windows"))
+    lines.append("【全站窗口请求量】")
+    for sec, label in _EMAIL_TRAFFIC_WINDOWS:
+        row = global_windows.get(sec)
+        if not row:
+            lines.append(f"  {label}: —")
+            continue
+        lines.append(
+            f"  {label}: {_fmt_int(row.get('requests'))} 请求 / QPS {_fmt_qps(row.get('qps'))}"
+        )
+
+    recent = overview.get("recent_log_stats") or {}
+    g_logs = recent.get("global") or {}
+    if g_logs:
+        lines.append(
+            f"【全站近期日志】近 {recent.get('window_min', '—')} 分钟："
+            f"总量 {_fmt_int(g_logs.get('total'))} / "
+            f"拦截 {_fmt_int(g_logs.get('blocked'))} / "
+            f"放行 {_fmt_int(g_logs.get('passed'))} / "
+            f"拦截率 {_fmt_qps(g_logs.get('block_rate_pct'))}%"
+        )
+
+    if overview.get("burst_active"):
+        lines.append("【状态】流量自动取证模式已激活")
+
+    sites = overview.get("sites") or []
+    log_by_site = {
+        int(row["site_id"]): row
+        for row in (recent.get("by_site") or [])
+        if row.get("site_id") is not None
+    }
+    if sites:
+        lines.append("")
+        lines.append("【分站点汇总】")
+        for site in sites:
+            sid = int(site.get("site_id") or 0)
+            lines.append(_site_display_name(site))
+            win = _window_lookup(site.get("windows"))
+            for sec, label in _EMAIL_TRAFFIC_WINDOWS:
+                row = win.get(sec)
+                if not row:
+                    lines.append(f"  {label}: —")
+                else:
+                    lines.append(
+                        f"  {label}: {_fmt_int(row.get('requests'))} 请求 / "
+                        f"QPS {_fmt_qps(row.get('qps'))}"
+                    )
+            log_row = log_by_site.get(sid)
+            if log_row:
+                lines.append(
+                    f"  近期日志: 总量 {_fmt_int(log_row.get('total'))} / "
+                    f"拦截 {_fmt_int(log_row.get('blocked'))} / "
+                    f"放行 {_fmt_int(log_row.get('passed'))} / "
+                    f"拦截率 {_fmt_qps(log_row.get('block_rate_pct'))}%"
+                )
+            lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def format_traffic_overview_html(overview: dict | None) -> str:
+    """Render an HTML multi-site traffic / block summary table for emails."""
+    if not overview or overview.get("error"):
+        return html_paragraph("暂无实时流量汇总。", muted=True)
+
+    th = (
+        f"padding:8px 10px;border-bottom:1px solid {_COLOR_BORDER};"
+        f"background:#f8fafc;color:{_COLOR_TEXT_SECONDARY};font-size:12px;"
+        "font-weight:600;text-align:left;white-space:nowrap;"
+    )
+    td = (
+        f"padding:8px 10px;border-bottom:1px solid {_COLOR_BORDER};"
+        f"color:{_COLOR_TEXT};font-size:12px;white-space:nowrap;"
+    )
+    td_muted = (
+        f"padding:8px 10px;border-bottom:1px solid {_COLOR_BORDER};"
+        f"color:{_COLOR_TEXT_MUTED};font-size:12px;white-space:nowrap;"
+    )
+
+    def _cells_for_windows(windows: list[dict] | None) -> str:
+        win = _window_lookup(windows)
+        parts: list[str] = []
+        for sec, _label in _EMAIL_TRAFFIC_WINDOWS:
+            row = win.get(sec)
+            if not row:
+                parts.append(f'<td style="{td_muted}">—</td><td style="{td_muted}">—</td>')
+            else:
+                parts.append(
+                    f'<td style="{td}">{html.escape(_fmt_int(row.get("requests")))}</td>'
+                    f'<td style="{td}">{html.escape(_fmt_qps(row.get("qps")))}</td>'
+                )
+        return "".join(parts)
+
+    header_cols = "".join(
+        f'<th style="{th}">{html.escape(label)}请求</th>'
+        f'<th style="{th}">{html.escape(label)}QPS</th>'
+        for _sec, label in _EMAIL_TRAFFIC_WINDOWS
+    )
+    header = (
+        f'<tr>'
+        f'<th style="{th}">范围</th>'
+        f"{header_cols}"
+        f'<th style="{th}">近期总量</th>'
+        f'<th style="{th}">拦截</th>'
+        f'<th style="{th}">放行</th>'
+        f'<th style="{th}">拦截率</th>'
+        f"</tr>"
+    )
+
+    recent = overview.get("recent_log_stats") or {}
+    g_logs = recent.get("global") or {}
+    log_by_site = {
+        int(row["site_id"]): row
+        for row in (recent.get("by_site") or [])
+        if row.get("site_id") is not None
+    }
+
+    def _log_cells(log_row: dict | None) -> str:
+        if not log_row:
+            return (
+                f'<td style="{td_muted}">—</td>'
+                f'<td style="{td_muted}">—</td>'
+                f'<td style="{td_muted}">—</td>'
+                f'<td style="{td_muted}">—</td>'
+            )
+        return (
+            f'<td style="{td}">{html.escape(_fmt_int(log_row.get("total")))}</td>'
+            f'<td style="{td}">{html.escape(_fmt_int(log_row.get("blocked")))}</td>'
+            f'<td style="{td}">{html.escape(_fmt_int(log_row.get("passed")))}</td>'
+            f'<td style="{td}">{html.escape(_fmt_qps(log_row.get("block_rate_pct")))}%</td>'
+        )
+
+    rows_html = [
+        "<tr>"
+        f'<td style="{td}"><strong>全站</strong></td>'
+        + _cells_for_windows((overview.get("global") or {}).get("windows"))
+        + _log_cells(g_logs if "total" in g_logs else None)
+        + "</tr>"
+    ]
+    for site in overview.get("sites") or []:
+        sid = int(site.get("site_id") or 0)
+        rows_html.append(
+            "<tr>"
+            f'<td style="{td}">{html.escape(_site_display_name(site))}</td>'
+            + _cells_for_windows(site.get("windows"))
+            + _log_cells(log_by_site.get(sid))
+            + "</tr>"
+        )
+
+    note = ""
+    if overview.get("burst_active"):
+        note = html_paragraph("当前已进入流量自动取证模式。", muted=False)
+    window_note = html_paragraph(
+        f"近期日志统计窗口：近 {recent.get('window_min', '—')} 分钟；"
+        "窗口请求量来自引擎实时计数（1分钟 / 5分钟 / 30分钟 / 1小时）。",
+        muted=True,
+    )
+
+    table = (
+        f'<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">'
+        f'<table style="width:100%;border-collapse:collapse;min-width:720px;">'
+        f"<thead>{header}</thead>"
+        f'<tbody>{"".join(rows_html)}</tbody>'
+        f"</table></div>"
+    )
+    return note + table + window_note
+
+
+_EMAIL_SYSTEM_WINDOWS = (
+    (60, "1分钟"),
+    (300, "5分钟"),
+    (1800, "30分钟"),
+)
+
+
+def _fmt_metric(value: object, *, digits: int = 2, suffix: str = "") -> str:
+    if value is None:
+        return "—"
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    text = f"{num:.{digits}f}".rstrip("0").rstrip(".")
+    return f"{text}{suffix}" if text else "—"
+
+
+def format_system_metrics_plain(snapshot: dict | None) -> str:
+    """Render plain-text CPU / load window averages for emails."""
+    if not snapshot:
+        return "（暂无系统 CPU 数据）"
+
+    windows = snapshot.get("windows") or {}
+    instant = snapshot.get("instant") or {}
+    lines = ["【窗口平均 CPU】"]
+    for sec, label in _EMAIL_SYSTEM_WINDOWS:
+        row = windows.get(str(sec)) or {}
+        lines.append(
+            f"  {label}: 容器 {_fmt_metric(row.get('container_cpu_pct_avg'), digits=1, suffix='%')} · "
+            f"宿主机 {_fmt_metric(row.get('host_cpu_pct_avg'), digits=1, suffix='%')}"
+        )
+
+    cores = instant.get("cpu_cores")
+    source = instant.get("source")
+    meta_parts: list[str] = []
+    if cores is not None:
+        meta_parts.append(f"CPU 核数 {cores}")
+    if source:
+        meta_parts.append(f"来源 {source}")
+    if meta_parts:
+        lines.append("【环境】" + " · ".join(meta_parts))
+    return "\n".join(lines)
+
+
+def format_system_metrics_html(snapshot: dict | None) -> str:
+    """Render an HTML table of CPU window averages for emails."""
+    if not snapshot:
+        return html_paragraph("暂无系统 CPU 数据。", muted=True)
+
+    windows = snapshot.get("windows") or {}
+    instant = snapshot.get("instant") or {}
+    th = (
+        f"padding:8px 10px;border-bottom:1px solid {_COLOR_BORDER};"
+        f"background:#f8fafc;color:{_COLOR_TEXT_SECONDARY};font-size:12px;"
+        "font-weight:600;text-align:left;white-space:nowrap;"
+    )
+    td = (
+        f"padding:8px 10px;border-bottom:1px solid {_COLOR_BORDER};"
+        f"color:{_COLOR_TEXT};font-size:12px;white-space:nowrap;"
+    )
+    header = (
+        f"<tr>"
+        f'<th style="{th}">窗口</th>'
+        f'<th style="{th}">容器 CPU</th>'
+        f'<th style="{th}">宿主机 CPU</th>'
+        f"</tr>"
+    )
+    rows: list[str] = []
+    for sec, label in _EMAIL_SYSTEM_WINDOWS:
+        row = windows.get(str(sec)) or {}
+        rows.append(
+            "<tr>"
+            f'<td style="{td}">{html.escape(label)}</td>'
+            f'<td style="{td}">{html.escape(_fmt_metric(row.get("container_cpu_pct_avg"), digits=1, suffix="%"))}</td>'
+            f'<td style="{td}">{html.escape(_fmt_metric(row.get("host_cpu_pct_avg"), digits=1, suffix="%"))}</td>'
+            "</tr>"
+        )
+
+    meta_bits: list[str] = []
+    if instant.get("cpu_cores") is not None:
+        meta_bits.append(f"CPU 核数 {instant.get('cpu_cores')}")
+    if instant.get("source"):
+        meta_bits.append(f"采样来源 {instant.get('source')}")
+    meta_bits.append("数值为对应窗口的滚动平均 CPU%（1 / 5 / 30 分钟）。")
+    note = html_paragraph(" · ".join(str(x) for x in meta_bits), muted=True)
+
+    table = (
+        f'<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">'
+        f'<table style="width:100%;border-collapse:collapse;min-width:480px;">'
+        f"<thead>{header}</thead>"
+        f'<tbody>{"".join(rows)}</tbody>'
+        f"</table></div>"
+    )
+    return table + note
+
+
+def build_alert_email(
+    *,
+    policy_name: str,
+    message: str,
+    traffic_overview: dict | None = None,
+    system_metrics: dict | None = None,
+) -> tuple[str, str]:
     """Return (plain_text, html_body) for alert policy notifications."""
     title = f"安全预警 · {policy_name}"
     subtitle = "系统检测到异常指标，请及时登录管理面板查看详情。"
+    traffic_plain = format_traffic_overview_plain(traffic_overview)
+    system_plain = format_system_metrics_plain(system_metrics)
     plain = build_plain_email(
         title=title,
         subtitle=subtitle,
         body=(
             f"{message}\n\n"
+            "站点流量与拦截汇总：\n"
+            f"{traffic_plain}\n\n"
+            "系统 CPU：\n"
+            f"{system_plain}\n\n"
             "建议操作：\n"
             "1. 登录流盾 WAF 管理面板，查看访问日志与拦截记录；\n"
             "2. 确认是否为正常业务波动或真实攻击；\n"
@@ -194,6 +519,8 @@ def build_alert_email(*, policy_name: str, message: str) -> tuple[str, str]:
     )
     body_html = (
         html_paragraph(message)
+        + html_section("站点流量与拦截汇总", format_traffic_overview_html(traffic_overview))
+        + html_section("系统 CPU", format_system_metrics_html(system_metrics))
         + html_section(
             "建议操作",
             "<ol style=\"margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;\">"

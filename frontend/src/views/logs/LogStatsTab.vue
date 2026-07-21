@@ -115,6 +115,9 @@ import { useRoute, type LocationQuery } from "vue-router";
 import { DownOutlined } from "@ant-design/icons-vue";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
+import { storeToRefs } from "pinia";
+import { echartsThemeName, withTransparentChartBg } from "@/composables/useEchartsTheme";
+import { useThemeStore } from "@/stores/theme";
 import { api } from "@/api";
 import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { formatDateTime } from "@/utils/datetime";
@@ -150,6 +153,7 @@ const emit = defineEmits<{ "drill-down": [LogDrillDownFilter] }>();
 const { formatSiteId } = useSiteOptions();
 const { paginationSize } = useResponsivePagination();
 const route = useRoute();
+const { isDark } = storeToRefs(useThemeStore());
 
 function queryValue(query: LocationQuery, key: string) {
   const value = query[key];
@@ -288,7 +292,7 @@ function renderTrendChart() {
     return;
   }
   disposeChart(trendChart);
-  trendChart = echarts.init(trendChartEl.value);
+  trendChart = echarts.init(trendChartEl.value, echartsThemeName(isDark.value));
   const times = overview.trend.map((item) => formatTrendLabel(item.time));
   const hasSplit = overview.trend.some((item) => item.blocked !== undefined);
   const series = hasSplit
@@ -326,7 +330,7 @@ function renderTrendChart() {
           data: overview.trend.map((item) => item.count ?? 0),
         },
       ];
-  trendChart.setOption({
+  trendChart.setOption(withTransparentChartBg({
     color: hasSplit ? ["#ef4444", "#22c55e"] : ["#38bdf8"],
     tooltip: {
       trigger: "axis",
@@ -355,7 +359,7 @@ function renderTrendChart() {
       splitLine: { show: false },
     },
     series,
-  });
+  }));
   trendChart.resize();
 }
 
@@ -463,6 +467,11 @@ watch(
   },
   { immediate: true },
 );
+
+watch(isDark, () => {
+  if (!props.active || !initialized.value) return;
+  void renderCharts();
+});
 
 watch(
   () => route.query.dimension,

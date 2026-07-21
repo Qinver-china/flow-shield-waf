@@ -129,7 +129,7 @@
     </a-row>
 
     <a-row :gutter="[12, 12]">
-      <a-col :xs="24" :xl="14">
+      <a-col :xs="24" :xl="12">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title panel-title-link" @click.stop="goLogs()">
@@ -139,12 +139,38 @@
           <div ref="trendEl" class="chart-box chart-box-lg" />
         </a-card>
       </a-col>
-      <a-col :xs="24" :xl="10">
+      <a-col :xs="24" :md="12" :xl="6">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><pie-chart-outlined /> 防护方式分布</span>
           </template>
           <div ref="modeEl" class="chart-box chart-box-lg" />
+        </a-card>
+      </a-col>
+      <a-col :xs="24" :md="12" :xl="6">
+        <a-card class="panel-card load-card" :bordered="false">
+          <template #title>
+            <span class="panel-title"><cloud-server-outlined /> CPU负载</span>
+          </template>
+          <template #extra>
+            <span class="load-window-tag">{{ systemMetrics.window_label || "1 分钟" }}</span>
+          </template>
+          <div ref="loadCpuEl" class="load-gauge-box" />
+          <div class="load-mini-grid">
+            <div
+              v-for="(item, idx) in loadMetricCards"
+              :key="item.key"
+              class="load-mini-item"
+            >
+              <div
+                class="load-mini-gauge"
+                :ref="(el) => setLoadMiniEl(idx, el)"
+              />
+              <div class="load-mini-caption">
+                <div class="load-mini-label">{{ item.label }}</div>
+              </div>
+            </div>
+          </div>
         </a-card>
       </a-col>
       <a-col :xs="24" :md="12" :xl="8">
@@ -253,6 +279,7 @@ import {
   BarChartOutlined,
   BellOutlined,
   CheckCircleOutlined,
+  CloudServerOutlined,
   ClusterOutlined,
   DashboardOutlined,
   DisconnectOutlined,
@@ -276,7 +303,7 @@ import DashboardLiveRefreshToggle from "@/components/DashboardLiveRefreshToggle.
 import { useLogNavigation } from "@/composables/useLogNavigation";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import { useDashboardLiveRefresh } from "@/composables/useDashboardLiveRefresh";
-import { echartsThemeName } from "@/composables/useEchartsTheme";
+import { echartsThemeName, withTransparentChartBg } from "@/composables/useEchartsTheme";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
 import { formatClockTime, formatDateTime, formatDateTimeShort } from "@/utils/datetime";
@@ -385,6 +412,52 @@ const trafficCardTitle = computed(() =>
   trafficSiteId.value == null ? "实时全站流量" :"实时站点流量",
 );
 
+const systemMetrics = reactive({
+  window_sec: 60,
+  window_label: "1 分钟",
+  container_cpu_pct: null as number | null,
+  host_cpu_pct: null as number | null,
+  windows: [] as Array<{
+    sec: number;
+    label: string;
+    container_cpu_pct: number | null;
+    host_cpu_pct: number | null;
+  }>,
+  cpu_cores: null as number | null,
+  source: null as string | null,
+  updated_at: null as number | null,
+  available: false,
+});
+
+function formatCpuPct(value: number | null | undefined, digits = 1): string {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return Number(value).toFixed(digits);
+}
+
+/** Mini rings: 5-minute container CPU + 1-minute host CPU. */
+const loadMetricCards = computed(() => {
+  const windows = systemMetrics.windows || [];
+  const bySec = (sec: number) => windows.find((w) => w.sec === sec);
+  const w5 = bySec(300);
+  const w1 = bySec(60);
+  return [
+    {
+      key: "c-300",
+      label: "5 分钟 · 容器",
+      value: formatCpuPct(w5?.container_cpu_pct ?? null, 1),
+      unit: "%",
+      pct: w5?.container_cpu_pct ?? null,
+    },
+    {
+      key: "h-60",
+      label: "1 分钟 · 宿主机",
+      value: formatCpuPct(w1?.host_cpu_pct ?? null, 1),
+      unit: "%",
+      pct: w1?.host_cpu_pct ?? null,
+    },
+  ];
+});
+
 /** 异常检测仅展示有基线学习能力的窗口（排除 10s / 30s） */
 const intelDisplayWindows = computed(() =>
   (intel.windows || []).filter((w: { window_sec: number }) => w.window_sec !== 10 && w.window_sec !== 30),
@@ -393,6 +466,15 @@ const intelDisplayWindows = computed(() =>
 const feedLoading = ref(false);
 const trendEl = ref<HTMLElement>();
 const modeEl = ref<HTMLElement>();
+const loadCpuEl = ref<HTMLElement>();
+/** Non-reactive: function refs must not write reactive state (causes render loops). */
+const loadMiniEls: (HTMLElement | null)[] = [];
+
+function setLoadMiniEl(idx: number, el: unknown) {
+  const node = el instanceof HTMLElement ? el : null;
+  if (loadMiniEls[idx] === node) return;
+  loadMiniEls[idx] = node;
+}
 const sourceEl = ref<HTMLElement>();
 const countryEl = ref<HTMLElement>();
 const logTypeEl = ref<HTMLElement>();
@@ -607,7 +689,7 @@ function onFeedClick(item: { type: string; title?: string }) {
   }
 }
 
-type ChartKey = "trend" | "mode" | "source" | "country" | "logType";
+type ChartKey = "trend" | "mode" | "loadCpu" | "loadMini0" | "loadMini1" | "source" | "country" | "logType";
 
 const chartStore: Partial<Record<ChartKey, ECharts>> = {};
 
@@ -626,13 +708,13 @@ function upsertChart(
 ) {
   if (!el) return;
   const motion = chartMotion(silent);
-  const fullOption: echarts.EChartsOption = {
+  const fullOption: echarts.EChartsOption = withTransparentChartBg({
     ...option,
     ...motion,
     series: Array.isArray(option.series)
       ? option.series.map((s) => ({ ...s, ...motion }))
       : option.series,
-  };
+  });
 
   let chart = chartStore[key];
   if (!chart || chart.isDisposed()) {
@@ -644,7 +726,10 @@ function upsertChart(
     return;
   }
 
-  chart.setOption(fullOption, { notMerge: false, lazyUpdate: true });
+  chart.setOption(fullOption, {
+    notMerge: key === "loadCpu" || key.startsWith("loadMini"),
+    lazyUpdate: true,
+  });
 }
 
 function destroyCharts() {
@@ -653,6 +738,180 @@ function destroyCharts() {
     delete chartStore[key];
   });
   charts.splice(0, charts.length);
+}
+
+function loadCpuRingColor(pct: number): string {
+  if (pct >= 85) return "#ef4444";
+  if (pct >= 60) return "#f59e0b";
+  return "#22c55e";
+}
+
+function cpuRingTrackColor(): string {
+  return isDark.value ? "rgba(148,163,184,0.16)" : "rgba(148,163,184,0.2)";
+}
+
+/** Smooth progress ring: solid track underneath + rounded progress arc on top. */
+function buildCpuRingOption(opts: {
+  pct: number | null;
+  radius: [string, string];
+  center?: [string, string];
+  showCenterLabel?: boolean;
+  centerTitle?: string;
+  valueFontSize?: number;
+  unitFontSize?: number;
+  titleFontSize?: number;
+}): echarts.EChartsOption {
+  const hasValue = opts.pct != null && !Number.isNaN(Number(opts.pct));
+  const pct = hasValue ? Math.max(0, Number(opts.pct)) : 0;
+  const ring = Math.min(100, pct);
+  const remain = Math.max(0, 100 - ring);
+  const color = hasValue ? loadCpuRingColor(pct) : "#94a3b8";
+  const track = cpuRingTrackColor();
+  const center = opts.center || (["50%", "50%"] as [string, string]);
+  const radius = opts.radius;
+
+  const series: echarts.SeriesOption[] = [
+    {
+      type: "pie",
+      radius,
+      center,
+      silent: true,
+      z: 1,
+      label: { show: false },
+      labelLine: { show: false },
+      animation: false,
+      data: [{ value: 100, itemStyle: { color: track } }],
+    },
+    {
+      type: "pie",
+      radius,
+      center,
+      silent: true,
+      z: 2,
+      startAngle: 90,
+      label: { show: false },
+      labelLine: { show: false },
+      data: [
+        {
+          value: hasValue && ring > 0 ? ring : 0,
+          itemStyle: {
+            color,
+            borderRadius: 100,
+          },
+        },
+        {
+          value: hasValue && ring > 0 ? Math.max(remain, 0.001) : 100,
+          itemStyle: { color: "transparent" },
+        },
+      ],
+    },
+  ];
+
+  const graphic: object[] = [];
+  if (opts.showCenterLabel) {
+    const valueSize = opts.valueFontSize ?? 28;
+    const unitSize = opts.unitFontSize ?? Math.max(10, Math.round(valueSize * 0.5));
+    const titleSize = opts.titleFontSize ?? 12;
+    const valueFill = isDark.value ? "#f8fafc" : "#0f172a";
+    const mutedFill = isDark.value ? "#94a3b8" : "#64748b";
+    const title = (opts.centerTitle || "").trim();
+    const hasTitle = Boolean(title) || !hasValue;
+
+    graphic.push({
+      type: "group",
+      left: "center",
+      top: hasTitle ? "38%" : "middle",
+      children: [
+        {
+          type: "text",
+          style: {
+            text: hasValue ? pct.toFixed(1) : "—",
+            fill: valueFill,
+            fontSize: valueSize,
+            fontWeight: 700,
+            textAlign: "right",
+            textVerticalAlign: "middle",
+          },
+          x: -1,
+          y: 0,
+        },
+        {
+          type: "text",
+          style: {
+            text: hasValue ? "%" : "",
+            fill: valueFill,
+            fontSize: unitSize,
+            fontWeight: 600,
+            textAlign: "left",
+            textVerticalAlign: "middle",
+          },
+          x: 1,
+          y: hasTitle ? Math.max(1, Math.round(valueSize * 0.08)) : 0,
+        },
+      ],
+    });
+
+    if (hasTitle) {
+      graphic.push({
+        type: "text",
+        left: "center",
+        top: "58%",
+        style: {
+          text: hasValue ? title : "暂无数据",
+          fill: mutedFill,
+          fontSize: titleSize,
+          align: "center",
+          verticalAlign: "middle",
+          lineHeight: titleSize + 4,
+        },
+      });
+    }
+  }
+
+  return {
+    tooltip: { show: false },
+    series,
+    graphic,
+  };
+}
+
+function updateLoadChart(silent = false) {
+  upsertChart(
+    "loadCpu",
+    loadCpuEl.value,
+    buildCpuRingOption({
+      pct: systemMetrics.container_cpu_pct,
+      radius: ["64%", "82%"],
+      center: ["50%", "50%"],
+      showCenterLabel: true,
+      centerTitle: "容器 CPU",
+      valueFontSize: 28,
+      unitFontSize: 14,
+      titleFontSize: 12,
+    }),
+    undefined,
+    silent,
+  );
+
+  const miniKeys: ChartKey[] = ["loadMini0", "loadMini1"];
+  loadMetricCards.value.forEach((item, idx) => {
+    const key = miniKeys[idx];
+    if (!key) return;
+    upsertChart(
+      key,
+      loadMiniEls[idx] || undefined,
+      buildCpuRingOption({
+        pct: item.pct,
+        radius: ["58%", "74%"],
+        center: ["50%", "50%"],
+        showCenterLabel: true,
+        valueFontSize: 13,
+        unitFontSize: 10,
+      }),
+      undefined,
+      silent,
+    );
+  });
 }
 
 function updateCharts(silent = false) {
@@ -705,7 +964,7 @@ function updateCharts(silent = false) {
         type: "pie",
         radius: ["42%", "68%"],
         padAngle: 3,
-        itemStyle: { borderRadius: 6, borderWidth: 2 },
+        itemStyle: { borderRadius: 6, borderWidth: 0 },
         label: { formatter: "{b}\n{d}%" },
         emphasis: {
           scale: true,
@@ -724,6 +983,8 @@ function updateCharts(silent = false) {
     },
     silent,
   );
+
+  updateLoadChart(silent);
 
   upsertChart(
     "source",
@@ -811,6 +1072,14 @@ async function loadIntel() {
   Object.assign(intel, resp.data);
 }
 
+async function loadSystemMetrics(silent = false) {
+  const resp = await api.get("/api/v1/dashboard/system-metrics");
+  Object.assign(systemMetrics, resp.data || {});
+  await nextTick();
+  await nextTick();
+  updateLoadChart(silent);
+}
+
 function onTrafficSiteChange() {
   void refreshAll();
 }
@@ -834,6 +1103,7 @@ async function refreshAll(silent = false) {
     loadFeed(silent),
     loadTraffic(),
     loadIntel(),
+    loadSystemMetrics(silent),
   ]);
   await syncDashboardWindow();
 }
@@ -1157,6 +1427,59 @@ onUnmounted(() => {
   height: 320px;
 }
 
+.load-card :deep(.ant-card-body) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 320px;
+}
+
+.load-window-tag {
+  font-size: 12px;
+  color: var(--fs-text-secondary);
+}
+
+.load-gauge-box {
+  height: 168px;
+  flex: 0 0 auto;
+}
+
+.load-mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 6px;
+}
+
+.load-mini-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.load-mini-gauge {
+  width: 100%;
+  height: 112px;
+}
+
+.load-mini-caption {
+  text-align: center;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.load-mini-label {
+  margin-top: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--fs-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
 .feed-card :deep(.ant-card-body) {
   padding-top: 8px;
   padding-bottom: 12px;
@@ -1328,6 +1651,18 @@ onUnmounted(() => {
   .chart-box,
   .chart-box-lg {
     height: 240px;
+  }
+
+  .load-card :deep(.ant-card-body) {
+    min-height: 0;
+  }
+
+  .load-gauge-box {
+    height: 140px;
+  }
+
+  .load-mini-gauge {
+    height: 96px;
   }
 }
 </style>

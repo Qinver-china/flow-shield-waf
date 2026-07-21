@@ -1185,6 +1185,48 @@
           "label": "低于基线百分比"
         }
       ]
+    },
+    {
+      "key": "system.cpu",
+      "label": "系统 CPU",
+      "category": "时间与流量",
+      "value_type": "system",
+      "requires_arg": false,
+      "operators": [
+        "compare"
+      ],
+      "compare_modes": [
+        {
+          "value": "container_cpu_gt",
+          "label": "容器CPU%高于"
+        },
+        {
+          "value": "container_cpu_lt",
+          "label": "容器CPU%低于"
+        },
+        {
+          "value": "host_cpu_gt",
+          "label": "宿主机CPU%高于"
+        },
+        {
+          "value": "host_cpu_lt",
+          "label": "宿主机CPU%低于"
+        }
+      ],
+      "options": [
+        {
+          "value": "60",
+          "label": "1 分钟"
+        },
+        {
+          "value": "300",
+          "label": "5 分钟"
+        },
+        {
+          "value": "1800",
+          "label": "30 分钟"
+        }
+      ]
     }
   ],
   "operators": {
@@ -1214,7 +1256,7 @@
     "geo_in": "属于地区",
     "key_exists": "键存在",
     "key_absent": "键不存在",
-    "compare": "流量比较"
+    "compare": "比较"
   },
   "operators_by_type": {
     "string": [
@@ -1259,6 +1301,9 @@
       "eq"
     ],
     "traffic": [
+      "compare"
+    ],
+    "system": [
       "compare"
     ]
   }

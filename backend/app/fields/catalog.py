@@ -16,7 +16,9 @@ IP = "ip"
 ENUM = "enum"
 BOOL = "bool"
 TRAFFIC = "traffic"
+SYSTEM = "system"
 
+from app.constants.system_metrics import SYSTEM_METRIC_WINDOWS_SEC, system_metric_window_options
 from app.constants.traffic_windows import (
     TRAFFIC_BASELINE_MIN_WINDOW_SEC,
     TRAFFIC_WINDOWS_SEC,
@@ -71,6 +73,7 @@ FIELD_OPTIONS: dict[str, list[dict[str, str]]] = {
     ],
     "traffic.global": traffic_window_options(as_string=True),
     "traffic.site": traffic_window_options(as_string=True),
+    "system.cpu": system_metric_window_options(as_string=True),
 }
 
 TRAFFIC_COMPARE_MODES: list[dict[str, str]] = [
@@ -82,11 +85,25 @@ TRAFFIC_COMPARE_MODES: list[dict[str, str]] = [
     {"value": "baseline_lt", "label": "低于基线百分比"},
 ]
 
+SYSTEM_CPU_COMPARE_MODES: list[dict[str, str]] = [
+    {"value": "container_cpu_gt", "label": "容器CPU%高于"},
+    {"value": "container_cpu_lt", "label": "容器CPU%低于"},
+    {"value": "host_cpu_gt", "label": "宿主机CPU%高于"},
+    {"value": "host_cpu_lt", "label": "宿主机CPU%低于"},
+]
+
 _TRAFFIC_FIELD_DEF = {
     "value_type": TRAFFIC,
     "requires_arg": False,
     "operators": ["compare"],
     "compare_modes": TRAFFIC_COMPARE_MODES,
+}
+
+_SYSTEM_CPU_FIELD_DEF = {
+    "value_type": SYSTEM,
+    "requires_arg": False,
+    "operators": ["compare"],
+    "compare_modes": SYSTEM_CPU_COMPARE_MODES,
 }
 
 # operators grouped by value type
@@ -101,6 +118,7 @@ OPERATORS_BY_TYPE: dict[str, list[str]] = {
     ENUM: ["eq", "neq", "in_list"],
     BOOL: ["eq"],
     TRAFFIC: ["compare"],
+    SYSTEM: ["compare"],
 }
 
 # human labels for operators (for the frontend)
@@ -131,7 +149,7 @@ OPERATORS: dict[str, str] = {
     "geo_in": "属于地区",
     "key_exists": "键存在",
     "key_absent": "键不存在",
-    "compare": "流量比较",
+    "compare": "比较",
 }
 
 
@@ -242,13 +260,19 @@ FIELDS: list[dict] = [
         "category": "时间与流量",
         **_TRAFFIC_FIELD_DEF,
     },
+    {
+        "key": "system.cpu",
+        "label": "系统CPU负载",
+        "category": "时间与流量",
+        **_SYSTEM_CPU_FIELD_DEF,
+    },
 ]
 
 
 def options_for_field(field: dict) -> list[dict[str, str]] | None:
     if field["value_type"] == BOOL:
         return BOOL_OPTIONS
-    if field["value_type"] in (ENUM, TRAFFIC):
+    if field["value_type"] in (ENUM, TRAFFIC, SYSTEM):
         return FIELD_OPTIONS.get(field["key"])
     # Optional hint options for string fields (e.g. geo.isp) — UI may still allow free text
     return FIELD_OPTIONS.get(field["key"])
@@ -296,7 +320,7 @@ def catalog_compact_for_llm() -> dict:
                 "单条叶子条件可省略外层分组，系统会自动包裹",
                 "requires_arg=true 的字段必须提供 arg（如 http.header 的 Header 名）",
                 "field 必须严格使用 fields 列表中的 key，禁止自造字段名",
-                "流量只能用 traffic.global / traffic.site；CC/频率限制用 create_rate_limit",
+                "流量只能用 traffic.global / traffic.site；系统 CPU 用 system.cpu；CC/频率限制用 create_rate_limit",
             ],
         },
         "operator_selection": {
@@ -332,6 +356,10 @@ def catalog_compact_for_llm() -> dict:
                 "traffic": {
                     "use": ["compare"],
                     "fields": ["traffic.global", "traffic.site"],
+                },
+                "system": {
+                    "use": ["compare"],
+                    "fields": ["system.cpu"],
                 },
             },
             "aliases_accepted_but_prefer_canonical": {
@@ -382,6 +410,45 @@ def catalog_compact_for_llm() -> dict:
                         "field": "traffic.global",
                         "op": "compare",
                         "value": {"window_sec": 300, "compare": "baseline_gt", "percent": 200},
+                    },
+                },
+            ],
+        },
+        "system_value": {
+            "field": "system.cpu",
+            "op": "compare",
+            "value": {
+                "window_sec": list(SYSTEM_METRIC_WINDOWS_SEC),
+                "compare": [m["value"] for m in SYSTEM_CPU_COMPARE_MODES],
+                "threshold": "非负数（CPU% 或 Load）",
+            },
+            "notes": [
+                "window_sec 仅支持 60/300/1800（1/5/30 分钟窗口均值）",
+                "container_cpu_* 使用容器 cgroup CPU%；host_cpu_* 使用宿主机 /proc/stat",
+            ],
+            "examples": [
+                {
+                    "description": "5 分钟平均容器 CPU 超过 80%",
+                    "leaf": {
+                        "field": "system.cpu",
+                        "op": "compare",
+                        "value": {
+                            "window_sec": 300,
+                            "compare": "container_cpu_gt",
+                            "threshold": 80,
+                        },
+                    },
+                },
+                {
+                    "description": "1 分钟平均宿主机 CPU 超过 85%",
+                    "leaf": {
+                        "field": "system.cpu",
+                        "op": "compare",
+                        "value": {
+                            "window_sec": 60,
+                            "compare": "host_cpu_gt",
+                            "threshold": 85,
+                        },
                     },
                 },
             ],

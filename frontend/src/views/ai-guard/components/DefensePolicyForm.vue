@@ -46,6 +46,16 @@
               >{{ w.label }}</a-select-option>
             </a-select>
             <a-select
+              v-else-if="p.kind === 'system_window'"
+              v-model:value="model.trigger_params[p.key]"
+            >
+              <a-select-option
+                v-for="w in systemWindows"
+                :key="w.value"
+                :value="w.value"
+              >{{ w.label }}</a-select-option>
+            </a-select>
+            <a-select
               v-else-if="p.kind === 'block_window'"
               v-model:value="model.trigger_params[p.key]"
             >
@@ -125,6 +135,7 @@ const props = defineProps<{
   channels: any[];
   trafficWindows: { value: number; label: string }[];
   blockWindows: { value: number; label: string }[];
+  systemWindows: { value: number; label: string }[];
 }>();
 
 const notifyOptions = [
@@ -142,6 +153,8 @@ function defaultTriggerParams(type: string): Record<string, unknown> {
   if (type.startsWith("traffic.qps")) return { window_sec: 60, threshold: 100 };
   if (type === "security.block_count") return { window_min: 5, threshold: 100 };
   if (type === "security.block_rate") return { window_min: 5, percent: 30 };
+  if (type === "system.container_cpu_gt") return { window_sec: 300, threshold: 80 };
+  if (type === "system.host_cpu_gt") return { window_sec: 300, threshold: 85 };
   return {};
 }
 

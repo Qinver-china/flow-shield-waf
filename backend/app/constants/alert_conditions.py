@@ -1,8 +1,10 @@
 """Catalog of alert policy condition types for admin notifications."""
 
+from app.constants.system_metrics import system_metric_window_options
 from app.constants.traffic_windows import traffic_window_options
 
 TRAFFIC_WINDOWS = traffic_window_options()
+SYSTEM_WINDOWS = system_metric_window_options()
 
 BLOCK_WINDOWS_MIN = [
     {"value": 5, "label": "5 分钟"},
@@ -17,6 +19,13 @@ _SITE_PARAM = {
     "kind": "site_id",
     "required": False,
     "help": "留空表示全站；选择站点则使用该站点的基线与请求量统计",
+}
+
+_SYSTEM_WINDOW_PARAM = {
+    "key": "window_sec",
+    "label": "统计窗口",
+    "kind": "system_window",
+    "required": True,
 }
 
 ALERT_CONDITION_TYPES: list[dict] = [
@@ -113,6 +122,26 @@ ALERT_CONDITION_TYPES: list[dict] = [
             {"key": "window_min", "label": "统计窗口", "kind": "block_window", "required": True},
             {"key": "percent", "label": "拦截率 (%)", "kind": "number", "min": 1, "max": 100, "required": True},
             {"key": "site_id", "label": "生效站点", "kind": "site_id", "required": False},
+        ],
+    },
+    {
+        "type": "system.container_cpu_gt",
+        "label": "容器 CPU 占用过高",
+        "category": "系统 CPU",
+        "description": "按窗口平均容器 CPU 占用率（cgroup 换算）判断，适合节点过载时告警。",
+        "params": [
+            _SYSTEM_WINDOW_PARAM,
+            {"key": "threshold", "label": "CPU 占用 (%)", "kind": "number", "min": 0, "max": 1000, "required": True},
+        ],
+    },
+    {
+        "type": "system.host_cpu_gt",
+        "label": "宿主机 CPU 占用过高",
+        "category": "系统 CPU",
+        "description": "按窗口平均宿主机 CPU 占用率判断（/proc/stat）。",
+        "params": [
+            _SYSTEM_WINDOW_PARAM,
+            {"key": "threshold", "label": "CPU 占用 (%)", "kind": "number", "min": 0, "max": 100, "required": True},
         ],
     },
 ]

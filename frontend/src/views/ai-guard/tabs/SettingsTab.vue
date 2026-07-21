@@ -24,10 +24,6 @@
           />
           <a-button :loading="loadingModels" @click="loadModels">拉取模型</a-button>
         </a-space>
-        <div class="hint">
-          若「测试连接」提示 502 / 上游不可用，通常是 mxou 账号余额、分组或上游故障，不是 WAF 问题。
-          可先点「拉取模型」确认 Key 有效，再从中选择模型。
-        </div>
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="12">

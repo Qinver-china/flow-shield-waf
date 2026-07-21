@@ -12,6 +12,10 @@ from app.services.ai_guard.incident_action_tokens import (
 from app.services.notifications.email_templates import (
     build_email_html,
     build_plain_email,
+    format_system_metrics_html,
+    format_system_metrics_plain,
+    format_traffic_overview_html,
+    format_traffic_overview_plain,
     html_button,
     html_info_row,
     html_paragraph,
@@ -152,16 +156,24 @@ def build_trigger_email(
     policy_name: str,
     window_min: int,
     trigger_snapshot: dict[str, Any],
+    traffic_overview: dict[str, Any] | None = None,
+    system_metrics: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Return (plain_text, html_body) when an AI guard policy triggers."""
     snapshot_json = json.dumps(trigger_snapshot, ensure_ascii=False, indent=2)
     title = "AI 防护已触发"
     subtitle = f"策略「{policy_name}」· 开始分析近 {window_min} 分钟日志"
+    traffic_plain = format_traffic_overview_plain(traffic_overview)
+    system_plain = format_system_metrics_plain(system_metrics)
     plain = build_plain_email(
         title=title,
         subtitle=subtitle,
         body=(
             f"触发条件已命中，系统正在自动取样并分析近 {window_min} 分钟的防护日志。\n\n"
+            "站点流量与拦截汇总：\n"
+            f"{traffic_plain}\n\n"
+            "系统 CPU：\n"
+            f"{system_plain}\n\n"
             "触发快照：\n"
             f"{snapshot_json}\n\n"
             "分析完成后将另行发送「AI 防护分析结果」邮件。"
@@ -169,6 +181,8 @@ def build_trigger_email(
     )
     body_html = (
         html_paragraph(f"触发条件已命中，系统正在自动取样并分析近 {window_min} 分钟的防护日志。")
+        + html_section("站点流量与拦截汇总", format_traffic_overview_html(traffic_overview))
+        + html_section("系统 CPU", format_system_metrics_html(system_metrics))
         + html_section("触发快照", html_pre_block(snapshot_json))
         + html_paragraph("分析完成后将另行发送「AI 防护分析结果」邮件。", muted=True)
     )

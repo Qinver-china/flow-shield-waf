@@ -130,6 +130,8 @@ def test_enum_fields_expose_options():
     assert len(fields["traffic.global"]["options"]) == 6
     assert fields["traffic.site"]["compare_modes"]
     assert len(fields["traffic.site"]["options"]) == 6
+    assert fields["system.cpu"]["compare_modes"]
+    assert len(fields["system.cpu"]["options"]) == 3
 
 
 def test_traffic_global_condition_ok():

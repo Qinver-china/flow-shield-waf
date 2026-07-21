@@ -2,7 +2,7 @@
   <div v-if="readonly" class="cond-leaf-readonly">
     {{ formatLeafRow(row, fieldMap, operators, ipGroupLabel) }}
   </div>
-  <div v-else-if="isTrafficField(row.field)" class="cond-row cond-traffic-row">
+  <div v-else-if="isWindowCompareField(row.field)" class="cond-row cond-traffic-row">
     <condition-field-picker
       v-model:value="row.field"
       :catalog="catalog"
@@ -53,9 +53,9 @@
       v-model:value="row.trafficThreshold"
       class="value-input"
       :min="0"
-      :precision="isTrafficQpsCompare(row.trafficCompare) ? 2 : 0"
-      :addon-after="isTrafficQpsCompare(row.trafficCompare) ? 'QPS' : undefined"
-      :placeholder="isTrafficQpsCompare(row.trafficCompare) ? 'QPS' : '请求量'"
+      :precision="thresholdPrecision"
+      :addon-after="thresholdAddon"
+      :placeholder="thresholdPlaceholder"
     />
 
     <a-button danger size="small" type="text" @click="$emit('remove')">删除</a-button>
@@ -173,9 +173,10 @@ import {
   isListOp,
   isNumberOp,
   isStringMultiOp,
+  isSystemCpuPctCompare,
   isTrafficBaselineCompare,
-  isTrafficField,
   isTrafficQpsCompare,
+  isWindowCompareField,
   onFieldChange,
   onOpChange,
   opsFor,
@@ -193,6 +194,24 @@ const props = defineProps<{
 }>();
 
 defineEmits<{ remove: [] }>();
+
+const thresholdPrecision = computed(() => {
+  if (isTrafficQpsCompare(props.row.trafficCompare)) return 2;
+  if (isSystemCpuPctCompare(props.row.trafficCompare)) return 1;
+  return 0;
+});
+
+const thresholdAddon = computed(() => {
+  if (isTrafficQpsCompare(props.row.trafficCompare)) return "QPS";
+  if (isSystemCpuPctCompare(props.row.trafficCompare)) return "%";
+  return undefined;
+});
+
+const thresholdPlaceholder = computed(() => {
+  if (isTrafficQpsCompare(props.row.trafficCompare)) return "QPS";
+  if (isSystemCpuPctCompare(props.row.trafficCompare)) return "CPU%";
+  return "请求量";
+});
 
 const ipGroupSelectOptions = computed(() =>
   (props.ipGroupOptions || []).map((item) => ({

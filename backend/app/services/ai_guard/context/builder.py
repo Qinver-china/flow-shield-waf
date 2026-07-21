@@ -76,6 +76,7 @@ def knowledge_for_defense(field_catalog: dict | None = None) -> dict:
         "condition_format": catalog.get("condition_format"),
         "operator_selection": catalog.get("operator_selection"),
         "traffic_value": catalog.get("traffic_value"),
+        "system_value": catalog.get("system_value"),
         "fields": catalog.get("fields"),
         "operators_by_type": catalog.get("operators_by_type"),
     }

@@ -1,7 +1,7 @@
 <template>
   <page-shell
     title="Bot 库"
-    description="维护 Bot 识别库与分类，在防护规则中通过 bot.name / bot.category / bot.is_known 引用；日志自动写入 bot 维度"
+    description="BOT机器抓取识别库与分类"
   >
     <template #actions>
       <a-button

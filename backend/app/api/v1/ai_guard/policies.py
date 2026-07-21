@@ -11,6 +11,7 @@ from app.schemas.ai_guard import AiGuardPolicyCreate, AiGuardPolicyOut, AiGuardP
 from app.schemas.common import ok
 from app.services.ai_guard.defense.triggers import (
     BLOCK_WINDOWS_MIN,
+    SYSTEM_WINDOWS,
     TRAFFIC_WINDOWS,
     TRIGGER_TYPES,
     validate_apply_mode,
@@ -26,6 +27,7 @@ async def trigger_types(_user: User = Depends(get_current_user)):
         "triggers": TRIGGER_TYPES,
         "traffic_windows": TRAFFIC_WINDOWS,
         "block_windows": BLOCK_WINDOWS_MIN,
+        "system_windows": SYSTEM_WINDOWS,
     })
 
 

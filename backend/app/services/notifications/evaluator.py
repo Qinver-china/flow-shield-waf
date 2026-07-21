@@ -84,6 +84,8 @@ class AlertPolicyEvaluator:
             return await self._block_count(params, label)
         if ctype == "security.block_rate":
             return await self._block_rate(params, label)
+        if ctype.startswith("system."):
+            return await self._system_metric(ctype, params, label)
         return None
 
     async def _traffic_baseline(
@@ -205,6 +207,31 @@ class AlertPolicyEvaluator:
             )
         return None
 
+    async def _system_metric(self, ctype: str, params: dict, label: str) -> str | None:
+        from app.services.system_metrics import read_system_metrics_snapshot, window_metric_value
+
+        window_sec = int(params.get("window_sec", 300))
+        threshold = float(params.get("threshold", 0))
+        metric_map = {
+            "system.container_cpu_gt": ("container_cpu_pct", "容器 CPU", "%"),
+            "system.host_cpu_gt": ("host_cpu_pct", "宿主机 CPU", "%"),
+        }
+        meta = metric_map.get(ctype)
+        if not meta:
+            return None
+        metric_key, metric_label, unit = meta
+        snapshot = await read_system_metrics_snapshot()
+        current = window_metric_value(snapshot, window_sec=window_sec, metric=metric_key)
+        if current is None:
+            return None
+        if current <= threshold:
+            return None
+        unit_text = unit or ""
+        return (
+            f"【预警】{label}：近 {window_sec}s 平均{metric_label} {current:.2f}{unit_text}，"
+            f"高于阈值 {threshold:g}{unit_text}"
+        )
+
     async def _window_requests(
         self,
         window_sec: int,
@@ -311,7 +338,49 @@ class AlertPolicyEvaluator:
             )
             return False
         subject = f"流盾WAF 预警：{policy.name}"
-        plain, html_body = build_alert_email(policy_name=policy.name, message=message)
+        traffic_overview = None
+        try:
+            from app.services.ai_guard.defense.traffic_context import build_defense_traffic_overview
+
+            params = policy.condition_params or {}
+            focus_site_id = params.get("site_id")
+            try:
+                focus_site_id = int(focus_site_id) if focus_site_id not in (None, "") else None
+            except (TypeError, ValueError):
+                focus_site_id = None
+            focus_window_sec = params.get("window_sec")
+            try:
+                focus_window_sec = int(focus_window_sec) if focus_window_sec not in (None, "") else None
+            except (TypeError, ValueError):
+                focus_window_sec = None
+            log_window_min = params.get("window_min")
+            try:
+                log_window_min = int(log_window_min) if log_window_min not in (None, "") else 30
+            except (TypeError, ValueError):
+                log_window_min = 30
+            traffic_overview = await build_defense_traffic_overview(
+                db,
+                focus_site_id=focus_site_id,
+                focus_window_sec=focus_window_sec,
+                log_window_min=max(log_window_min, 5),
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("alert email traffic overview failed policy=%s", policy.id)
+
+        system_metrics = None
+        try:
+            from app.services.system_metrics import read_system_metrics_snapshot
+
+            system_metrics = await read_system_metrics_snapshot()
+        except Exception:  # noqa: BLE001
+            log.exception("alert email system metrics failed policy=%s", policy.id)
+
+        plain, html_body = build_alert_email(
+            policy_name=policy.name,
+            message=message,
+            traffic_overview=traffic_overview,
+            system_metrics=system_metrics,
+        )
         any_ok = False
         for ch in channels:
             try:

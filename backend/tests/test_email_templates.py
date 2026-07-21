@@ -41,6 +41,94 @@ def test_build_alert_email_has_html_and_plain():
     assert PRODUCT_NAME in html
 
 
+def test_build_alert_email_includes_traffic_overview():
+    overview = {
+        "burst_active": False,
+        "global": {
+            "windows": [
+                {"window_sec": 60, "requests": 120, "qps": 2.0},
+                {"window_sec": 300, "requests": 900, "qps": 3.0},
+                {"window_sec": 1800, "requests": 4000, "qps": 2.2},
+                {"window_sec": 3600, "requests": 8000, "qps": 2.2},
+            ]
+        },
+        "sites": [
+            {
+                "site_id": 1,
+                "name": "官网",
+                "domains": ["www.example.com"],
+                "windows": [
+                    {"window_sec": 60, "requests": 80, "qps": 1.3},
+                    {"window_sec": 300, "requests": 500, "qps": 1.7},
+                    {"window_sec": 1800, "requests": 2000, "qps": 1.1},
+                    {"window_sec": 3600, "requests": 4000, "qps": 1.1},
+                ],
+            }
+        ],
+        "recent_log_stats": {
+            "window_min": 30,
+            "global": {"total": 1000, "blocked": 50, "passed": 950, "block_rate_pct": 5.0},
+            "by_site": [
+                {"site_id": 1, "total": 800, "blocked": 40, "passed": 760, "block_rate_pct": 5.0},
+            ],
+        },
+    }
+    plain, html = build_alert_email(
+        policy_name="流量突增",
+        message="命中阈值",
+        traffic_overview=overview,
+    )
+    assert "站点流量与拦截汇总" in plain
+    assert "官网（www.example.com）" in plain
+    assert "1分钟" in plain
+    assert "5分钟" in plain
+    assert "30分钟" in plain
+    assert "1小时" in plain
+    assert "拦截率" in plain
+    assert "站点流量与拦截汇总" in html
+    assert "www.example.com" in html
+    assert "<table" in html
+
+
+def test_build_alert_email_includes_system_metrics():
+    snapshot = {
+        "instant": {"cpu_cores": 8, "source": "cgroup_v2"},
+        "windows": {
+            "60": {
+                "container_cpu_pct_avg": 12.5,
+                "host_cpu_pct_avg": 30.1,
+                "loadavg_1_avg": 2.4,
+                "load_per_core_1_avg": 0.3,
+            },
+            "300": {
+                "container_cpu_pct_avg": 18.0,
+                "host_cpu_pct_avg": 40.0,
+                "loadavg_1_avg": 3.1,
+                "load_per_core_1_avg": 0.39,
+            },
+            "1800": {
+                "container_cpu_pct_avg": 22.0,
+                "host_cpu_pct_avg": 45.0,
+                "loadavg_1_avg": 3.5,
+                "load_per_core_1_avg": 0.44,
+            },
+        },
+    }
+    plain, html = build_alert_email(
+        policy_name="CPU过高",
+        message="命中阈值",
+        system_metrics=snapshot,
+    )
+    assert "系统 CPU" in plain
+    assert "容器 12.5%" in plain
+    assert "每核Load" not in plain
+    assert "系统 CPU" in html
+    assert "容器 CPU" in html
+    assert "12.5%" in html
+    assert "Load(1)" not in html
+    assert "cgroup_v2" in html
+
+
 def test_build_test_email_has_html_and_plain():
     plain, html = build_test_email()
     assert "通知通道测试" in plain
