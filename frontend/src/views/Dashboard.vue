@@ -1945,11 +1945,11 @@ onUnmounted(() => {
 .traffic-live-card__bar {
   margin-top: auto;
   padding-top: 10px;
-  margin-bottom: 0;
+  margin-bottom: -8px;
 }
 
 .traffic-live-card__bar :deep(.ant-progress-inner) {
-  height: 4px !important;
+  height: 6px !important;
   background: color-mix(in srgb, var(--fs-border) 70%, transparent) !important;
 }
 
