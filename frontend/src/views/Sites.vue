@@ -89,10 +89,10 @@
                 <a-select v-model:value="record.origin_protocol" :options="protocolOptions" :disabled="readonly" />
               </a-form-item>
             </a-col>
-            <a-col :span="24">
+            <a-col :span="14">
               <a-form-item
                 label="客户端 IP 获取方式"
-                extra="站点接入 CDN 或反向代理时，选择与上游一致的客户端 IP 来源头；影响规则匹配、限速、日志与 GeoIP。"
+                extra="使用了CDN或反代时，需选择与上游一致的IP来源头"
               >
                 <a-select
                   v-model:value="record.client_ip_source"
@@ -102,10 +102,10 @@
                 />
               </a-form-item>
             </a-col>
-            <a-col :span="24">
+            <a-col :span="10">
               <a-form-item
                 label="关闭内容缓冲"
-                extra="如果源站在本机，建议关闭内容缓冲（开启本开关）。"
+                extra="如果源站在本机，建议开启此开关"
               >
                 <a-switch v-model:checked="record.disable_content_buffering" :disabled="readonly" />
               </a-form-item>
