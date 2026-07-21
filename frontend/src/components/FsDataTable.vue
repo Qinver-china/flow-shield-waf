@@ -9,6 +9,7 @@
       :row-key="rowKey"
       :size="size"
       :scroll="scroll"
+      bordered
       @change="(...args) => emit('change', ...args)"
     >
       <template v-for="(_, name) in $slots" #[name]="slotData">

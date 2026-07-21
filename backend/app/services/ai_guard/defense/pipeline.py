@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -252,3 +252,48 @@ async def dismiss_incident(incident_id: int) -> IncidentRecord:
         raise ValueError("事件不存在")
     incident.status = "dismissed"
     return await _incidents.upsert(incident)
+
+
+STALE_SUGGESTED_HOURS = 24
+
+
+async def expire_stale_suggested_incidents(
+    *,
+    max_age_hours: int = STALE_SUGGESTED_HOURS,
+    limit: int = 200,
+) -> int:
+    """Auto-dismiss suggested incidents left without manual action for too long."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now - timedelta(hours=max_age_hours)
+    stale = await _incidents.list_stale(
+        statuses=["suggested"],
+        before=cutoff,
+        limit=limit,
+    )
+    if not stale:
+        return 0
+
+    dismissed = 0
+    now_iso = now.isoformat(timespec="seconds") + "Z"
+    for incident in stale:
+        if incident.status != "suggested":
+            continue
+        notes = list(incident.notification_log or [])
+        notes.append({
+            "event": "auto_dismissed",
+            "reason": f"stale_over_{max_age_hours}h",
+            "at": now_iso,
+        })
+        incident.notification_log = notes
+        incident.status = "dismissed"
+        await _incidents.upsert(incident)
+        dismissed += 1
+
+    if dismissed:
+        log.info(
+            "auto-dismissed %s stale suggested incident(s) older than %sh",
+            dismissed,
+            max_age_hours,
+        )
+    return dismissed
+

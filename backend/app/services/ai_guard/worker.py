@@ -7,20 +7,33 @@ import time
 
 from app.core.db import SessionLocal
 from app.services.ai_guard.config import is_defense_enabled, load_runtime_config
-from app.services.ai_guard.defense.pipeline import run_defense_for_policy
+from app.services.ai_guard.defense.pipeline import (
+    expire_stale_suggested_incidents,
+    run_defense_for_policy,
+)
 from app.services.ai_guard.defense.trigger_eval import evaluate_policy, list_enabled_policies
 
 log = logging.getLogger("waf.ai_guard.worker")
 
 LOOP_INTERVAL_SEC = 5
+STALE_SWEEP_INTERVAL_SEC = 300
 _last_global_run_at = 0.0
+_last_stale_sweep_at = 0.0
 
 
 async def run_ai_guard_loop(stop_event=None) -> None:
-    global _last_global_run_at
+    global _last_global_run_at, _last_stale_sweep_at
     log.info("ai guard worker started (interval=%ss)", LOOP_INTERVAL_SEC)
     while stop_event is None or not stop_event.is_set():
         try:
+            now_mono = time.monotonic()
+            if now_mono - _last_stale_sweep_at >= STALE_SWEEP_INTERVAL_SEC:
+                try:
+                    await expire_stale_suggested_incidents()
+                except Exception:  # noqa: BLE001
+                    log.exception("ai guard stale suggested sweep failed")
+                _last_stale_sweep_at = time.monotonic()
+
             async with SessionLocal() as db:
                 if not await is_defense_enabled(db):
                     pass

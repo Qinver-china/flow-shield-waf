@@ -8,6 +8,7 @@
         :pagination="resolvedPagination"
         row-key="id"
         size="small"
+        bordered
         :scroll="{ x: 1100 }"
         @change="onTableChange"
       >

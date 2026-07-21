@@ -34,6 +34,7 @@
           :pagination="false"
           size="middle"
           row-key="key"
+          bordered
         />
       </fs-detail-section>
 
@@ -44,6 +45,7 @@
           :pagination="false"
           size="middle"
           row-key="key"
+          bordered
         />
       </fs-detail-section>
 

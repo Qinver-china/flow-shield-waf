@@ -40,6 +40,7 @@
       :row-selection="rowSelection"
       row-key="id"
       size="middle"
+      bordered
       :scroll="{ x: tableScrollX }"
       @change="onTableChange"
     >

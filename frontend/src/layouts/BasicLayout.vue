@@ -195,6 +195,7 @@ const menuGroups = [
       { path: "/exceptions", label: "防护例外", icon: DisconnectOutlined },
       { path: "/ratelimit", label: "速率防护", icon: DashboardOutlined },
       { path: "/rules", label: "自定义规则", icon: SafetyOutlined },
+      { path: "/ai-guard", label: "AI 防护", icon: RobotOutlined },
     ],
   },
   {
@@ -205,7 +206,6 @@ const menuGroups = [
     { path: "/ip-groups", label: "IP 组管理", icon: GlobalOutlined },
       { path: "/logs", label: "防护日志", icon: FileSearchOutlined },
       { path: "/alerts", label: "预警通知", icon: BellOutlined },
-      { path: "/ai-guard", label: "AI 防护", icon: RobotOutlined },
     ],
   },
   {

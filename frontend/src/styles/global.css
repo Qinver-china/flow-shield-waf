@@ -124,6 +124,48 @@ code,
   color: var(--fs-text-secondary) !important;
 }
 
+.ant-table-wrapper .ant-table-tbody > tr > td,
+.ant-table-wrapper .ant-table.ant-table-middle .ant-table-tbody > tr > td,
+.ant-table-wrapper .ant-table.ant-table-small .ant-table-tbody > tr > td {
+  padding: 12px 14px;
+}
+
+/* Bordered tables: keep outer frame + row lines, hide column dividers */
+.ant-table-wrapper .ant-table {
+  border: 1px solid var(--fs-border) !important;
+  border-radius: var(--fs-radius-md);
+  overflow: hidden;
+}
+
+.ant-table-wrapper .ant-table.ant-table-bordered > .ant-table-container {
+  border-inline-start: none !important;
+}
+
+.ant-table-wrapper .ant-table.ant-table-bordered > .ant-table-container > .ant-table-content > table,
+.ant-table-wrapper .ant-table.ant-table-bordered > .ant-table-container > .ant-table-header > table {
+  border-top: none !important;
+}
+
+.ant-table-wrapper .ant-table.ant-table-bordered .ant-table-cell {
+  border-inline-end: none !important;
+}
+
+/* Drop AntD's thead-only corner radius; outer container owns the rounded frame */
+.ant-table-wrapper .ant-table.ant-table-bordered .ant-table-thead > tr:first-child > *:first-child,
+.ant-table-wrapper .ant-table.ant-table-bordered .ant-table-thead > tr:first-child > *:last-child {
+  border-start-start-radius: 0 !important;
+  border-start-end-radius: 0 !important;
+}
+
+.ant-table-wrapper .ant-table.ant-table-bordered .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+
+.ant-table-wrapper .ant-table.ant-table-bordered .ant-table-container::before,
+.ant-table-wrapper .ant-table.ant-table-bordered .ant-table-container::after {
+  display: none !important;
+}
+
 .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td {
   background-color: color-mix(in srgb, var(--fs-color-primary) 6%, var(--fs-bg-surface)) !important;
 }

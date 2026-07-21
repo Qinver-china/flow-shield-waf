@@ -74,6 +74,7 @@
         :loading="logsLoading"
         row-key="id"
         size="small"
+        bordered
         :pagination="logsPagination"
       >
         <template #bodyCell="{ column, record }">

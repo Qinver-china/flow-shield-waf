@@ -242,8 +242,8 @@ function domainHref(domain: string) {
 const metaItems = computed(() => {
   const listenTags: { text: string; color?: string }[] = [];
   if (props.site.listen_http) listenTags.push({ text: "HTTP" });
-  if (props.site.listen_https) listenTags.push({ text: "HTTPS", color: "blue" });
-  if (props.site.force_https) listenTags.push({ text: "强制 HTTPS", color: "purple" });
+  if (props.site.listen_https && !props.site.force_https) listenTags.push({ text: "HTTPS", color: "blue" });
+  if (props.site.force_https) listenTags.push({ text: "强制HTTPS", color: "purple" });
 
   return [
     { label: "源站", value: props.site.origin_display || "—" },

@@ -268,6 +268,38 @@ class IncidentStore:
 
         return await asyncio.to_thread(_query)
 
+    async def list_stale(
+        self,
+        *,
+        statuses: list[str],
+        before: datetime,
+        limit: int = 200,
+    ) -> list[IncidentRecord]:
+        """Latest-version incidents in ``statuses`` whose ``updated_at`` is older than ``before``."""
+        if not statuses:
+            return []
+
+        def _query():
+            client = get_clickhouse()
+            rows = client.query(
+                _latest_select(
+                    where=(
+                        "WHERE t.status IN {statuses:Array(String)} "
+                        "AND t.updated_at < {before:DateTime64(3)}"
+                    ),
+                    order="ORDER BY t.updated_at ASC",
+                    limit="LIMIT {limit:UInt32}",
+                ),
+                parameters={
+                    "statuses": list(statuses),
+                    "before": before,
+                    "limit": int(limit),
+                },
+            ).result_rows
+            return [_record_from_row(r) for r in rows]
+
+        return await asyncio.to_thread(_query)
+
     async def _insert(self, rec: IncidentRecord) -> None:
         row = _row_from_record(rec)
 

@@ -9,12 +9,14 @@
         新增防护策略
       </a-button>
     </template>
-    <a-tabs v-model:active-key="tab" class="ai-guard-tabs fs-tabs-animated">
+
+    <a-tabs v-model:active-key="tab" size="large" class="ai-guard-tabs fs-tabs-animated">
       <a-tab-pane key="chat" tab="AI智能助手" />
       <a-tab-pane key="policies" tab="AI防护策略" />
       <a-tab-pane key="incidents" tab="AI分析记录" />
       <a-tab-pane key="settings" tab="AI 配置" />
     </a-tabs>
+
     <fs-slide-transition :transition-key="tab">
       <chat-tab v-if="tab === 'chat'" />
       <defense-policies-tab v-else-if="tab === 'policies'" ref="policiesRef" />
@@ -39,12 +41,7 @@ const policiesRef = ref<InstanceType<typeof DefensePoliciesTab> | null>(null);
 
 <style scoped>
 .ai-guard-tabs :deep(.ant-tabs-nav) {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
-@media (max-width: 767px) {
-  .ai-guard-tabs :deep(.ant-tabs-nav-list) {
-    flex-wrap: wrap;
-  }
-}
 </style>

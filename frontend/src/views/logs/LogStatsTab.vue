@@ -85,6 +85,7 @@
           size="small"
           row-key="key"
           class="stats-table"
+          bordered
           @change="onTableChange"
         >
           <template #bodyCell="{ column, record }">
@@ -117,6 +118,7 @@ import type { ECharts } from "echarts";
 import { api } from "@/api";
 import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { formatDateTime } from "@/utils/datetime";
+import { lineAreaGradient } from "@/utils/lineAreaGradient";
 import {
   localizeStatsItems,
   resolveAutoTrendGranularity,
@@ -296,7 +298,9 @@ function renderTrendChart() {
           type: "line",
           smooth: true,
           stack: "hits",
-          areaStyle: { opacity: 0.2 },
+          showSymbol: false,
+          symbol: "none",
+          areaStyle: lineAreaGradient("#ef4444"),
           data: overview.trend.map((item) => item.blocked ?? 0),
         },
         {
@@ -304,7 +308,9 @@ function renderTrendChart() {
           type: "line",
           smooth: true,
           stack: "hits",
-          areaStyle: { opacity: 0.16 },
+          showSymbol: false,
+          symbol: "none",
+          areaStyle: lineAreaGradient("#22c55e"),
           data: overview.trend.map((item) => item.passed ?? 0),
         },
       ]
@@ -313,7 +319,9 @@ function renderTrendChart() {
           name: "命中",
           type: "line",
           smooth: true,
-          areaStyle: { opacity: 0.2 },
+          showSymbol: false,
+          symbol: "none",
+          areaStyle: lineAreaGradient("#38bdf8"),
           itemStyle: { color: "#38bdf8" },
           data: overview.trend.map((item) => item.count ?? 0),
         },

@@ -184,27 +184,46 @@ async def feed(
         client = get_clickhouse()
         since = datetime.utcnow() - timedelta(hours=24)
 
+        # Observe hits are logged with blocked=0; still exclude them explicitly.
+        # Feed only surfaces terminal protection actions.
+        _FEED_ACTIONS = ("block", "js_challenge", "captcha", "slide_captcha")
+        _FEED_SEVERITY = {
+            "block": "danger",
+            "js_challenge": "info",
+            "captcha": "warning",
+            "slide_captcha": "info",
+        }
+
         def _query_logs():
             return client.query(
                 "SELECT ts, client_ip, domain, rule_name, action FROM waf_logs "
-                "WHERE blocked = 1 AND ts >= {start:DateTime} "
+                "WHERE blocked = 1 "
+                "AND action IN {actions:Array(String)} "
+                "AND ts >= {start:DateTime} "
                 "ORDER BY ts DESC LIMIT {lim:UInt32}",
-                parameters={"start": since, "lim": min(limit, 20)},
+                parameters={
+                    "start": since,
+                    "lim": min(limit, 20),
+                    "actions": list(_FEED_ACTIONS),
+                },
             ).result_rows
 
         log_rows = await asyncio.wait_for(asyncio.to_thread(_query_logs), timeout=10)
         for ts, client_ip, domain, rule_name, action in log_rows:
+            mode = (action or "block").strip() or "block"
+            if mode not in _FEED_ACTIONS:
+                continue
             site_label = (domain or "").strip() or None
-            rule_label = (rule_name or action or "").strip() or None
+            rule_label = (rule_name or "").strip() or None
             items.append(
                 DashboardFeedItemOut(
                     id=f"log-{ts}-{client_ip}",
-                    type="block",
-                    title=f"拦截 {client_ip or '未知 IP'}",
+                    type=mode,
+                    title=(client_ip or "").strip() or "未知 IP",
                     detail=None,
                     site=site_label,
                     rule=rule_label,
-                    severity="danger",
+                    severity=_FEED_SEVERITY.get(mode, "danger"),
                     created_at=ts if isinstance(ts, datetime) else datetime.utcnow(),
                 )
             )
@@ -213,6 +232,9 @@ async def feed(
 
     pending_ai = 0
     try:
+        from app.services.ai_guard.defense.pipeline import expire_stale_suggested_incidents
+
+        await expire_stale_suggested_incidents()
         pending_ai = await IncidentStore().count_by_status(["suggested", "pending"])
     except Exception:  # noqa: BLE001
         log.exception("dashboard feed: pending AI incident count failed")

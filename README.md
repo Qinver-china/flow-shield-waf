@@ -98,8 +98,9 @@ flow-shield-waf/
 │   ├── baota/              # 宝塔一键部署
 │   └── smoke_test.sh       # 集成回归脚本
 ├── scripts/
-│   └── fresh-start.sh      # 清空数据卷并重建（开发/测试用）
-└── docs/                   # 架构 / 规则 DSL / API 文档
+│   ├── fresh-start.sh      # 清空数据卷并重建（开发/测试用）
+│   └── stress_test.py      # 防护分阶段 QPS 压测
+└── docs/                   # 架构 / 规则 DSL / API / 压测文档
 ```
 
 ---
@@ -188,6 +189,9 @@ curl -fsS http://localhost/waf-health
 
 # 完整集成回归（需先登录凭据与 httpbin 可达）
 bash deploy/smoke_test.sh
+
+# 防护压测（默认 20/50/100 QPS × 各 2 分钟；详见 docs/stress-test.md）
+python3 scripts/stress_test.py --url http://127.0.0.1 --host your.site.com
 ```
 
 ### 端口与宝塔共存
@@ -403,6 +407,10 @@ cd backend && python -m app.fields.export
 
 # 单元测试
 cd backend && pytest
+
+# 防护压测（对已配置站点；完整说明见 docs/stress-test.md）
+python3 scripts/stress_test.py --url https://你的站点.com
+python3 scripts/stress_test.py --url http://127.0.0.1 --host your.site.com --mix-attack --report report.json
 ```
 
 数据库采用模型驱动建表（`create_all` + 轻量 schema patch），全新环境可用 `./scripts/fresh-start.sh` 重建；已有数据环境升级时 backend 启动会自动应用列补丁。
@@ -416,6 +424,7 @@ cd backend && pytest
 | [`docs/architecture.md`](docs/architecture.md) | 架构、请求流程、配置下发、日志链路 |
 | [`docs/rule-dsl.md`](docs/rule-dsl.md) | 条件 DSL、操作符、字段目录 |
 | [`docs/api.md`](docs/api.md) | REST API 说明 |
+| [`docs/stress-test.md`](docs/stress-test.md) | **防护压测**脚本用法与参数 |
 | [`docs/review-after-fix.md`](docs/review-after-fix.md) | 安全加固与审查记录 |
 | [`docs/upgrade.md`](docs/upgrade.md) | **版本更新**、回滚与检查清单 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本更新日志 |

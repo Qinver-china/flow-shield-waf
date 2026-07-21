@@ -34,7 +34,6 @@ defineProps<{
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--fs-space-md);
-  flex-wrap: wrap;
 }
 
 .page-shell-title {
@@ -68,11 +67,6 @@ defineProps<{
 @media (max-width: 767px) {
   .page-shell-title {
     font-size: 18px;
-  }
-
-  .page-shell-actions {
-    width: 100%;
-    justify-content: flex-end;
   }
 }
 </style>

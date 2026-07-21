@@ -95,7 +95,7 @@
         </a-card>
       </a-col>
       <a-col :xs="24" :md="10">
-        <a-card class="panel-card intel-card traffic-metrics-panel" :bordered="false" title="流量异常检测">
+        <a-card class="panel-card intel-card traffic-metrics-panel" :bordered="false">
           <template #title>
             <span class="panel-title"><alert-outlined /> 流量异常检测</span>
           </template>
@@ -185,6 +185,7 @@
             :pagination="false"
             :row-key="(record: { id?: number; name: string }) => String(record.id ?? record.name)"
             size="small"
+            bordered
             :scroll="{ x: 180 }"
             :custom-row="ruleTableRow"
           />
@@ -201,6 +202,7 @@
             :pagination="false"
             row-key="ip"
             size="small"
+            bordered
             :scroll="{ x: 180 }"
             :custom-row="ipTableRow"
           />
@@ -278,6 +280,7 @@ import { echartsThemeName } from "@/composables/useEchartsTheme";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
 import { formatClockTime, formatDateTime, formatDateTimeShort } from "@/utils/datetime";
+import { lineAreaGradient } from "@/utils/lineAreaGradient";
 import { trafficWindowLabels } from "@/views/logs/constants";
 
 interface CountPair {
@@ -486,16 +489,31 @@ function formatTrendTime(value: string) {
   return formatDateTimeShort(value);
 }
 
+const FEED_PROTECTION_TYPES = new Set([
+  "block",
+  "js_challenge",
+  "captcha",
+  "slide_captcha",
+]);
+
+const FEED_TYPE_LABEL: Record<string, string> = {
+  alert: "预警",
+  block: "拦截",
+  js_challenge: "JS 挑战",
+  captcha: "数学验证",
+  slide_captcha: "滑动验证",
+};
+
 function feedTone(item: { type?: string; severity?: string }) {
   if (item.type === "block" || item.severity === "danger") return "danger";
-  if (item.type === "alert" || item.severity === "warning") return "alert";
+  if (item.type === "alert" || item.type === "captcha" || item.severity === "warning") {
+    return "alert";
+  }
   return "info";
 }
 
 function feedTypeLabel(type: string) {
-  if (type === "alert") return "预警";
-  if (type === "block") return "拦截";
-  return type;
+  return FEED_TYPE_LABEL[type] || type;
 }
 
 function feedMeta(item: { site?: string | null; rule?: string | null; detail?: string | null }) {
@@ -578,12 +596,13 @@ function onFeedClick(item: { type: string; title?: string }) {
     router.push("/alerts");
     return;
   }
-  if (item.type === "block") {
-    const match = item.title?.match(/^拦截\s+(.+)$/);
+  if (FEED_PROTECTION_TYPES.has(item.type)) {
+    const ip = (item.title || "").trim();
     goToLogs({
       tab: "detail",
       blocked: true,
-      client_ip: match?.[1]?.trim() || undefined,
+      mode: item.type,
+      client_ip: ip && ip !== "未知 IP" ? ip : undefined,
     });
   }
 }
@@ -649,8 +668,26 @@ function updateCharts(silent = false) {
       xAxis: { type: "category", boundaryGap: false, data: times },
       yAxis: { type: "value", minInterval: 1 },
       series: [
-        { name: "已拦截", type: "line", smooth: true, stack: "total", areaStyle: { opacity: 0.22 }, data: stats.trend.map((t: any) => t.blocked ?? 0) },
-        { name: "已放行", type: "line", smooth: true, stack: "total", areaStyle: { opacity: 0.18 }, data: stats.trend.map((t: any) => t.passed ?? t.count ?? 0) },
+        {
+          name: "已拦截",
+          type: "line",
+          smooth: true,
+          stack: "total",
+          showSymbol: false,
+          symbol: "none",
+          areaStyle: lineAreaGradient("#ef4444"),
+          data: stats.trend.map((t: any) => t.blocked ?? 0),
+        },
+        {
+          name: "已放行",
+          type: "line",
+          smooth: true,
+          stack: "total",
+          showSymbol: false,
+          symbol: "none",
+          areaStyle: lineAreaGradient("#22c55e"),
+          data: stats.trend.map((t: any) => t.passed ?? t.count ?? 0),
+        },
       ],
     },
     () => goToLogs({ tab: "detail" }),
@@ -663,11 +700,17 @@ function updateCharts(silent = false) {
     {
       tooltip: { trigger: "item" },
       legend: { bottom: 0, type: "scroll" },
+      stateAnimation: { duration: 280, easing: "cubicOut" },
       series: [{
         type: "pie",
         radius: ["42%", "68%"],
+        padAngle: 3,
         itemStyle: { borderRadius: 6, borderWidth: 2 },
         label: { formatter: "{b}\n{d}%" },
+        emphasis: {
+          scale: true,
+          scaleSize: 8,
+        },
         data: stats.mode_split.map((m: any) => ({
           name: m.label || m.mode,
           value: m.count,
@@ -902,12 +945,12 @@ onUnmounted(() => {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--fs-radius-md);
   flex-shrink: 0;
   font-size: 22px;
   color: var(--fs-color-primary);
-  background: color-mix(in srgb, var(--fs-color-primary) 6%, var(--fs-bg-surface));
-  border: 1px solid color-mix(in srgb, var(--fs-color-primary) 22%, transparent);
+  background: var(--fs-color-primary);
+  color: #fff;
 }
 
 .hero-text {
@@ -1073,6 +1116,7 @@ onUnmounted(() => {
   font-size: 10px;
   font-weight: 500;
   color: var(--fs-text-muted);
+  white-space: nowrap;
 }
 
 .metric-window-sub {

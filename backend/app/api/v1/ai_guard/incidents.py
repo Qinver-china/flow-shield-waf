@@ -11,6 +11,7 @@ from app.schemas.common import ok
 from app.services.ai_guard.defense.pipeline import (
     apply_incident_rule,
     dismiss_incident,
+    expire_stale_suggested_incidents,
     rollback_incident,
 )
 from app.services.ai_guard.incident_action_html import render_action_page
@@ -113,6 +114,10 @@ async def list_incidents(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
+    try:
+        await expire_stale_suggested_incidents()
+    except Exception:  # noqa: BLE001
+        pass
     rows, total = await _incidents.list(
         status=status,
         offset=pg.offset,

@@ -6,6 +6,7 @@
       :loading="loading"
       :pagination="resolvedPagination"
       row-key="id"
+      bordered
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
