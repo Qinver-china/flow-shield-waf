@@ -16,6 +16,7 @@ from app.models.rule import Rule
 from app.models.site import Site
 from app.models.notification import AlertPolicy, NotificationChannel
 from app.models.traffic_intel import TrafficBaseline
+from app.models.traffic_live_backup import TrafficLiveBackup
 from app.models.user import User
 from app.models.waf_setting import WafSetting
 
@@ -33,6 +34,7 @@ __all__ = [
     "RateLimit",
     "WafSetting",
     "TrafficBaseline",
+    "TrafficLiveBackup",
     "NotificationChannel",
     "AlertPolicy",
     "AiGuardSetting",

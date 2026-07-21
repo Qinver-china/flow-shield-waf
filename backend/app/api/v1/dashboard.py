@@ -135,6 +135,7 @@ async def system_metrics(_user: User = Depends(get_current_user)):
 
     windows_out: list[dict] = []
     for sec in SYSTEM_METRIC_WINDOWS_SEC:
+        win_row = ((snapshot or {}).get("windows") or {}).get(str(sec)) or {}
         windows_out.append({
             "sec": int(sec),
             "label": SYSTEM_METRIC_WINDOW_LABELS.get(sec, f"{sec} 秒"),
@@ -144,7 +145,8 @@ async def system_metrics(_user: User = Depends(get_current_user)):
             "host_cpu_pct": window_metric_value(
                 snapshot, window_sec=int(sec), metric="host_cpu_pct"
             ),
-            "samples": ((snapshot or {}).get("windows") or {}).get(str(sec), {}).get("samples"),
+            "samples": win_row.get("samples"),
+            "ready": win_row.get("ready"),
         })
 
     primary = next((w for w in windows_out if w["sec"] == primary_sec), None) or {}

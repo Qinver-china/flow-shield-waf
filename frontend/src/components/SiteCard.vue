@@ -70,7 +70,7 @@
         >
           {{ formatCount(metrics?.requests_24h) }}
         </div>
-        <div class="metric__label">24 小时总请求量</div>
+        <div class="metric__label">24 小时命中量</div>
         <div
           class="metric__delta"
           :class="deltaClass(metrics?.requests_24h_delta_pct)"
@@ -553,8 +553,14 @@ function trafficBaselineClass(w: SiteTrafficWindow) {
 
 .site-card__traffic-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+@media (min-width: 640px) {
+  .site-card__traffic-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .traffic-card {

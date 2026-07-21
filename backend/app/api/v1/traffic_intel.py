@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC, TRAFFIC_WINDOWS_SEC
+from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC, TRAFFIC_LIVE_WINDOWS_SEC
 from app.core.db import get_db
 from app.core.redis import get_redis
 from app.models import User
@@ -25,8 +25,8 @@ from app.services.traffic_intel.constants import (
 from app.services.traffic_intel.store.alerts_clickhouse import AlertStore
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
-from app.services.traffic_intel.types import TrafficIntelConfig
 from app.services.traffic_intel.timezone import get_traffic_timezone
+from app.services.traffic_intel.types import TrafficIntelConfig
 from app.services.traffic_intel.windows import is_baseline_stable, label
 
 router = APIRouter()
@@ -130,13 +130,13 @@ async def intel_status(
     _user: User = Depends(get_current_user),
 ):
     config = _config()
-    ch = ClickHouseTrafficStore()
     baselines = BaselineStore()
     timezone_name = await get_traffic_timezone(db)
+    # Live current counts: Redis snapshot only (SQLite/CH are not used for panel).
     snapshot_raw = await get_redis().get(REDIS_SNAPSHOT_KEY)
 
     windows: list[WindowComparison] = []
-    for window_sec in TRAFFIC_WINDOWS_SEC:
+    for window_sec in TRAFFIC_LIVE_WINDOWS_SEC:
         baseline = None
         if window_sec in TRAFFIC_BASELINE_WINDOWS_SEC:
             baseline = await baselines.get(
@@ -148,8 +148,6 @@ async def intel_status(
             )
 
         current = _snapshot_window_requests(snapshot_raw, window_sec, site_id)
-        if current is None and window_sec in TRAFFIC_BASELINE_WINDOWS_SEC:
-            current = ch.current_window_requests(window_sec, site_id=site_id)
         if current is None:
             current = 0
 

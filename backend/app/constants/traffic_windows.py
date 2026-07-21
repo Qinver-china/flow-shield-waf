@@ -1,9 +1,12 @@
 """Shared traffic window definitions (engine counters + rule conditions)."""
 
-# Keep in sync with engine/lua/waf/traffic_counter.lua WINDOWS.
+# Rule DSL / alert condition windows (no 24h — too coarse for most rules).
 TRAFFIC_WINDOWS_SEC: tuple[int, ...] = (10, 30, 60, 300, 1800, 3600)
 
-# Windows used for baseline learning / anomaly comparison.
+# Live counters + dashboard snapshot (includes 24h). Keep in sync with traffic_counter.lua.
+TRAFFIC_LIVE_WINDOWS_SEC: tuple[int, ...] = (10, 30, 60, 300, 1800, 3600, 86400)
+
+# Windows used for baseline learning / anomaly comparison (no 10s / 30s / 24h).
 TRAFFIC_BASELINE_WINDOWS_SEC: tuple[int, ...] = (60, 300, 1800, 3600)
 
 # Minimum window for baseline-relative rule / alert comparisons.
@@ -16,6 +19,7 @@ TRAFFIC_WINDOW_LABELS: dict[int, str] = {
     300: "5 分钟",
     1800: "30 分钟",
     3600: "60 分钟",
+    86400: "24 小时",
 }
 
 

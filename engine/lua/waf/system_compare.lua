@@ -160,6 +160,10 @@ local function current_value(window_sec, metric_key)
     if type(row) ~= "table" then
         return nil
     end
+    -- Window not yet fully collected after process start → treat as missing.
+    if row.ready == false then
+        return nil
+    end
     return tonumber(row[metric_key])
 end
 

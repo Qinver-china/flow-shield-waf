@@ -26,7 +26,6 @@ from app.services.traffic_intel.windows import is_baseline_stable
 log = logging.getLogger("waf.notify.evaluator")
 
 TRAFFIC_SNAPSHOT_KEY = REDIS_SNAPSHOT_KEY
-_LIVE_WINDOW_THRESHOLD_SEC = 60
 _alert_logs = AlertLogStore()
 
 
@@ -238,13 +237,8 @@ class AlertPolicyEvaluator:
         *,
         site_id: int | None,
     ) -> int:
-        if window_sec < _LIVE_WINDOW_THRESHOLD_SEC:
-            return await self._snapshot_window_requests(window_sec, site_id=site_id)
-        return await asyncio.to_thread(
-            self._ch.current_window_requests,
-            window_sec,
-            site_id=site_id,
-        )
+        # Live traffic judgments always read Redis snapshot (DB is backup only).
+        return await self._snapshot_window_requests(window_sec, site_id=site_id)
 
     async def _snapshot_window_requests(
         self,

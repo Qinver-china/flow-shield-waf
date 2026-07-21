@@ -69,61 +69,129 @@
       </a-col>
     </a-row>
     <a-row :gutter="[12, 12]">
-      <a-col :xs="24" :md="14">
-        <a-card class="panel-card traffic-metrics-panel" :bordered="false">
+      <a-col :xs="24" :lg="14" :xl="15">
+        <a-card class="panel-card traffic-live-panel" :bordered="false">
           <template #title>
-            <span class="panel-title"><thunderbolt-outlined /> {{ trafficCardTitle }}</span>
-            <a-tag v-if="traffic.burst_active" color="orange" style="margin-left: 8px">自动取证中</a-tag>
+            <div class="traffic-live-title">
+              <span class="panel-title"><thunderbolt-outlined /> 实时请求量</span>
+              <span
+                class="traffic-live-badge"
+                :class="liveRefreshEnabled ? 'is-live' : 'is-paused'"
+              >
+                <span class="traffic-live-badge__dot" />
+                {{ liveRefreshEnabled ? "实时更新" : "已暂停刷新" }}
+              </span>
+              <a-tag v-if="traffic.burst_active" color="orange">自动取证中</a-tag>
+            </div>
           </template>
           <template #extra>
             <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
           </template>
-          <a-row class="traffic-metrics-grid" :gutter="[8, 8]">
-            <a-col v-for="w in traffic.windows" :key="w.sec" :xs="12" :sm="8" :md="8" :lg="4" :xl="4">
-              <div class="metric-window-card traffic-window">
-                <div class="metric-window-label">{{ windowLabel(w.sec) }}</div>
-                <div class="metric-window-value">
-                  {{ w.requests }}
-                  <span class="metric-window-meta">{{ Number(w.qps || 0).toFixed(1) }} QPS</span>
+
+          <a-empty v-if="!liveTrafficWindows.length" description="暂无数据" />
+          <template v-else>
+            <div class="traffic-live-hero">
+              <div class="traffic-live-hero__metric">
+                <div class="traffic-live-hero__label">{{ liveTrafficDay.label }}</div>
+                <div class="traffic-live-hero__value">{{ formatTrafficCount(liveTrafficDay.requests) }}</div>
+                <div class="traffic-live-hero__meta">
+                  <span>平均 {{ formatQps(liveTrafficDay.qps) }} QPS</span>
+                  <span
+                    v-if="liveTrafficDay.deviation_ratio != null && !liveTrafficDay.baseline_warmup"
+                    class="traffic-live-hero__delta"
+                    :class="liveTrafficCardClass(liveTrafficDay)"
+                  >
+                    {{ formatIntelDeviation(liveTrafficDay.deviation_ratio) }}
+                  </span>
                 </div>
-                <a-progress v-if="w.threshold" :percent="Math.min(100, Math.round((w.requests / w.threshold) * 100))"
-                  size="small" :stroke-color="progressColor(w.requests, w.threshold)" :show-info="false"
-                  class="metric-window-progress" />
               </div>
-            </a-col>
-          </a-row>
+              <div class="traffic-live-hero__divider" />
+              <div class="traffic-live-hero__status" :class="`is-${liveTrafficOverall.tone}`">
+                <div class="traffic-live-hero__status-title">
+                  <component :is="liveTrafficOverall.icon" />
+                  <span>{{ liveTrafficOverall.title }}</span>
+                </div>
+                <div class="traffic-live-hero__status-desc">{{ liveTrafficOverall.desc }}</div>
+              </div>
+            </div>
+
+            <div class="traffic-live-grid">
+              <div
+                v-for="w in liveTrafficWindowCards"
+                :key="w.window_sec"
+                class="traffic-live-card"
+                :class="liveTrafficCardClass(w)"
+              >
+                <div class="traffic-live-card__head">
+                  <span class="traffic-live-card__label">{{ w.label }}</span>
+                </div>
+                <div class="traffic-live-card__value">{{ formatTrafficCount(w.requests) }}</div>
+                <div class="traffic-live-card__qps">{{ formatQps(w.qps) }} QPS</div>
+                <div class="traffic-live-card__status">
+                  <component :is="liveTrafficStatusIcon(w)" class="traffic-live-card__status-icon" />
+                  <span class="traffic-live-card__baseline-text">
+                    <template v-if="w.baseline_avg != null">
+                      <span>基线</span>
+                      <span
+                        v-if="w.deviation_ratio != null && !w.baseline_warmup"
+                        class="traffic-live-card__ratio"
+                      >
+                        {{ formatIntelDeviation(w.deviation_ratio) }}
+                      </span>
+                      <span v-if="w.baseline_warmup" class="traffic-live-card__learning">学习中</span>
+                    </template>
+                    <template v-else>暂无基线</template>
+                  </span>
+                </div>
+                <a-progress
+                  :percent="liveTrafficBarPercent(w)"
+                  size="small"
+                  :stroke-color="liveTrafficBarColor(w)"
+                  :show-info="false"
+                  class="traffic-live-card__bar"
+                />
+              </div>
+            </div>
+          </template>
         </a-card>
       </a-col>
-      <a-col :xs="24" :md="10">
-        <a-card class="panel-card intel-card traffic-metrics-panel" :bordered="false">
+      <a-col :xs="24" :lg="10" :xl="9">
+        <a-card class="panel-card load-card" :bordered="false">
           <template #title>
-            <span class="panel-title"><alert-outlined /> 流量与基线</span>
+            <div class="load-card-title">
+              <span class="panel-title"><cloud-server-outlined /> CPU负载</span>
+              <span class="load-status-badge" :class="`is-${loadOverall.tone}`">
+                <span class="load-status-badge__dot" />
+                {{ loadOverall.title }}
+              </span>
+            </div>
           </template>
-          <template #extra>
-            <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
-          </template>
-          <a-empty v-if="!intelDisplayWindows.length" description="暂无数据" />
-          <a-row v-else class="traffic-metrics-grid" :gutter="[8, 8]">
-            <a-col v-for="w in intelDisplayWindows" :key="w.window_sec" :xs="12" :sm="12" :md="12" :lg="6" :xl="6">
-              <div class="metric-window-card intel-item" :class="intelBaselineClass(w)">
-                <div class="metric-window-label">{{ w.label }}</div>
-                <div class="metric-window-value">
-                  {{ w.current_requests }}
-                  <span class="metric-window-meta">请求</span>
-                </div>
-                <div class="metric-window-sub">
-                  <template v-if="w.baseline_avg != null">
-                    基线 {{ formatIntelBaseline(w.baseline_avg) }}
-                    <span v-if="w.baseline_warmup" class="intel-warmup">· 学习中</span>
-                    <span v-else-if="w.deviation_ratio != null" class="intel-deviation">
-                      · {{ formatIntelDeviation(w.deviation_ratio) }}
-                    </span>
-                  </template>
-                  <template v-else>暂无基线</template>
+          <div class="load-body">
+            <div class="load-main">
+              <div ref="loadCpuEl" class="load-gauge-box" />
+              <div class="load-main-foot" :class="`is-${loadOverall.tone}`">
+                <component :is="loadOverall.icon" />
+                <span>{{ loadOverall.hint }}</span>
+              </div>
+            </div>
+            <div class="load-side">
+              <div
+                v-for="(item, idx) in loadMetricCards"
+                :key="item.key"
+                class="load-side-card"
+                :class="[item.kind === 'host' ? 'is-host' : 'is-container', `is-${cpuTone(item.pct)}`]"
+              >
+                <div class="load-side-card__label">{{ item.label }}</div>
+                <div
+                  class="load-side-ring"
+                  :ref="(el) => setLoadMiniEl(idx, el)"
+                />
+                <div class="load-side-card__value">
+                  {{ item.value }}<span v-if="item.pct != null" class="load-side-card__unit">%</span>
                 </div>
               </div>
-            </a-col>
-          </a-row>
+            </div>
+          </div>
         </a-card>
       </a-col>
     </a-row>
@@ -148,32 +216,6 @@
         </a-card>
       </a-col>
       <a-col :xs="24" :md="12" :xl="6">
-        <a-card class="panel-card load-card" :bordered="false">
-          <template #title>
-            <span class="panel-title"><cloud-server-outlined /> CPU负载</span>
-          </template>
-          <template #extra>
-            <span class="load-window-tag">{{ systemMetrics.window_label || "1 分钟" }}</span>
-          </template>
-          <div ref="loadCpuEl" class="load-gauge-box" />
-          <div class="load-mini-grid">
-            <div
-              v-for="(item, idx) in loadMetricCards"
-              :key="item.key"
-              class="load-mini-item"
-            >
-              <div
-                class="load-mini-gauge"
-                :ref="(el) => setLoadMiniEl(idx, el)"
-              />
-              <div class="load-mini-caption">
-                <div class="load-mini-label">{{ item.label }}</div>
-              </div>
-            </div>
-          </div>
-        </a-card>
-      </a-col>
-      <a-col :xs="24" :md="12" :xl="8">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><bar-chart-outlined /> 防护来源</span>
@@ -181,7 +223,7 @@
           <div ref="sourceEl" class="chart-box" />
         </a-card>
       </a-col>
-      <a-col :xs="24" :md="12" :xl="8">
+      <a-col :xs="24" :md="12" :xl="12">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><global-outlined /> 拦截来源国家 Top</span>
@@ -189,7 +231,7 @@
           <div ref="countryEl" class="chart-box" />
         </a-card>
       </a-col>
-      <a-col :xs="24" :md="24" :xl="8">
+      <a-col :xs="24" :md="24" :xl="12">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><file-text-outlined /> 日志类型</span>
@@ -279,13 +321,16 @@ import {
   BarChartOutlined,
   BellOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   CloudServerOutlined,
   ClusterOutlined,
   DashboardOutlined,
   DisconnectOutlined,
+  ExclamationCircleOutlined,
   FileTextOutlined,
   GlobalOutlined,
   LineChartOutlined,
+  MinusCircleOutlined,
   PieChartOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
@@ -359,8 +404,23 @@ const MODE_CHART_COLORS: Record<string, string> = {
   unknown: "#94a3b8",
 };
 
-const SOURCE_CHART_COLORS = ["#2563eb", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316"];
+/** Sequential palette for ranked bar charts (source / country). */
+const RANK_BAR_COLORS = [
+  "#2563eb",
+  "#ef4444",
+  "#8b5cf6",
+  "#14b8a6",
+  "#f97316",
+  "#0ea5e9",
+  "#eab308",
+  "#ec4899",
+  "#22c55e",
+  "#6366f1",
+];
 
+function rankBarColor(index: number): string {
+  return RANK_BAR_COLORS[index % RANK_BAR_COLORS.length];
+}
 const counts = reactive<OverviewCounts>({
   sites: { total: 0, enabled: 0 },
   rules: { total: 0, enabled: 0 },
@@ -409,10 +469,6 @@ const traffic = reactive<{ burst_active: boolean; windows: any[] }>({
   windows: [],
 });
 
-const trafficCardTitle = computed(() =>
-  trafficSiteId.value == null ? "实时全站流量" :"实时站点流量",
-);
-
 const systemMetrics = reactive({
   window_sec: 60,
   window_label: "1 分钟",
@@ -423,6 +479,8 @@ const systemMetrics = reactive({
     label: string;
     container_cpu_pct: number | null;
     host_cpu_pct: number | null;
+    samples?: number | null;
+    ready?: boolean | null;
   }>,
   cpu_cores: null as number | null,
   source: null as string | null,
@@ -435,36 +493,200 @@ function formatCpuPct(value: number | null | undefined, digits = 1): string {
   return Number(value).toFixed(digits);
 }
 
-/** Mini rings: 5-minute container CPU + 1-minute host CPU. */
+function cpuTone(pct: number | null | undefined): "ok" | "warn" | "danger" | "neutral" {
+  if (pct == null || Number.isNaN(Number(pct))) return "neutral";
+  const n = Number(pct);
+  if (n >= 85) return "danger";
+  if (n >= 60) return "warn";
+  return "ok";
+}
+
+/** 右侧：容器 5m/30m + 宿主机 5m/30m */
 const loadMetricCards = computed(() => {
   const windows = systemMetrics.windows || [];
   const bySec = (sec: number) => windows.find((w) => w.sec === sec);
   const w5 = bySec(300);
-  const w1 = bySec(60);
+  const w30 = bySec(1800);
   return [
     {
       key: "c-300",
-      label: "5 分钟 · 容器",
+      kind: "container" as const,
+      label: "容器 · 5 分钟",
       value: formatCpuPct(w5?.container_cpu_pct ?? null, 1),
-      unit: "%",
       pct: w5?.container_cpu_pct ?? null,
     },
     {
-      key: "h-60",
-      label: "1 分钟 · 宿主机",
-      value: formatCpuPct(w1?.host_cpu_pct ?? null, 1),
-      unit: "%",
-      pct: w1?.host_cpu_pct ?? null,
+      key: "c-1800",
+      kind: "container" as const,
+      label: "容器 · 30 分钟",
+      value: formatCpuPct(w30?.container_cpu_pct ?? null, 1),
+      pct: w30?.container_cpu_pct ?? null,
+    },
+    {
+      key: "h-300",
+      kind: "host" as const,
+      label: "宿主机 · 5 分钟",
+      value: formatCpuPct(w5?.host_cpu_pct ?? null, 1),
+      pct: w5?.host_cpu_pct ?? null,
+    },
+    {
+      key: "h-1800",
+      kind: "host" as const,
+      label: "宿主机 · 30 分钟",
+      value: formatCpuPct(w30?.host_cpu_pct ?? null, 1),
+      pct: w30?.host_cpu_pct ?? null,
     },
   ];
 });
 
-/** 基线对比仅展示有基线学习能力的窗口（排除 10s / 30s） */
-const intelDisplayWindows = computed(() =>
-  (intel.windows || []).filter((w: { window_sec: number }) => w.window_sec !== 10 && w.window_sec !== 30),
+const loadOverall = computed(() => {
+  const pct = systemMetrics.container_cpu_pct;
+  const tone = cpuTone(pct);
+  if (tone === "danger") {
+    return {
+      tone,
+      title: "负载过高",
+      hint: "容器CPU负载高于 85%",
+      icon: ExclamationCircleOutlined,
+    };
+  }
+  if (tone === "warn") {
+    return {
+      tone,
+      title: "负载偏高",
+      hint: "容器CPU负载较高",
+      icon: ExclamationCircleOutlined,
+    };
+  }
+  if (tone === "neutral") {
+    return {
+      tone,
+      title: "采样中",
+      hint: "需满 1 分钟样本后显示均值",
+      icon: MinusCircleOutlined,
+    };
+  }
+  return {
+    tone: "ok" as const,
+    title: "运行正常",
+    hint: "负载稳定",
+    icon: CheckCircleOutlined,
+  };
+});
+/** 合并实时流量 + 基线：10s～24h */
+const liveTrafficWindows = computed(() => {
+  const intelBySec = new Map<number, any>();
+  for (const w of intel.windows || []) {
+    const sec = Number(w.window_sec);
+    if (Number.isFinite(sec)) intelBySec.set(sec, w);
+  }
+
+  const fromTraffic = (traffic.windows || []).map((w: any) => {
+    const sec = Number(w.sec);
+    const intelW = intelBySec.get(sec);
+    const requests = Number(w.requests || 0);
+    const baselineAvg =
+      intelW?.baseline_avg != null ? Number(intelW.baseline_avg) : null;
+    return {
+      window_sec: sec,
+      label: windowLabel(sec),
+      requests,
+      qps: Number(w.qps || 0),
+      threshold: w.threshold != null ? Number(w.threshold) : null,
+      baseline_avg: baselineAvg,
+      baseline_warmup: Boolean(intelW?.baseline_warmup),
+      deviation_ratio:
+        intelW?.deviation_ratio != null
+          ? Number(intelW.deviation_ratio)
+          : baselineAvg && baselineAvg > 0
+            ? requests / baselineAvg
+            : null,
+    };
+  });
+
+  if (fromTraffic.length) return fromTraffic;
+
+  return (intel.windows || []).map((w: any) => {
+    const sec = Number(w.window_sec);
+    const requests = Number(w.current_requests || 0);
+    return {
+      window_sec: sec,
+      label: w.label || windowLabel(sec),
+      requests,
+      qps: requests / Math.max(sec, 1),
+      threshold: null as number | null,
+      baseline_avg: w.baseline_avg != null ? Number(w.baseline_avg) : null,
+      baseline_warmup: Boolean(w.baseline_warmup),
+      deviation_ratio:
+        w.deviation_ratio != null ? Number(w.deviation_ratio) : null,
+    };
+  });
+});
+
+/** 底部子卡片：10s～60m（24h 放在顶部摘要） */
+const liveTrafficWindowCards = computed(() =>
+  liveTrafficWindows.value.filter((w) => w.window_sec !== 86400),
 );
 
-const feedLoading = ref(false);
+const liveTrafficDay = computed(() => {
+  const day = liveTrafficWindows.value.find((w) => w.window_sec === 86400);
+  if (day) return day;
+  return {
+    window_sec: 86400,
+    label: windowLabel(86400),
+    requests: 0,
+    qps: 0,
+    threshold: null as number | null,
+    baseline_avg: null as number | null,
+    baseline_warmup: false,
+    deviation_ratio: null as number | null,
+  };
+});
+
+const liveTrafficOverall = computed(() => {
+  const scored = liveTrafficWindows.value.filter(
+    (w) => w.baseline_avg != null || w.threshold != null,
+  );
+  const tones = scored.map((w) => baselineTone(w.deviation_ratio));
+  if (tones.includes("danger")) {
+    return {
+      tone: "danger" as const,
+      title: "流量偏高",
+      desc: "部分时间窗请求量明显高于基线，建议结合日志排查。",
+      icon: ExclamationCircleOutlined,
+    };
+  }
+  if (tones.includes("warn")) {
+    return {
+      tone: "warn" as const,
+      title: "需关注",
+      desc: "部分时间窗高于基线，请留意是否持续上升。",
+      icon: ExclamationCircleOutlined,
+    };
+  }
+  if (!scored.length) {
+    return {
+      tone: "neutral" as const,
+      title: "暂无基线",
+      desc: "尚无可用基线；下方展示实时窗口请求量。",
+      icon: MinusCircleOutlined,
+    };
+  }
+  if (scored.some((w) => w.baseline_warmup)) {
+    return {
+      tone: "ok" as const,
+      title: "流量正常",
+      desc: "基线仍在学习中，当前请求量相对初步基线未见异常偏高。",
+      icon: SafetyCertificateOutlined,
+    };
+  }
+  return {
+    tone: "ok" as const,
+    title: "流量正常",
+    desc: "当前请求量在基线范围内波动，未检测到异常。",
+    icon: SafetyCertificateOutlined,
+  };
+});const feedLoading = ref(false);
 const trendEl = ref<HTMLElement>();
 const modeEl = ref<HTMLElement>();
 const loadCpuEl = ref<HTMLElement>();
@@ -549,9 +771,13 @@ function windowLabel(sec: number) {
   return trafficWindowLabels[sec] || `${sec} 秒`;
 }
 
-function formatIntelBaseline(value: number | null | undefined) {
-  if (value == null) return "—";
-  return Math.round(value);
+function formatQps(value: number | null | undefined) {
+  return Number(value || 0).toFixed(1);
+}
+
+function formatTrafficCount(value: number | null | undefined) {
+  const n = Math.round(Number(value || 0));
+  return Number.isFinite(n) ? n.toLocaleString("zh-CN") : "0";
 }
 
 function formatIntelDeviation(ratio: number) {
@@ -560,21 +786,59 @@ function formatIntelDeviation(ratio: number) {
   return `${sign}${delta.toFixed(0)}%`;
 }
 
-function intelBaselineClass(w: {
-  deviation_ratio?: number | null;
+type LiveTrafficWindow = {
+  window_sec: number;
+  label?: string;
+  requests: number;
+  qps?: number;
+  threshold?: number | null;
+  baseline_avg?: number | null;
   baseline_warmup?: boolean;
-}) {
-  const tone = baselineTone(w.deviation_ratio, w.baseline_warmup);
-  if (tone === "warn") return "intel-item--warn";
-  if (tone === "danger") return "intel-item--danger";
-  return "";
+  deviation_ratio?: number | null;
+};
+
+function liveTrafficCardClass(w: LiveTrafficWindow) {
+  if (w.baseline_avg == null && (w.threshold == null || w.threshold <= 0)) {
+    return "is-neutral";
+  }
+  // 学习中同样按请求量/基线比值着色
+  const tone = baselineTone(w.deviation_ratio);
+  if (tone === "warn") return "is-warn";
+  if (tone === "danger") return "is-danger";
+  return "is-ok";
 }
 
-function progressColor(requests: number, threshold: number) {
-  const ratio = threshold ? requests / threshold : 0;
-  if (ratio >= 1) return "#ef4444";
-  if (ratio >= 0.7) return "#f59e0b";
-  return "#22c55e";
+function liveTrafficStatusIcon(w: LiveTrafficWindow) {
+  if (w.baseline_avg == null) return MinusCircleOutlined;
+  if (w.baseline_warmup) return ClockCircleOutlined;
+  const tone = baselineTone(w.deviation_ratio);
+  if (tone === "danger" || tone === "warn") return ExclamationCircleOutlined;
+  return CheckCircleOutlined;
+}
+
+/** 有阈值按阈值；否则相对基线（基线=50%，2×=100%）；都没有则为 0 */
+function liveTrafficBarPercent(w: LiveTrafficWindow) {
+  if (w.threshold != null && w.threshold > 0) {
+    return Math.min(100, Math.round((w.requests / w.threshold) * 100));
+  }
+  if (w.baseline_avg != null && w.baseline_avg > 0) {
+    return Math.min(100, Math.round((w.requests / w.baseline_avg) * 50));
+  }
+  return w.requests > 0 ? 28 : 0;
+}
+
+function liveTrafficBarColor(w: LiveTrafficWindow) {
+  if (w.threshold != null && w.threshold > 0) {
+    const ratio = w.requests / w.threshold;
+    if (ratio >= 1) return "#ef4444";
+    if (ratio >= 0.7) return "#f59e0b";
+    return "#22c55e";
+  }
+  if (w.baseline_avg == null) return "#94a3b8";
+  const tone = baselineTone(w.deviation_ratio);
+  if (tone === "danger") return "#ef4444";
+  if (tone === "warn") return "#f59e0b";
+  return "#3474ff";
 }
 
 function formatTrendTime(value: string) {
@@ -700,13 +964,25 @@ function onFeedClick(item: { type: string; title?: string }) {
   }
 }
 
-type ChartKey = "trend" | "mode" | "loadCpu" | "loadMini0" | "loadMini1" | "source" | "country" | "logType";
+type ChartKey =
+  | "trend"
+  | "mode"
+  | "loadCpu"
+  | "loadMini0"
+  | "loadMini1"
+  | "loadMini2"
+  | "loadMini3"
+  | "source"
+  | "country"
+  | "logType";
 
 const chartStore: Partial<Record<ChartKey, ECharts>> = {};
 
 function chartMotion(silent: boolean): Pick<echarts.EChartsOption, "animation" | "animationDuration" | "animationDurationUpdate"> {
+  // Keep animation enabled so pie emphasis scale still eases on hover.
+  // Silent refresh only short-circuits data enter/update durations.
   return silent
-    ? { animation: false, animationDuration: 0, animationDurationUpdate: 0 }
+    ? { animation: true, animationDuration: 0, animationDurationUpdate: 0 }
     : { animation: true, animationDuration: 300, animationDurationUpdate: 200 };
 }
 
@@ -754,135 +1030,157 @@ function destroyCharts() {
 function loadCpuRingColor(pct: number): string {
   if (pct >= 85) return "#ef4444";
   if (pct >= 60) return "#f59e0b";
-  return "#22c55e";
+  return "#3474ff";
 }
 
 function cpuRingTrackColor(): string {
   return isDark.value ? "rgba(148,163,184,0.16)" : "rgba(148,163,184,0.2)";
 }
 
-/** Smooth progress ring: solid track underneath + rounded progress arc on top. */
-function buildCpuRingOption(opts: {
+/** 仪表盘拱形半环（无底边，类似汽车仪表）。 */
+function buildCpuArcOption(opts: {
   pct: number | null;
-  radius: [string, string];
-  center?: [string, string];
-  showCenterLabel?: boolean;
   centerTitle?: string;
+  /** Two-line subtitle under the percentage (main gauge). */
+  centerTitleLines?: { primary: string; secondary: string };
   valueFontSize?: number;
   unitFontSize?: number;
   titleFontSize?: number;
+  /** Arc span; default ~240° for main gauge. */
+  startAngle?: number;
+  endAngle?: number;
+  radius?: string;
+  center?: [string, string];
+  lineWidth?: number;
+  showLabels?: boolean;
 }): echarts.EChartsOption {
   const hasValue = opts.pct != null && !Number.isNaN(Number(opts.pct));
-  const pct = hasValue ? Math.max(0, Number(opts.pct)) : 0;
-  const ring = Math.min(100, pct);
-  const remain = Math.max(0, 100 - ring);
+  const pct = hasValue ? Math.max(0, Math.min(100, Number(opts.pct))) : 0;
   const color = hasValue ? loadCpuRingColor(pct) : "#94a3b8";
   const track = cpuRingTrackColor();
-  const center = opts.center || (["50%", "50%"] as [string, string]);
-  const radius = opts.radius;
+  const valueFill = isDark.value ? "#f8fafc" : "#0f172a";
+  const mutedFill = isDark.value ? "#94a3b8" : "#64748b";
+  const secondaryFill = isDark.value ? "#cbd5e1" : "#475569";
+  const valueSize = opts.valueFontSize ?? 30;
+  const unitSize = opts.unitFontSize ?? 14;
+  const titleSize = opts.titleFontSize ?? 12;
+  const title = (opts.centerTitle || "").trim();
+  const titleLines = opts.centerTitleLines;
+  const showLabels = opts.showLabels !== false;
+  const lineWidth = opts.lineWidth ?? 12;
+  const useTitleLines = Boolean(titleLines?.primary);
 
-  const series: echarts.SeriesOption[] = [
-    {
-      type: "pie",
-      radius,
-      center,
-      silent: true,
-      z: 1,
-      label: { show: false },
-      labelLine: { show: false },
-      animation: false,
-      data: [{ value: 100, itemStyle: { color: track } }],
-    },
-    {
-      type: "pie",
-      radius,
-      center,
-      silent: true,
-      z: 2,
-      startAngle: 90,
-      label: { show: false },
-      labelLine: { show: false },
-      data: [
-        {
-          value: hasValue && ring > 0 ? ring : 0,
-          itemStyle: {
-            color,
-            borderRadius: 100,
-          },
-        },
-        {
-          value: hasValue && ring > 0 ? Math.max(remain, 0.001) : 100,
-          itemStyle: { color: "transparent" },
-        },
-      ],
-    },
-  ];
-
-  const graphic: object[] = [];
-  if (opts.showCenterLabel) {
-    const valueSize = opts.valueFontSize ?? 28;
-    const unitSize = opts.unitFontSize ?? Math.max(10, Math.round(valueSize * 0.5));
-    const titleSize = opts.titleFontSize ?? 12;
-    const valueFill = isDark.value ? "#f8fafc" : "#0f172a";
-    const mutedFill = isDark.value ? "#94a3b8" : "#64748b";
-    const title = (opts.centerTitle || "").trim();
-    const hasTitle = Boolean(title) || !hasValue;
-
-    graphic.push({
-      type: "group",
-      left: "center",
-      top: hasTitle ? "38%" : "middle",
-      children: [
-        {
-          type: "text",
-          style: {
-            text: hasValue ? pct.toFixed(1) : "—",
-            fill: valueFill,
-            fontSize: valueSize,
-            fontWeight: 700,
-            textAlign: "right",
-            textVerticalAlign: "middle",
-          },
-          x: -1,
-          y: 0,
-        },
-        {
-          type: "text",
-          style: {
-            text: hasValue ? "%" : "",
-            fill: valueFill,
-            fontSize: unitSize,
-            fontWeight: 600,
-            textAlign: "left",
-            textVerticalAlign: "middle",
-          },
-          x: 1,
-          y: hasTitle ? Math.max(1, Math.round(valueSize * 0.08)) : 0,
-        },
-      ],
-    });
-
-    if (hasTitle) {
-      graphic.push({
-        type: "text",
-        left: "center",
-        top: "58%",
-        style: {
-          text: hasValue ? title : "暂无数据",
-          fill: mutedFill,
-          fontSize: titleSize,
-          align: "center",
-          verticalAlign: "middle",
-          lineHeight: titleSize + 4,
-        },
-      });
+  const detailFormatter = () => {
+    const valuePart = hasValue ? `{v|${pct.toFixed(1)}}{u|%}` : "{e|—}";
+    if (!showLabels) return valuePart;
+    if (useTitleLines && titleLines) {
+      // ECharts gauge rich 的 padding 对换行间距几乎无效，用空行 + height 拉开间距
+      return `${valuePart}\n{gap1| }\n{t|${titleLines.primary}}\n{gap2| }\n{s|${titleLines.secondary}}`;
     }
-  }
+    return valuePart;
+  };
 
   return {
     tooltip: { show: false },
-    series,
-    graphic,
+    series: [
+      {
+        type: "gauge",
+        center: opts.center || ["50%", "70%"],
+        radius: opts.radius || "83%",
+        startAngle: opts.startAngle ?? 210,
+        endAngle: opts.endAngle ?? -30,
+        min: 0,
+        max: 100,
+        splitNumber: 0,
+        silent: true,
+        axisLine: {
+          roundCap: true,
+          lineStyle: {
+            width: lineWidth,
+            color: [[1, track]],
+          },
+        },
+        progress: {
+          show: true,
+          roundCap: true,
+          width: lineWidth,
+          itemStyle: { color },
+        },
+        pointer: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: { show: false },
+        anchor: { show: false },
+        title: {
+          show: showLabels && !useTitleLines,
+          offsetCenter: [0, "18%"],
+          color: mutedFill,
+          fontSize: titleSize,
+          fontWeight: 500,
+        },
+        detail: {
+          show: showLabels,
+          valueAnimation: true,
+          // 整块文案相对圆心下移约 20px
+          offsetCenter: useTitleLines ? [0, 20] : [0, "-12%"],
+          formatter: detailFormatter,
+          rich: {
+            v: {
+              fontSize: valueSize,
+              fontWeight: 700,
+              color: valueFill,
+              lineHeight: valueSize + 4,
+              padding: [0, 1, 0, 0],
+            },
+            u: {
+              fontSize: unitSize,
+              fontWeight: 600,
+              color: valueFill,
+              lineHeight: valueSize + 4,
+              padding: [11, 0, 0, 1],
+            },
+            e: {
+              fontSize: valueSize,
+              fontWeight: 700,
+              color: valueFill,
+              lineHeight: valueSize + 4,
+            },
+            gap1: {
+              fontSize: 1,
+              lineHeight: 14,
+              height: 14,
+            },
+            gap2: {
+              fontSize: 1,
+              lineHeight: 2,
+              height: 2,
+            },
+            t: {
+              fontSize: titleSize,
+              fontWeight: 500,
+              color: secondaryFill,
+              lineHeight: titleSize + 4,
+              align: "center",
+            },
+            s: {
+              fontSize: Math.max(10, titleSize - 1),
+              fontWeight: 400,
+              color: mutedFill,
+              lineHeight: titleSize + 4,
+              align: "center",
+            },
+          },
+        },
+        data: [
+          {
+            value: hasValue ? pct : 0,
+            name: showLabels && !useTitleLines
+              ? (hasValue ? title || "容器 CPU" : "暂无数据")
+              : "",
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -890,34 +1188,39 @@ function updateLoadChart(silent = false) {
   upsertChart(
     "loadCpu",
     loadCpuEl.value,
-    buildCpuRingOption({
+    buildCpuArcOption({
       pct: systemMetrics.container_cpu_pct,
-      radius: ["64%", "82%"],
-      center: ["50%", "50%"],
-      showCenterLabel: true,
-      centerTitle: "容器 CPU",
-      valueFontSize: 28,
-      unitFontSize: 14,
+      centerTitleLines: {
+        primary: "容器 CPU 负载",
+        secondary: "一分钟均值",
+      },
+      valueFontSize: 36,
+      unitFontSize: 15,
       titleFontSize: 12,
+      // 容器内上下居中；环略放大，百分比更突出
+      center: ["50%", "52%"],
+      radius: "99%",
+      lineWidth: 14,
     }),
     undefined,
     silent,
   );
 
-  const miniKeys: ChartKey[] = ["loadMini0", "loadMini1"];
+  const miniKeys: ChartKey[] = ["loadMini0", "loadMini1", "loadMini2", "loadMini3"];
   loadMetricCards.value.forEach((item, idx) => {
     const key = miniKeys[idx];
     if (!key) return;
     upsertChart(
       key,
       loadMiniEls[idx] || undefined,
-      buildCpuRingOption({
+      buildCpuArcOption({
         pct: item.pct,
-        radius: ["58%", "74%"],
-        center: ["50%", "50%"],
-        showCenterLabel: true,
-        valueFontSize: 13,
-        unitFontSize: 10,
+        startAngle: 180,
+        endAngle: 0,
+        radius: "100%",
+        center: ["50%", "72%"],
+        lineWidth: 6,
+        showLabels: false,
       }),
       undefined,
       silent,
@@ -970,13 +1273,14 @@ function updateCharts(silent = false) {
     {
       tooltip: { trigger: "item" },
       legend: { bottom: 0, type: "scroll" },
-      stateAnimation: { duration: 280, easing: "cubicOut" },
       series: [{
         type: "pie",
         radius: ["42%", "68%"],
         padAngle: 3,
         itemStyle: { borderRadius: 6, borderWidth: 0 },
         label: { formatter: "{b}\n{d}%" },
+        // Hover scale transition (must live on series; root-level is ignored).
+        stateAnimation: { duration: 320, easing: "cubicOut" },
         emphasis: {
           scale: true,
           scaleSize: 8,
@@ -1001,12 +1305,19 @@ function updateCharts(silent = false) {
     "source",
     sourceEl.value,
     {
-      color: SOURCE_CHART_COLORS,
       tooltip: { trigger: "axis" },
       grid: { left: 12, right: 12, top: 16, bottom: 8, containLabel: true },
       xAxis: { type: "category", data: stats.source_split.map((s: any) => s.label || s.source) },
       yAxis: { type: "value", minInterval: 1 },
-      series: [{ type: "bar", barMaxWidth: 36, itemStyle: { borderRadius: [6, 6, 0, 0] }, data: stats.source_split.map((s: any) => s.count) }],
+      series: [{
+        type: "bar",
+        barMaxWidth: 36,
+        itemStyle: { borderRadius: [6, 6, 0, 0] },
+        data: stats.source_split.map((s: any, i: number) => ({
+          value: s.count,
+          itemStyle: { color: rankBarColor(i) },
+        })),
+      }],
     },
     (params) => {
       const item = stats.source_split[params.dataIndex];
@@ -1015,20 +1326,33 @@ function updateCharts(silent = false) {
     silent,
   );
 
-  const countries = [...stats.top_countries].reverse();
+  // Rank colors by original order (Top1 = first color), then reverse for y-axis display.
+  const countryBars = stats.top_countries.map((c: any, i: number) => ({
+    raw: c,
+    name: c.label || c.country,
+    value: c.count,
+    itemStyle: { color: rankBarColor(i) },
+  })).reverse();
   upsertChart(
     "country",
     countryEl.value,
     {
-      color: ["#2563eb"],
       tooltip: { trigger: "axis" },
       grid: { left: 12, right: 20, top: 8, bottom: 8, containLabel: true },
       xAxis: { type: "value", minInterval: 1 },
-      yAxis: { type: "category", data: countries.map((c: any) => c.label || c.country) },
-      series: [{ type: "bar", barMaxWidth: 18, itemStyle: { borderRadius: [0, 6, 6, 0] }, data: countries.map((c: any) => c.count) }],
+      yAxis: { type: "category", data: countryBars.map((c) => c.name) },
+      series: [{
+        type: "bar",
+        barMaxWidth: 18,
+        itemStyle: { borderRadius: [0, 6, 6, 0] },
+        data: countryBars.map((c) => ({
+          value: c.value,
+          itemStyle: c.itemStyle,
+        })),
+      }],
     },
     (params) => {
-      const item = countries[params.dataIndex];
+      const item = countryBars[params.dataIndex]?.raw;
       const country = item?.country || item?.key;
       if (country) goToLogs({ tab: "detail", geo_country: country });
     },
@@ -1361,86 +1685,282 @@ onUnmounted(() => {
   width: 150px !important;
 }
 
-.traffic-metrics-panel :deep(.ant-card-head) {
-  padding: 0 16px;
+.traffic-live-panel :deep(.ant-card-head) {
+  padding: 0 18px;
+  min-height: 52px;
 }
 
-.traffic-metrics-panel :deep(.ant-card-body) {
-  padding: 12px 14px 14px;
+.traffic-live-panel :deep(.ant-card-body) {
+  padding: 4px 18px 14px;
 }
 
-.metric-window-card {
-  height: 100%;
-  min-width: 0;
-  padding: 8px 10px;
-  border-radius: var(--fs-radius-sm);
-  background: var(--fs-bg-muted);
-  border: 1px solid var(--fs-border);
+.traffic-live-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.metric-window-label {
+.traffic-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
   font-size: 11px;
-  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.traffic-live-badge.is-live {
+  color: #15803d;
+  background: color-mix(in srgb, var(--fs-color-accent) 14%, transparent);
+}
+
+.traffic-live-badge.is-paused {
+  color: var(--fs-text-muted);
+  background: var(--fs-bg-muted);
+}
+
+.traffic-live-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.traffic-live-badge.is-live .traffic-live-badge__dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fs-color-accent) 28%, transparent);
+  animation: traffic-live-pulse 1.6s ease-out infinite;
+}
+
+@keyframes traffic-live-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fs-color-accent) 40%, transparent); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.traffic-live-hero {
+  display: flex;
+  padding: 14px 0;
+  gap: 20px;
+}
+
+.traffic-live-hero__metric {
+  flex:1;
+  min-width: 0;
+}
+
+.traffic-live-hero__label {
+  font-size: 12px;
   color: var(--fs-text-secondary);
 }
 
-.metric-window-value {
-  margin-top: 2px;
-  font-size: 22px;
-  line-height: 1.25;
+.traffic-live-hero__value {
+  margin-top: 4px;
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--fs-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-live-hero__meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--fs-text-muted);
+}
+
+.traffic-live-hero__delta {
+  font-weight: 600;
+}
+
+.traffic-live-hero__delta.is-ok { color: var(--fs-color-primary); }
+.traffic-live-hero__delta.is-warn { color: var(--fs-color-warning); }
+.traffic-live-hero__delta.is-danger { color: var(--fs-color-danger); }
+
+.traffic-live-hero__divider {
+  width: 1px;
+  align-self: stretch;
+  background: color-mix(in srgb, var(--fs-border) 40% ,transparent);
+  flex: none;
+}
+
+.traffic-live-hero__status {
+  flex: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+}
+
+.traffic-live-hero__status-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.traffic-live-hero__status.is-ok .traffic-live-hero__status-title { color: var(--fs-color-primary); }
+.traffic-live-hero__status.is-warn .traffic-live-hero__status-title { color: var(--fs-color-warning); }
+.traffic-live-hero__status.is-danger .traffic-live-hero__status-title { color: var(--fs-color-danger); }
+.traffic-live-hero__status.is-neutral .traffic-live-hero__status-title { color: var(--fs-text-secondary); }
+
+.traffic-live-hero__status-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fs-text-secondary);
+}
+
+.traffic-live-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 768px) {
+  .traffic-live-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+
+@media (min-width: 1200px) {
+  .traffic-live-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+
+.traffic-live-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--fs-radius-sm);
+  background: var(--fs-bg-muted);
+  border: 1px solid var(--fs-border);
+  transition: border-color var(--fs-transition), background var(--fs-transition), box-shadow var(--fs-transition);
+}
+
+
+.traffic-live-card.is-warn {
+  border-color: color-mix(in srgb, var(--fs-color-warning) 50%, var(--fs-border));
+  background: color-mix(in srgb, var(--fs-color-warning) 5%, var(--fs-bg-muted));
+}
+
+.traffic-live-card.is-danger {
+  border-color: color-mix(in srgb, var(--fs-color-danger) 50%, var(--fs-border));
+  background: color-mix(in srgb, var(--fs-color-danger) 5%, var(--fs-bg-muted));
+}
+
+.traffic-live-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.traffic-live-card__label {
+  font-size: 12px;
+  color: var(--fs-text-secondary);
+}
+
+.traffic-live-card__value {
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1.15;
   font-weight: 700;
   color: var(--fs-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
-.metric-window-meta {
-  margin-left: 4px;
-  font-size: 10px;
+.traffic-live-card__qps {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--fs-text-muted);
+}
+
+.traffic-live-card__status {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  color: var(--fs-text-secondary);
+  min-height: 18px;
+}
+
+.traffic-live-card__status-icon {
+  font-size: 13px;
+  flex: none;
+}
+
+.traffic-live-card__baseline-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.traffic-live-card.is-ok .traffic-live-card__status { color: #15803d; }
+.traffic-live-card.is-warn .traffic-live-card__status { color: #b45309; }
+.traffic-live-card.is-danger .traffic-live-card__status { color: #b91c1c; }
+.traffic-live-card.is-neutral .traffic-live-card__status { color: var(--fs-text-muted); }
+
+.traffic-live-card__ratio {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.traffic-live-card__learning {
   font-weight: 500;
-  color: var(--fs-text-muted);
-  white-space: nowrap;
+  opacity: 0.85;
 }
 
-.metric-window-sub {
-  margin-top: 8px;
-  font-size: 10px;
-  line-height: 1.35;
-  color: var(--fs-text-muted);
-}
-
-.metric-window-progress {
-  margin-top: 4px;
+.traffic-live-card__bar {
+  margin-top: auto;
+  padding-top: 10px;
   margin-bottom: 0;
 }
 
-.metric-window-progress :deep(.ant-progress-inner) {
-  height: 3px !important;
+.traffic-live-card__bar :deep(.ant-progress-inner) {
+  height: 4px !important;
+  background: color-mix(in srgb, var(--fs-border) 70%, transparent) !important;
 }
 
-.intel-item--warn {
-  border-color: var(--fs-color-warning);
-  background: color-mix(in srgb, var(--fs-color-warning) 10%, var(--fs-bg-muted));
+.traffic-live-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--fs-text-muted);
 }
 
-.intel-item--danger {
-  border-color: var(--fs-color-danger);
-  background: color-mix(in srgb, var(--fs-color-danger) 10%, var(--fs-bg-muted));
-}
+@media (max-width: 767px) {
+  .traffic-live-hero {
+    gap: 16px;
+  }
 
-.intel-item--warn .intel-deviation {
-  color: var(--fs-color-warning);
-}
+  .traffic-live-hero__value {
+    font-size: 28px;
+  }
 
-.intel-item--danger .intel-deviation {
-  color: var(--fs-color-danger);
-}
-
-.intel-deviation {
-  white-space: nowrap;
-}
-
-.intel-warmup {
-  color: #f59e0b;
-  white-space: nowrap;
+  .traffic-live-grid{
+    grid-template-columns: repeat(3,minmax(0,1fr));
+  }
 }
 
 .chart-box {
@@ -1454,8 +1974,51 @@ onUnmounted(() => {
 .load-card :deep(.ant-card-body) {
   display: flex;
   flex-direction: column;
+}
+
+.load-card-title {
+  display: inline-flex;
+  align-items: center;
   gap: 10px;
-  min-height: 320px;
+  flex-wrap: wrap;
+}
+
+.load-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.load-status-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.load-status-badge.is-ok {
+  color: #15803d;
+  background: color-mix(in srgb, var(--fs-color-accent) 14%, transparent);
+}
+
+.load-status-badge.is-warn {
+  color: #b45309;
+  background: color-mix(in srgb, var(--fs-color-warning) 14%, transparent);
+}
+
+.load-status-badge.is-danger {
+  color: #b91c1c;
+  background: color-mix(in srgb, var(--fs-color-danger) 12%, transparent);
+}
+
+.load-status-badge.is-neutral {
+  color: var(--fs-text-muted);
+  background: var(--fs-bg-muted);
 }
 
 .load-window-tag {
@@ -1463,46 +2026,117 @@ onUnmounted(() => {
   color: var(--fs-text-secondary);
 }
 
-.load-gauge-box {
-  height: 168px;
-  flex: 0 0 auto;
+.load-body {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+  justify-content: space-around;
 }
 
-.load-mini-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 6px;
-}
-
-.load-mini-item {
+.load-main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
   min-width: 0;
+  min-height: 0;
 }
 
-.load-mini-gauge {
-  width: 100%;
-  height: 112px;
+.load-gauge-box {
+  width: 240px;
+  height: 192px;
+  flex: none;
+  overflow: visible;
 }
 
-.load-mini-caption {
-  text-align: center;
+.load-main-foot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.load-main-foot.is-ok { color: #15803d; }
+.load-main-foot.is-warn { color: #b45309; }
+.load-main-foot.is-danger { color: #b91c1c; }
+.load-main-foot.is-neutral { color: var(--fs-text-muted); }
+
+.load-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  overflow: hidden;
+  min-height: 168px;
+  background: var(--fs-bg-surface);
+}
+
+.load-side-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: 4px;
+  padding: 10px 8px;
   min-width: 0;
-  padding: 0 2px;
+  min-height: 0;
+  background: var(--fs-bg-surface);
 }
 
-.load-mini-label {
-  margin-top: 0;
-  font-size: 11px;
+.load-side-card:nth-child(1),
+.load-side-card:nth-child(2) {
+  border-bottom: 1px solid var(--fs-border);
+}
+
+.load-side-card:nth-child(1),
+.load-side-card:nth-child(3) {
+  border-right: 1px solid var(--fs-border);
+}
+
+.load-side-card__label {
+  font-size: 12px;
   line-height: 1.3;
   color: var(--fs-text-secondary);
+  text-align: center;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
 }
+
+.load-side-card.is-host .load-side-card__label {
+  color: #2563eb;
+}
+
+.load-side-ring {
+  width: 56px;
+  height: 36px;
+  flex: none;
+}
+
+.load-side-card__value {
+  font-size: 20px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--fs-text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.load-side-card__unit {
+  margin-left: 1px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.load-side-card.is-warn .load-side-card__value { color: #b45309; }
+.load-side-card.is-danger .load-side-card__value { color: #b91c1c; }
+.load-side-card.is-neutral .load-side-card__value { color: var(--fs-text-muted); }
 
 .feed-card :deep(.ant-card-body) {
   padding-top: 8px;
@@ -1639,6 +2273,21 @@ onUnmounted(() => {
   line-height: 1.5;
   word-break: break-word;
 }
+@media (max-width: 1200px) {
+
+  .load-body {
+    flex-direction: column;
+  }
+
+
+}
+
+@media (max-width: 992px) {
+
+.load-body {
+  flex-direction: row;
+}
+}
 
 @media (max-width: 767px) {
   .feed-timeline-top {
@@ -1681,12 +2330,12 @@ onUnmounted(() => {
     min-height: 0;
   }
 
-  .load-gauge-box {
-    height: 140px;
+  .load-body {
+    flex-direction: column;
   }
 
-  .load-mini-gauge {
-    height: 96px;
+  .load-side {
+    min-height: 200px;
   }
 }
 </style>

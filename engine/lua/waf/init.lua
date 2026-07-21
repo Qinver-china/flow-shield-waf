@@ -31,6 +31,14 @@ local function traffic_tick(premature)
     end
 end
 
+local function traffic_hydrate(premature)
+    if premature then return end
+    local ok, err = pcall(traffic_counter.hydrate_from_redis)
+    if not ok then
+        ngx.log(ngx.ERR, "waf init: traffic hydrate error: ", err)
+    end
+end
+
 function _M.start()
     pcall(catalog.load)
 
@@ -41,6 +49,10 @@ function _M.start()
     local ok2, err2 = ngx.timer.every(POLL_INTERVAL, poll)
     if not ok2 then
         ngx.log(ngx.ERR, "waf init: failed to create poll timer: ", err2)
+    end
+    local okh, errh = ngx.timer.at(2, traffic_hydrate)
+    if not okh then
+        ngx.log(ngx.ERR, "waf init: failed to create traffic hydrate timer: ", errh)
     end
     local ok3, err3 = ngx.timer.every(TRAFFIC_INTERVAL, traffic_tick)
     if not ok3 then

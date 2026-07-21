@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from collections import deque
 from typing import Any
@@ -21,6 +22,15 @@ _METRIC_KEYS = (
     "container_cpu_pct",
     "host_cpu_pct",
 )
+
+# Require most of the theoretical samples for a window (tolerate a few missed ticks).
+_WINDOW_SAMPLE_FILL_RATIO = 0.8
+
+
+def _min_samples_for_window(window_sec: int) -> int:
+    """Minimum samples before a window average may be published."""
+    expected = window_sec / max(1, SYSTEM_METRICS_SAMPLE_INTERVAL_SEC)
+    return max(2, int(math.ceil(expected * _WINDOW_SAMPLE_FILL_RATIO)))
 
 
 class SystemMetricsCollector:
@@ -52,14 +62,37 @@ class SystemMetricsCollector:
         return {
             "updated_at": int(now),
             "sample_interval_sec": SYSTEM_METRICS_SAMPLE_INTERVAL_SEC,
+            "collecting_sec": round(self._collection_age(now), 1),
             "instant": instant,
             "windows": windows,
         }
 
+    def _collection_age(self, now: float) -> float:
+        """Seconds since the oldest sample still in the ring (0 if empty)."""
+        if not self._ring:
+            return 0.0
+        return max(0.0, now - self._ring[0].ts)
+
+    def _window_ready(self, now: float, window_sec: int, rows: list[CpuSample]) -> bool:
+        """True only when we have collected for a full window with enough samples."""
+        if self._collection_age(now) < window_sec:
+            return False
+        return len(rows) >= _min_samples_for_window(window_sec)
+
     def _avg_window(self, now: float, window_sec: int) -> dict[str, Any]:
         cutoff = now - window_sec
         rows = [s for s in self._ring if s.ts >= cutoff]
-        out: dict[str, Any] = {"samples": len(rows)}
+        ready = self._window_ready(now, window_sec, rows)
+        out: dict[str, Any] = {
+            "samples": len(rows),
+            "ready": ready,
+            "min_samples": _min_samples_for_window(window_sec),
+        }
+        if not ready:
+            for key in _METRIC_KEYS:
+                out[f"{key}_avg"] = None
+            return out
+
         for key in _METRIC_KEYS:
             vals = [getattr(s, key) for s in rows if getattr(s, key) is not None]
             out[f"{key}_avg"] = round(sum(vals) / len(vals), 3) if vals else None
@@ -113,11 +146,17 @@ def window_metric_value(
     window_sec: int,
     metric: str,
 ) -> float | None:
-    """Read a window average metric from a snapshot."""
+    """Read a window average metric from a snapshot.
+
+    Unready windows (not enough elapsed time / samples) return None so rules,
+    alerts, and the dashboard treat them as missing data.
+    """
     if not snapshot:
         return None
     windows = snapshot.get("windows") or {}
     row = windows.get(str(int(window_sec))) or {}
+    if row.get("ready") is False:
+        return None
     key = metric if str(metric).endswith("_avg") else f"{metric}_avg"
     val = row.get(key)
     try:

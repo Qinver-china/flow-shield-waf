@@ -29,6 +29,8 @@ async def _wait_or_stop(stop: asyncio.Event | None, timeout: float) -> bool:
 
 async def run_system_metrics_loop(stop: asyncio.Event | None = None) -> None:
     collector = get_collector()
+    # Drop any pre-restart Redis snapshot so rules/UI do not reuse stale window avgs.
+    await collector.publish(collector.build_snapshot())
     log.info(
         "system metrics collector waiting %ss after startup before sampling (interval=%ss)",
         SYSTEM_METRICS_STARTUP_DELAY_SEC,

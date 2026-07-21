@@ -34,7 +34,7 @@ from app.services.traffic_intel.windows import is_baseline_stable
 
 router = APIRouter()
 
-SITE_CARD_TRAFFIC_WINDOWS_SEC = (300, 1800, 3600)
+SITE_CARD_TRAFFIC_WINDOWS_SEC = (300, 1800, 3600, 86400)
 
 
 async def _sync(db: AsyncSession) -> None:

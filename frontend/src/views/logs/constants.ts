@@ -512,6 +512,7 @@ export const trafficWindowLabels: Record<number, string> = {
   300: "5 分钟",
   1800: "30 分钟",
   3600: "60 分钟",
+  86400: "24 小时",
 };
 
 export type LogFilterFieldType = "text" | "select" | "bool" | "number" | "site" | "rule_id" | "cookie";
