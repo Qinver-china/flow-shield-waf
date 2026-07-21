@@ -220,7 +220,8 @@ const pageTitle = computed(() => (route.meta.title as string) || "");
 
 function onMenu({ key }: { key: string }) {
   drawerOpen.value = false;
-  router.push(key);
+  // Chunk load failures are recovered in router.onError; swallow the rejected push.
+  void router.push(key).catch(() => undefined);
 }
 
 function onOpenChange(keys: string[]) {

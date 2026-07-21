@@ -1,4 +1,28 @@
-import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory, type RouteLocationNormalized } from "vue-router";
+
+/**
+ * Browsers cache a rejected dynamic import(); after a brief network blip the same
+ * chunk URL keeps failing until a full page load clears that entry.
+ */
+function isChunkLoadError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error ?? "");
+  return /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk \d+ failed/i.test(
+    msg,
+  );
+}
+
+/** Hard-navigate to the target route so chunks are fetched with a clean module map. */
+function recoverFromChunkLoadError(to: RouteLocationNormalized): void {
+  const key = "fs:chunk-reload-at";
+  const last = Number(sessionStorage.getItem(key) || "0");
+  // Avoid reload loops while the network is still down.
+  if (Date.now() - last < 10_000) return;
+  sessionStorage.setItem(key, String(Date.now()));
+
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  const path = to.fullPath.startsWith("/") ? to.fullPath : `/${to.fullPath}`;
+  window.location.assign(`${base}${path}`);
+}
 
 const router = createRouter({
   history: createWebHistory(),
@@ -37,6 +61,29 @@ router.beforeEach((to) => {
     return "/dashboard";
   }
   return true;
+});
+
+const preloadChunkErrors = new Set<unknown>();
+
+window.addEventListener("vite:preloadError", (event) => {
+  preloadChunkErrors.add(event.payload);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  if (isChunkLoadError(event.reason) || preloadChunkErrors.has(event.reason)) {
+    event.preventDefault();
+  }
+});
+
+router.onError((error, to) => {
+  if (isChunkLoadError(error) || preloadChunkErrors.has(error)) {
+    preloadChunkErrors.delete(error);
+    recoverFromChunkLoadError(to);
+  }
+});
+
+router.afterEach(() => {
+  sessionStorage.removeItem("fs:chunk-reload-at");
 });
 
 export default router;
