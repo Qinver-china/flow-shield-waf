@@ -98,9 +98,8 @@ flow-shield-waf/
 │   ├── baota/              # 宝塔一键部署
 │   └── smoke_test.sh       # 集成回归脚本
 ├── scripts/
-│   ├── fresh-start.sh         # 清空数据卷并重建（开发/测试用）
-│   ├── migrate-app-volume.sh  # 旧六卷 → app_data 一次性迁移
-│   └── stress_test.py         # 防护分阶段 QPS 压测
+│   ├── fresh-start.sh      # 清空数据卷并重建（开发/测试用）
+│   └── stress_test.py      # 防护分阶段 QPS 压测
 └── docs/                   # 架构 / 规则 DSL / API / 压测文档
 ```
 
@@ -337,8 +336,6 @@ docker compose down                  # 停止所有服务
 | `flowshield-waf_app_data` | 业务数据：`/data/waf.db`、引擎 conf/certs |
 | `flowshield-waf_redis_data` | Redis 持久化（可空卷重建） |
 | `flowshield-waf_clickhouse_data` | 防护日志（可空卷重建） |
-
-从旧六卷布局升级时，先执行：`./scripts/migrate-app-volume.sh`（详见 [`docs/upgrade.md`](docs/upgrade.md)）。
 
 ---
 

@@ -104,8 +104,6 @@ docker compose down               # 停止（勿加 -v，否则会删数据卷�
 | `flowshield-waf_redis_data` | Redis 持久化（可空卷重建） |
 | `flowshield-waf_clickhouse_data` | 防护日志与流水事件（可空卷重建） |
 
-从旧六卷布局升级时，先执行：`bash scripts/migrate-app-volume.sh`。
-
 备份示例：
 
 ```bash

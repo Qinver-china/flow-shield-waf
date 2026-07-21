@@ -27,22 +27,6 @@ diff .env.example .env || true
 echo "==> 备份 .env"
 cp .env ".env.bak.$(date +%Y%m%d%H%M)"
 
-PROJECT="${COMPOSE_PROJECT_NAME:-flowshield-waf}"
-if docker volume inspect "${PROJECT}_waf_sqlite" >/dev/null 2>&1; then
-  need_migrate=0
-  if ! docker volume inspect "${PROJECT}_app_data" >/dev/null 2>&1; then
-    need_migrate=1
-  else
-    has_db="$(docker run --rm -v "${PROJECT}_app_data:/to:ro" alpine \
-      sh -c 'test -f /to/waf.db && echo yes || echo no' 2>/dev/null || echo no)"
-    [ "$has_db" = "yes" ] || need_migrate=1
-  fi
-  if [ "$need_migrate" = "1" ]; then
-    echo "==> 检测到旧数据卷布局，先执行卷迁移"
-    bash scripts/migrate-app-volume.sh
-  fi
-fi
-
 echo "==> 重建并启动"
 $COMPOSE up -d --build
 
