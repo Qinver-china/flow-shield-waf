@@ -6,6 +6,7 @@
 
 - Docker 命名卷由 6 个收敛为 3 个：`app_data`（SQLite + 引擎 conf/certs）、`redis_data`、`clickhouse_data`
 - Compose 中 Redis 改为默认 TCP，移除 `redis_run` Unix Socket 共享卷
+- 移除镜像内 `/data/engine/conf.d`、`/data/engine/certs` 的 `VOLUME` 声明，避免匿名卷盖住 `app_data`
 - 已部署环境升级前执行 `scripts/migrate-app-volume.sh`（`deploy/baota/upgrade.sh` 会自动检测并迁移）
 
 ## [0.3.7] - 2026-07-20

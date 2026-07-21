@@ -94,6 +94,7 @@ RUN chmod +x /entrypoint.sh /opt/flowshield/wait-for.sh /opt/flowshield/wait-for
 
 EXPOSE 80 443 9000
 
-VOLUME ["/data/engine/conf.d", "/data/engine/certs"]
+# 不在此声明 VOLUME：conf/certs 已并入 compose 的 app_data:/data。
+# 若保留子路径 VOLUME，Docker 会自动挂匿名卷盖住 app_data 内同名目录。
 
 ENTRYPOINT ["/entrypoint.sh"]
