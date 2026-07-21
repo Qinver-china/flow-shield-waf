@@ -127,7 +127,10 @@
                 </div>
                 <div class="traffic-live-card__value">{{ formatTrafficCount(w.requests) }}</div>
                 <div class="traffic-live-card__qps">{{ formatQps(w.qps) }} QPS</div>
-                <div class="traffic-live-card__status">
+                <div
+                  class="traffic-live-card__status"
+                  :class="{ 'is-baseline-ghost': !liveTrafficHasBaselineWindow(w) }"
+                >
                   <component :is="liveTrafficStatusIcon(w)" class="traffic-live-card__status-icon" />
                   <span class="traffic-live-card__baseline-text">
                     <template v-if="w.baseline_avg != null">
@@ -796,6 +799,11 @@ type LiveTrafficWindow = {
   baseline_warmup?: boolean;
   deviation_ratio?: number | null;
 };
+
+function liveTrafficHasBaselineWindow(w: LiveTrafficWindow) {
+  // 与后端 TRAFFIC_BASELINE_WINDOWS_SEC 对齐：10s / 30s 不学基线
+  return w.window_sec !== 10 && w.window_sec !== 30;
+}
 
 function liveTrafficCardClass(w: LiveTrafficWindow) {
   if (w.baseline_avg == null && (w.threshold == null || w.threshold <= 0)) {
@@ -1897,6 +1905,12 @@ onUnmounted(() => {
   flex-wrap: wrap;
   color: var(--fs-text-secondary);
   min-height: 18px;
+}
+
+.traffic-live-card__status.is-baseline-ghost {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
 }
 
 .traffic-live-card__status-icon {
