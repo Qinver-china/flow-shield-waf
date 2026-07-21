@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +15,6 @@ from app.services.traffic_intel.types import (
     TrafficIntelConfig,
 )
 from app.services.traffic_intel.windows import label, stable_min_samples
-
-log = logging.getLogger("waf.traffic_intel.detector")
 
 
 class AnomalyDetector:
@@ -93,7 +90,6 @@ class AnomalyDetector:
             f"{scope} {win} 请求量 {current}，"
             f"高于基线 {baseline.avg_requests:.0f} 的 {pct}%（阈值 +{int(config.spike_ratio * 100)}%）"
         )
-        log.info("traffic anomaly: %s", message)
         return AnomalyResult(
             site_id=baseline.site_id,
             window_sec=baseline.window_sec,

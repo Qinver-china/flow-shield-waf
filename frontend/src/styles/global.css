@@ -186,6 +186,11 @@ code,
   background: var(--fs-bg-muted);
 }
 
+/* Card 标题底部分割线：相对主题边框减淡一半（日/夜均走 --fs-border） */
+.ant-card .ant-card-head {
+  border-bottom-color: color-mix(in srgb, var(--fs-border) 50%, transparent);
+}
+
 /* Table pagination: PC keeps default bordered size; mobile is borderless mini */
 @media (max-width: 767px) {
   .ant-pagination .ant-pagination-item,

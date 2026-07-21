@@ -161,11 +161,6 @@ async def intel_status(
             and not is_baseline_stable(window_sec, baseline.sample_count)
         )
         ratio = (current / baseline_avg) if baseline_avg and baseline_avg > 0 else None
-        threshold = (
-            baseline_avg * (1 + config.spike_ratio)
-            if baseline_avg and baseline_avg > 0
-            else None
-        )
         windows.append(
             WindowComparison(
                 window_sec=window_sec,
@@ -176,11 +171,7 @@ async def intel_status(
                 baseline_warmup=baseline_warmup,
                 deviation_ratio=round(ratio, 3) if ratio is not None else None,
                 spike_threshold_ratio=config.spike_ratio,
-                is_anomaly=bool(
-                    threshold is not None
-                    and not baseline_warmup
-                    and current > threshold
-                ),
+                is_anomaly=False,
             )
         )
 

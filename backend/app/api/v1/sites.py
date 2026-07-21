@@ -27,7 +27,7 @@ from app.constants.traffic_windows import TRAFFIC_WINDOW_LABELS
 from app.services.logging.query_clickhouse import stats_sites_24h_compare
 from app.services.traffic_intel.windows import label as traffic_window_label
 from app.services.site_domains import apply_domains_to_site, ensure_domains_available
-from app.services.traffic_intel.constants import DEFAULT_SPIKE_RATIO, REDIS_SNAPSHOT_KEY
+from app.services.traffic_intel.constants import REDIS_SNAPSHOT_KEY
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.windows import is_baseline_stable
@@ -177,7 +177,6 @@ async def sites_metrics(
                 continue
 
         traffic_windows = []
-        site_anomaly = False
         for sec in SITE_CARD_TRAFFIC_WINDOWS_SEC:
             w = by_sec.get(sec) or {}
             current = int(w.get("requests") or 0)
@@ -185,7 +184,6 @@ async def sites_metrics(
             baseline_avg = None
             baseline_warmup = False
             deviation_ratio = None
-            is_anomaly = False
             if sec in TRAFFIC_BASELINE_WINDOWS_SEC:
                 baseline = await baselines.get(
                     db,
@@ -199,13 +197,6 @@ async def sites_metrics(
                     baseline_warmup = not is_baseline_stable(sec, baseline.sample_count)
                     if baseline.avg_requests > 0:
                         deviation_ratio = round(current / float(baseline.avg_requests), 3)
-                        threshold = baseline.avg_requests * (1 + DEFAULT_SPIKE_RATIO)
-                        is_anomaly = (
-                            not baseline_warmup
-                            and current > threshold
-                        )
-            if is_anomaly:
-                site_anomaly = True
             traffic_windows.append(
                 {
                     "window_sec": sec,
@@ -220,7 +211,7 @@ async def sites_metrics(
                     "baseline_avg": baseline_avg,
                     "baseline_warmup": baseline_warmup,
                     "deviation_ratio": deviation_ratio,
-                    "is_anomaly": is_anomaly,
+                    "is_anomaly": False,
                 }
             )
 
@@ -235,7 +226,7 @@ async def sites_metrics(
             "unique_ips_24h_delta_pct": stat.get("unique_ips_delta_pct"),
             "block_rate": round(blocked * 100 / requests, 1) if requests else 0.0,
             "traffic_windows": traffic_windows,
-            "anomaly": site_anomaly,
+            "anomaly": False,
             # legacy alias
             "hits_24h": requests,
         }

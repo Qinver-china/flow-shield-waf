@@ -12,7 +12,6 @@ from app.constants.alert_conditions import CONDITION_TYPE_MAP
 from app.models.ai_guard import AiGuardPolicy
 from app.services.ai_guard.defense.triggers import normalize_legacy_trigger_params
 from app.services.notifications.evaluator import AlertPolicyEvaluator
-from app.services.traffic_intel.types import AnomalyResult
 
 log = logging.getLogger("waf.ai_guard.trigger")
 
@@ -70,39 +69,13 @@ def _snapshot_from_hit(
     return snapshot
 
 
-async def evaluate_policy(
-    db: AsyncSession, policy: AiGuardPolicy, *, anomaly: AnomalyResult | None = None
-) -> dict | None:
+async def evaluate_policy(db: AsyncSession, policy: AiGuardPolicy) -> dict | None:
     """Return a trigger snapshot when ``policy`` should fire, else ``None``."""
     if not policy.enabled or _in_cooldown(policy):
         return None
 
     params = normalize_legacy_trigger_params(policy.trigger_type, policy.trigger_params)
     ttype = policy.trigger_type
-
-    if ttype == "traffic_intel.anomaly":
-        if anomaly is None:
-            return None
-        want = params.get("window_sec")
-        if want not in (None, "") and int(want) != anomaly.window_sec:
-            return None
-        site_id = anomaly.site_id
-        want_site = params.get("site_id")
-        if want_site not in (None, "") and site_id is not None and int(want_site) != int(site_id):
-            return None
-        if want_site not in (None, "") and site_id is None:
-            return None
-        if not _matches_filter(policy, site_id):
-            return None
-        return _snapshot_from_hit(
-            trigger_type=ttype,
-            params={**params, "window_sec": anomaly.window_sec, "site_id": site_id},
-            message=anomaly.message,
-            extra={
-                "current_requests": anomaly.current_requests,
-                "baseline_avg": anomaly.baseline_avg,
-            },
-        )
 
     if ttype not in CONDITION_TYPE_MAP:
         log.warning("unsupported ai guard trigger type: %s", ttype)

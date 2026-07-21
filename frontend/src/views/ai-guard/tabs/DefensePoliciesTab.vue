@@ -126,7 +126,6 @@ const batchConfig: BatchConfig = {
 /** Default trigger params aligned with alert policy defaults. */
 function defaultParamsFor(type: string): Record<string, unknown> {
   if (type === "traffic.burst_logging") return {};
-  if (type === "traffic_intel.anomaly") return {};
   if (type.startsWith("traffic.baseline")) return { window_sec: 300, percent: 50 };
   if (type.startsWith("traffic.abs")) return { window_sec: 300, threshold: 1000 };
   if (type.startsWith("traffic.qps")) return { window_sec: 60, threshold: 100 };

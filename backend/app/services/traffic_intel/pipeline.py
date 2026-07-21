@@ -1,4 +1,4 @@
-"""Orchestrates ingest → baseline refresh → anomaly detection → actions."""
+"""Orchestrates ingest → baseline refresh (no built-in anomaly alerting)."""
 from __future__ import annotations
 
 import asyncio
@@ -10,19 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import SessionLocal
 from app.models import Site
-from app.services.traffic_intel.actions import ActionDispatcher
 from app.services.traffic_intel.baseline import BaselineCalculator
 from app.services.traffic_intel.constants import (
-    DEFAULT_ALERT_COOLDOWN_SEC,
     DEFAULT_BASELINE_LOOKBACK_DAYS,
     DEFAULT_BASELINE_RECALC_INTERVAL_SEC,
     DEFAULT_INGEST_INTERVAL_SEC,
     DEFAULT_MIN_BASELINE_SAMPLES,
     DEFAULT_SPIKE_RATIO,
 )
-from app.services.traffic_intel.detector import AnomalyDetector
 from app.services.traffic_intel.ingest import SnapshotIngestor
-from app.services.traffic_intel.store.alerts_clickhouse import AlertStore
 from app.services.traffic_intel.redis_baselines import publish_baselines_to_redis
 from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.types import TrafficIntelConfig
@@ -31,28 +27,26 @@ log = logging.getLogger("waf.traffic_intel.pipeline")
 
 
 class TrafficIntelPipeline:
-    """Main entry for the traffic intelligence worker loop."""
+    """Main entry for the traffic intelligence worker loop.
+
+    Learns baselines and publishes snapshots for rule/alert conditions
+    (``traffic.baseline_*``). Built-in spike auto-alerts are intentionally
+    disabled — operators configure thresholds via alert / AI Guard policies.
+    """
 
     def __init__(
         self,
         config: TrafficIntelConfig | None = None,
         ingestor: SnapshotIngestor | None = None,
         baseline_calc: BaselineCalculator | None = None,
-        detector: AnomalyDetector | None = None,
-        dispatcher: ActionDispatcher | None = None,
-        alert_store: AlertStore | None = None,
     ):
         self.config = config or TrafficIntelConfig(
             spike_ratio=DEFAULT_SPIKE_RATIO,
             baseline_lookback_days=DEFAULT_BASELINE_LOOKBACK_DAYS,
             min_baseline_samples=DEFAULT_MIN_BASELINE_SAMPLES,
-            alert_cooldown_sec=DEFAULT_ALERT_COOLDOWN_SEC,
         )
         self._ingestor = ingestor or SnapshotIngestor()
         self._baseline = baseline_calc or BaselineCalculator()
-        self._detector = detector or AnomalyDetector()
-        self._dispatcher = dispatcher or ActionDispatcher()
-        self._alerts = alert_store or AlertStore()
         self._last_baseline_at = 0.0
 
     async def _baseline_scopes(self, db: AsyncSession) -> list[int | None]:
@@ -79,35 +73,6 @@ class TrafficIntelPipeline:
                 )
                 await publish_baselines_to_redis(db)
                 self._last_baseline_at = now
-
-            all_anomalies = []
-            for site_id in await self._baseline_scopes(db):
-                anomalies = await self._detector.evaluate_scope(
-                    db,
-                    self.config,
-                    site_id=site_id,
-                    timezone_name=timezone_name,
-                )
-                all_anomalies.extend(anomalies)
-            filtered = await self._filter_cooldown(db, all_anomalies)
-            if filtered:
-                await self._dispatcher.dispatch(db, filtered, self.config)
-
-    async def _filter_cooldown(
-        self,
-        db: AsyncSession,
-        anomalies: list,
-    ) -> list:
-        kept = []
-        for a in anomalies:
-            recent = await self._alerts.recent_open_count(
-                site_id=a.site_id,
-                window_sec=a.window_sec,
-                within_sec=self.config.alert_cooldown_sec,
-            )
-            if recent == 0:
-                kept.append(a)
-        return kept
 
 
 async def run_pipeline_loop(

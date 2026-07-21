@@ -97,7 +97,7 @@
       <a-col :xs="24" :md="10">
         <a-card class="panel-card intel-card traffic-metrics-panel" :bordered="false">
           <template #title>
-            <span class="panel-title"><alert-outlined /> 流量异常检测</span>
+            <span class="panel-title"><alert-outlined /> 流量与基线</span>
           </template>
           <template #extra>
             <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
@@ -105,7 +105,7 @@
           <a-empty v-if="!intelDisplayWindows.length" description="暂无数据" />
           <a-row v-else class="traffic-metrics-grid" :gutter="[8, 8]">
             <a-col v-for="w in intelDisplayWindows" :key="w.window_sec" :xs="12" :sm="12" :md="12" :lg="6" :xl="6">
-              <div class="metric-window-card intel-item" :class="{ anomaly: w.is_anomaly }">
+              <div class="metric-window-card intel-item" :class="intelBaselineClass(w)">
                 <div class="metric-window-label">{{ w.label }}</div>
                 <div class="metric-window-value">
                   {{ w.current_requests }}
@@ -308,6 +308,7 @@ import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
 import { formatClockTime, formatDateTime, formatDateTimeShort } from "@/utils/datetime";
 import { lineAreaGradient } from "@/utils/lineAreaGradient";
+import { baselineTone } from "@/utils/baselineTone";
 import { trafficWindowLabels } from "@/views/logs/constants";
 
 interface CountPair {
@@ -458,7 +459,7 @@ const loadMetricCards = computed(() => {
   ];
 });
 
-/** 异常检测仅展示有基线学习能力的窗口（排除 10s / 30s） */
+/** 基线对比仅展示有基线学习能力的窗口（排除 10s / 30s） */
 const intelDisplayWindows = computed(() =>
   (intel.windows || []).filter((w: { window_sec: number }) => w.window_sec !== 10 && w.window_sec !== 30),
 );
@@ -557,6 +558,16 @@ function formatIntelDeviation(ratio: number) {
   const delta = ratio * 100 - 100;
   const sign = delta > 0 ? "+" : "";
   return `${sign}${delta.toFixed(0)}%`;
+}
+
+function intelBaselineClass(w: {
+  deviation_ratio?: number | null;
+  baseline_warmup?: boolean;
+}) {
+  const tone = baselineTone(w.deviation_ratio, w.baseline_warmup);
+  if (tone === "warn") return "intel-item--warn";
+  if (tone === "danger") return "intel-item--danger";
+  return "";
 }
 
 function progressColor(requests: number, threshold: number) {
@@ -1405,9 +1416,22 @@ onUnmounted(() => {
   height: 3px !important;
 }
 
-.intel-item.anomaly {
+.intel-item--warn {
   border-color: var(--fs-color-warning);
   background: color-mix(in srgb, var(--fs-color-warning) 10%, var(--fs-bg-muted));
+}
+
+.intel-item--danger {
+  border-color: var(--fs-color-danger);
+  background: color-mix(in srgb, var(--fs-color-danger) 10%, var(--fs-bg-muted));
+}
+
+.intel-item--warn .intel-deviation {
+  color: var(--fs-color-warning);
+}
+
+.intel-item--danger .intel-deviation {
+  color: var(--fs-color-danger);
 }
 
 .intel-deviation {

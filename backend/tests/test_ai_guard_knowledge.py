@@ -72,6 +72,6 @@ def test_defense_knowledge_includes_trigger_types():
     assert "system.container_cpu_gt" in types
     assert "system.host_cpu_gt" in types
     assert "system.load_per_core_gt" not in types
-    assert "traffic_intel.anomaly" in types
+    assert "traffic_intel.anomaly" not in types
     assert "suggest_only" in defense["apply_mode_values"]
     assert any("blacklist" in note for note in defense["rule_generation_notes"])

@@ -45,8 +45,6 @@ async def run_ai_guard_loop(stop_event=None) -> None:
                     else:
                         policies = await list_enabled_policies(db)
                         for policy in policies:
-                            if policy.trigger_type == "traffic_intel.anomaly":
-                                continue
                             snapshot = await evaluate_policy(db, policy)
                             if snapshot is None:
                                 continue

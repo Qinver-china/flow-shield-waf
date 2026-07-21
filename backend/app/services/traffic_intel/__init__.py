@@ -4,15 +4,14 @@ Layers
 ------
 1. **采集 (ingest)** — read engine Redis snapshot, persist minute + window history to ClickHouse.
 2. **基线 (baseline)** — learn same-slot median (weekday + hour + quarter) per global/site.
-   Warm-start widens to same hour / hour-only when history is sparse; alerts wait for stable samples.
-3. **检测 (detector)** — flag spikes when current > baseline × (1 + spike_ratio).
-4. **动作 (actions)** — persist alerts, log/notify (extend with webhooks).
+   Warm-start widens to same hour / hour-only when history is sparse.
+3. **条件比较 (detector helpers)** — used by alert / AI Guard ``traffic.baseline_*`` policies.
+   Built-in auto spike alerting is disabled.
 
 Extend
 ------
 - Add per-site scopes: extend engine snapshot + pass site_ids into pipeline.
 - Swap baseline strategy in ``baseline/strategies.py``.
-- Register custom handlers on ``ActionDispatcher``.
 """
 from app.services.traffic_intel.baseline import BaselineCalculator, SameSlotHourlyStrategy
 from app.services.traffic_intel.constants import ANALYSIS_WINDOWS_SEC, REALTIME_WINDOWS_SEC

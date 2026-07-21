@@ -125,7 +125,7 @@
           v-for="w in trafficWindows"
           :key="w.window_sec"
           class="traffic-card"
-          :class="{ 'traffic-card--anomaly': w.is_anomaly }"
+          :class="trafficBaselineClass(w)"
         >
           <div class="traffic-card__label">{{ w.label }}</div>
           <div
@@ -176,6 +176,7 @@ import { clientIpSourceLabel } from "@/constants/clientIpSource";
 import { useLogNavigation } from "@/composables/useLogNavigation";
 import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
 import { useResourceQuickActions } from "@/composables/useResourceQuickActions";
+import { baselineTone } from "@/utils/baselineTone";
 
 export type SiteTrafficWindow = {
   window_sec: number;
@@ -318,6 +319,13 @@ function formatDeviation(ratio: number) {
   const delta = ratio * 100 - 100;
   const sign = delta > 0 ? "+" : "";
   return `${sign}${delta.toFixed(0)}%`;
+}
+
+function trafficBaselineClass(w: SiteTrafficWindow) {
+  const tone = baselineTone(w.deviation_ratio, w.baseline_warmup);
+  if (tone === "warn") return "traffic-card--warn";
+  if (tone === "danger") return "traffic-card--danger";
+  return "";
 }
 </script>
 
@@ -557,9 +565,14 @@ function formatDeviation(ratio: number) {
   text-align: center;
 }
 
-.traffic-card--anomaly {
+.traffic-card--warn {
   border-color: color-mix(in srgb, var(--fs-color-warning) 45%, var(--fs-border));
   background: color-mix(in srgb, var(--fs-color-warning) 10%, var(--fs-bg-muted));
+}
+
+.traffic-card--danger {
+  border-color: color-mix(in srgb, var(--fs-color-danger) 45%, var(--fs-border));
+  background: color-mix(in srgb, var(--fs-color-danger) 10%, var(--fs-bg-muted));
 }
 
 .traffic-card__label {
@@ -599,8 +612,12 @@ function formatDeviation(ratio: number) {
   color: var(--fs-text-secondary);
 }
 
-.traffic-card--anomaly .traffic-card__deviation {
+.traffic-card--warn .traffic-card__deviation {
   color: var(--fs-color-warning);
+}
+
+.traffic-card--danger .traffic-card__deviation {
+  color: var(--fs-color-danger);
 }
 
 .site-card__actions {

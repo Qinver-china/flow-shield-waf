@@ -1,15 +1,16 @@
-"""Action handlers invoked when an anomaly is detected."""
+"""Action handlers for traffic anomalies (kept for tests / optional wiring).
+
+Built-in auto-alerting is disabled; the traffic intel pipeline no longer
+dispatches these handlers. Alert / AI Guard policies use ``traffic.baseline_*``.
+"""
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.traffic_intel.store.alerts_clickhouse import AlertStore
 from app.services.traffic_intel.types import AnomalyResult, TrafficIntelConfig
-
-log = logging.getLogger("waf.traffic_intel.actions")
 
 
 class ActionHandler(ABC):
@@ -23,7 +24,7 @@ class ActionHandler(ABC):
 
 
 class PersistAlertHandler(ActionHandler):
-    """Always record anomalies in ClickHouse."""
+    """Record anomalies in ClickHouse (unused by default pipeline)."""
 
     def __init__(self, store: AlertStore | None = None):
         self._store = store or AlertStore()
@@ -38,7 +39,7 @@ class PersistAlertHandler(ActionHandler):
 
 
 class LogNotifyHandler(ActionHandler):
-    """Structured log for external notification integrations (webhook/email later)."""
+    """No-op stub retained for import compatibility."""
 
     async def handle(
         self,
@@ -46,28 +47,12 @@ class LogNotifyHandler(ActionHandler):
         anomaly: AnomalyResult,
         config: TrafficIntelConfig,
     ) -> None:
-        # Persisted via PersistAlertHandler; keep container logs quiet at WARNING+.
-        log.info(
-            "TRAFFIC_ALERT site=%s window=%ss severity=%s ratio=%.2f msg=%s",
-            anomaly.site_id,
-            anomaly.window_sec,
-            anomaly.severity.value,
-            anomaly.deviation_ratio,
-            anomaly.message,
-        )
+        return
 
 
 class ActionDispatcher:
     def __init__(self, handlers: list[ActionHandler] | None = None):
-        if handlers is None:
-            from app.services.ai_guard.traffic_handler import AiGuardTrafficHandler
-
-            handlers = [
-                PersistAlertHandler(),
-                LogNotifyHandler(),
-                AiGuardTrafficHandler(),
-            ]
-        self._handlers = handlers
+        self._handlers = handlers or []
 
     async def dispatch(
         self,

@@ -7,6 +7,11 @@
 - Docker 命名卷收敛为 3 个：`app_data`（SQLite + 引擎 conf/certs）、`redis_data`、`clickhouse_data`
 - Compose 中 Redis 默认走 TCP；镜像不再声明 engine 子路径 `VOLUME`，避免匿名卷盖住 `app_data`
 
+### 流量基线
+
+- 取消内置基线突增自动告警（不再写 `traffic_alerts`、打 TRAFFIC_ALERT 日志）；改由预警/AI 策略的「流量高于/低于基线」条件自行配置
+- 移除 AI 防护触发类型 `traffic_intel.anomaly`；总览卡片改称「流量与基线」，不再标红异常状态
+
 ## [0.3.7] - 2026-07-20
 
 ### 站点卡片
