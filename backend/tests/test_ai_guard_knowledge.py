@@ -55,6 +55,9 @@ def test_defense_knowledge_includes_trigger_types():
     defense = _defense_knowledge()
     types = {item["type"] for item in defense["trigger_types"]}
     assert "traffic.qps_gt" in types
+    assert "traffic.baseline_gt" in types
+    assert "security.block_count" in types
     assert "security.block_rate" in types
+    assert "traffic_intel.anomaly" in types
     assert "suggest_only" in defense["apply_mode_values"]
     assert any("blacklist" in note for note in defense["rule_generation_notes"])

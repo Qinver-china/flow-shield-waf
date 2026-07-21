@@ -4,7 +4,7 @@
       type="info"
       show-icon
       style="margin-bottom: 16px"
-      message="当流量或拦截率达到阈值时，AI 将自动分析近期日志并生成防护规则。可配置仅建议、自动观察或自动拦截。"
+      message="当流量或拦截率达到阈值时，AI 将自动分析近期日志并生成防护规则。触发条件与「预警通知」对齐，可配置仅建议、自动观察或自动拦截。"
     />
 
     <fs-data-table
@@ -48,7 +48,13 @@
       :confirm-loading="saving"
       @ok="save"
     >
-      <defense-policy-form v-model="form" :triggers="triggers" :channels="channels" />
+      <defense-policy-form
+        v-model="form"
+        :triggers="triggers"
+        :channels="channels"
+        :traffic-windows="trafficWindows"
+        :block-windows="blockWindows"
+      />
     </fs-form-drawer>
   </div>
 </template>
@@ -59,10 +65,12 @@ import { onMounted, reactive, ref } from "vue";
 import { api } from "@/api";
 import FsDataTable from "@/components/FsDataTable.vue";
 import FsFormDrawer from "@/components/FsFormDrawer.vue";
+import { useSiteOptions } from "@/composables/useSiteOptions";
 import DefensePolicyForm from "../components/DefensePolicyForm.vue";
 import { applyModeOptions, commonBatchEditFields } from "@/constants/batch";
-import { trafficWindowLabels } from "@/views/logs/constants";
 import type { BatchConfig } from "@/types/batch";
+
+const { formatSiteId } = useSiteOptions();
 
 const loading = ref(false);
 const saving = ref(false);
@@ -70,6 +78,20 @@ const modalOpen = ref(false);
 const rows = ref<any[]>([]);
 const triggers = ref<any[]>([]);
 const channels = ref<any[]>([]);
+const trafficWindows = ref([
+  { value: 10, label: "10 秒" },
+  { value: 30, label: "30 秒" },
+  { value: 60, label: "1 分钟" },
+  { value: 300, label: "5 分钟" },
+  { value: 1800, label: "30 分钟" },
+  { value: 3600, label: "60 分钟" },
+]);
+const blockWindows = ref([
+  { value: 5, label: "5 分钟" },
+  { value: 15, label: "15 分钟" },
+  { value: 30, label: "30 分钟" },
+  { value: 60, label: "60 分钟" },
+]);
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
@@ -95,12 +117,34 @@ const batchConfig: BatchConfig = {
   editFields: [commonBatchEditFields.enabled],
 };
 
+/** Default trigger params aligned with alert policy defaults. */
+function defaultParamsFor(type: string): Record<string, unknown> {
+  if (type === "traffic.burst_logging") return {};
+  if (type === "traffic_intel.anomaly") return {};
+  if (type.startsWith("traffic.baseline")) return { window_sec: 300, percent: 50 };
+  if (type.startsWith("traffic.abs")) return { window_sec: 300, threshold: 1000 };
+  if (type.startsWith("traffic.qps")) return { window_sec: 60, threshold: 100 };
+  if (type === "security.block_count") return { window_min: 5, threshold: 100 };
+  if (type === "security.block_rate") return { window_min: 5, percent: 30 };
+  return {};
+}
+
+/** Normalize legacy ``qps`` param to ``threshold`` for list/edit display. */
+function normalizeTriggerParams(type: string, params: Record<string, unknown> | null | undefined) {
+  const out: Record<string, unknown> = { ...(params || {}) };
+  if ((type === "traffic.qps_gt" || type === "traffic.qps_lt") && out.threshold == null && out.qps != null) {
+    out.threshold = out.qps;
+    delete out.qps;
+  }
+  return out;
+}
+
 const defaultForm = () => ({
   id: null as number | null,
   name: "",
   enabled: true,
-  trigger_type: "traffic.qps_gt",
-  trigger_params: { window_sec: 60, qps: 100 },
+  trigger_type: "traffic.baseline_gt",
+  trigger_params: { window_sec: 300, percent: 50 } as Record<string, unknown>,
   apply_mode: "suggest_only",
   notify_on: ["trigger", "result"],
   channel_ids: [] as number[],
@@ -117,7 +161,7 @@ function triggerLabel(t: string) {
 
 function formatTriggerParams(record: any) {
   const meta = triggers.value.find((t) => t.type === record.trigger_type);
-  const params = record.trigger_params || {};
+  const params = normalizeTriggerParams(record.trigger_type, record.trigger_params);
   if (!meta?.params?.length) return "—";
 
   const parts: string[] = [];
@@ -126,14 +170,16 @@ function formatTriggerParams(record: any) {
     if (value == null || value === "") continue;
 
     let display = String(value);
-    if (p.key === "window_sec") {
-      display = trafficWindowLabels[Number(value)] || `${value} 秒`;
-    } else if (p.key === "window_min") {
-      display = `${value} 分钟`;
+    if (p.kind === "traffic_window" || p.key === "window_sec") {
+      display = trafficWindows.value.find((x) => x.value === Number(value))?.label || `${value} 秒`;
+    } else if (p.kind === "block_window" || p.key === "window_min") {
+      display = blockWindows.value.find((x) => x.value === Number(value))?.label || `${value} 分钟`;
     } else if (p.key === "percent") {
       display = `${value}%`;
     } else if (p.key === "site_id") {
-      display = `站点 #${value}`;
+      display = formatSiteId(Number(value));
+    } else if (p.key === "threshold") {
+      display = String(value);
     }
 
     parts.push(`${p.label || p.key} ${display}`);
@@ -172,6 +218,12 @@ async function loadMeta() {
     api.get("/api/v1/notification-channels"),
   ]);
   triggers.value = tRes.data.triggers || [];
+  if (tRes.data.traffic_windows?.length) {
+    trafficWindows.value = tRes.data.traffic_windows;
+  }
+  if (tRes.data.block_windows?.length) {
+    blockWindows.value = tRes.data.block_windows;
+  }
   channels.value = cRes.data || [];
 }
 
@@ -182,12 +234,20 @@ function onTableChange(pag: { current?: number; pageSize?: number }) {
 }
 
 function openCreate() {
-  form.value = defaultForm();
+  const type = "traffic.baseline_gt";
+  form.value = {
+    ...defaultForm(),
+    trigger_type: type,
+    trigger_params: defaultParamsFor(type),
+  };
   modalOpen.value = true;
 }
 
 function openEdit(record: any) {
-  form.value = { ...record, trigger_params: { ...record.trigger_params } };
+  form.value = {
+    ...record,
+    trigger_params: normalizeTriggerParams(record.trigger_type, record.trigger_params),
+  };
   modalOpen.value = true;
 }
 
@@ -196,6 +256,7 @@ async function save() {
   try {
     const payload = { ...form.value };
     delete payload.id;
+    payload.trigger_params = normalizeTriggerParams(payload.trigger_type, payload.trigger_params);
     if (form.value.id) {
       await api.put(`/api/v1/ai-guard/policies/${form.value.id}`, payload);
     } else {

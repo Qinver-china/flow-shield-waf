@@ -10,6 +10,7 @@ from app.services.ai_guard.config import AiGuardRuntimeConfig
 from app.services.ai_guard.context.builder import build_knowledge_snapshot, knowledge_for_defense
 from app.services.ai_guard.context.tools import DEFENSE_TOOL_DEFINITIONS
 from app.services.ai_guard.defense.tool_runner import SUBMIT_ANALYSIS_TOOL, run_defense_tool_calls
+from app.services.ai_guard.defense.traffic_context import build_defense_traffic_overview
 from app.services.ai_guard.llm.client import LlmClient
 from app.services.ai_guard.llm.prompts import DEFENSE_SYSTEM
 from app.services.ai_guard.llm.schemas import AttackAnalysis
@@ -18,6 +19,15 @@ from app.services.ai_guard.ports import DEFENSE_INITIAL_MAX_ROWS, DEFENSE_INITIA
 log = logging.getLogger("waf.ai_guard.rule_generator")
 
 _MAX_DEFENSE_ROUNDS = 6
+
+
+def _coerce_optional_int(value) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _build_initial_payload(
@@ -29,11 +39,15 @@ def _build_initial_payload(
     defense: dict | None,
     custom_prompt: str | None,
     trigger_snapshot: dict | None,
+    sites: list[dict] | None,
+    traffic_overview: dict | None,
 ) -> dict:
     prompt = (custom_prompt or "").strip()
     payload: dict = {
         "trigger": trigger_snapshot or {},
         "site_id": site_id,
+        "sites": sites or [],
+        "traffic_overview": traffic_overview or {},
         "initial_sample": {
             "window_min": log_meta.get("window_min", DEFENSE_INITIAL_WINDOW_MIN),
             "max_rows": DEFENSE_INITIAL_MAX_ROWS,
@@ -45,7 +59,9 @@ def _build_initial_payload(
         "field_catalog": knowledge_for_defense(field_catalog),
         "defense": defense,
         "instructions": (
-            "以上为策略触发时的首批放行日志样本。"
+            "请先阅读 traffic_overview：含全站与分站点的窗口请求量、QPS，以及近期日志拦截统计；"
+            "多站点时对比 sites 列表判断流量集中在哪些站点。"
+            "以上另附策略触发时的首批放行日志样本。"
             "若证据不足，请调用 query_logs / get_log_stats / query_log_stats_group "
             "扩大 hours 或调整 blocked 等筛选后再下结论。"
             "分析完成后必须调用 submit_analysis；无需建规则时设 create_rule=false。"
@@ -97,6 +113,26 @@ async def analyze_and_suggest(
     client = LlmClient(config)
     snapshot = await build_knowledge_snapshot(db)
     field_catalog = snapshot.get("field_catalog") or {}
+    trigger = trigger_snapshot or {}
+    focus_site_id = site_id if site_id is not None else _coerce_optional_int(trigger.get("site_id"))
+    focus_window_sec = _coerce_optional_int(trigger.get("window_sec"))
+    log_window_min = _coerce_optional_int(log_meta.get("window_min")) or _coerce_optional_int(
+        trigger.get("window_min")
+    ) or DEFENSE_INITIAL_WINDOW_MIN
+
+    try:
+        traffic_overview = await build_defense_traffic_overview(
+            db,
+            focus_site_id=focus_site_id,
+            focus_window_sec=focus_window_sec,
+            log_window_min=log_window_min,
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("failed to build defense traffic overview")
+        traffic_overview = {
+            "error": "unavailable",
+            "notes": ["流量概览构建失败，请改用查询工具自行拉取分站点统计"],
+        }
 
     initial = _build_initial_payload(
         site_id=site_id,
@@ -106,6 +142,8 @@ async def analyze_and_suggest(
         defense=snapshot.get("defense"),
         custom_prompt=custom_prompt,
         trigger_snapshot=trigger_snapshot,
+        sites=snapshot.get("sites") or [],
+        traffic_overview=traffic_overview,
     )
     messages: list[dict] = [
         {"role": "system", "content": DEFENSE_SYSTEM},

@@ -54,7 +54,18 @@ async def test_analyze_and_suggest_multiround_with_submit():
     with patch(
         "app.services.ai_guard.defense.rule_generator.build_knowledge_snapshot",
         new_callable=AsyncMock,
-        return_value={"field_catalog": {}, "defense": {}},
+        return_value={
+            "field_catalog": {},
+            "defense": {},
+            "sites": [{"id": 7, "name": "demo", "domains": ["demo.test"]}],
+        },
+    ), patch(
+        "app.services.ai_guard.defense.rule_generator.build_defense_traffic_overview",
+        new_callable=AsyncMock,
+        return_value={
+            "global": {"windows": [{"window_sec": 60, "requests": 120, "qps": 2.0}]},
+            "sites": [{"site_id": 7, "name": "demo", "windows": [{"window_sec": 60, "requests": 100, "qps": 1.67}]}],
+        },
     ), patch(
         "app.services.ai_guard.defense.rule_generator.LlmClient"
     ) as client_cls:
@@ -107,7 +118,7 @@ async def test_analyze_and_suggest_multiround_with_submit():
                 },
                 site_id=7,
                 custom_prompt="勿封 CDN",
-                trigger_snapshot={"type": "traffic.qps_gt"},
+                trigger_snapshot={"type": "traffic.qps_gt", "window_sec": 60},
             )
 
     assert result.create_rule is False
@@ -118,6 +129,9 @@ async def test_analyze_and_suggest_multiround_with_submit():
     assert payload["custom_prompt"] == "勿封 CDN"
     assert payload["initial_sample"]["sample_scope"] == "passed_only"
     assert payload["trigger"]["type"] == "traffic.qps_gt"
+    assert payload["sites"][0]["id"] == 7
+    assert payload["traffic_overview"]["sites"][0]["site_id"] == 7
+    assert payload["traffic_overview"]["global"]["windows"][0]["qps"] == 2.0
 
 
 @pytest.mark.asyncio
@@ -142,7 +156,11 @@ async def test_analyze_and_suggest_submit_with_rule():
     with patch(
         "app.services.ai_guard.defense.rule_generator.build_knowledge_snapshot",
         new_callable=AsyncMock,
-        return_value={"field_catalog": {}, "defense": {}},
+        return_value={"field_catalog": {}, "defense": {}, "sites": []},
+    ), patch(
+        "app.services.ai_guard.defense.rule_generator.build_defense_traffic_overview",
+        new_callable=AsyncMock,
+        return_value={"global": {"windows": []}, "sites": []},
     ), patch(
         "app.services.ai_guard.defense.rule_generator.LlmClient"
     ) as client_cls, patch(

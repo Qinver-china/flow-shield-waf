@@ -8,6 +8,7 @@
           v-model:value="selectedAction"
           class="table-batch-bar-action"
           placeholder="选择批量操作"
+          placement="topLeft"
           :options="actionOptions"
           :disabled="processing"
         />
@@ -17,6 +18,7 @@
           v-model:value="modeValue"
           class="table-batch-bar-mode"
           placeholder="选择目标模式"
+          placement="topLeft"
           :options="modeOptions"
           :disabled="processing"
         />

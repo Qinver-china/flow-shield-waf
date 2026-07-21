@@ -12,27 +12,61 @@
       </a-form-item>
     </fs-form-section>
 
-    <fs-form-section title="触发条件">
-      <a-form-item label="触发类型" required>
+    <fs-form-section title="触发条件" description="与预警通知共用同一套条件类型；命中后由 AI 分析并生成防护建议">
+      <a-form-item label="触发条件" required>
         <a-select v-model:value="model.trigger_type" @change="onTriggerChange">
-          <a-select-option v-for="t in triggers" :key="t.type" :value="t.type">
-            {{ t.label }}
-          </a-select-option>
+          <a-select-opt-group
+            v-for="group in triggerGroups"
+            :key="group.name"
+            :label="group.name"
+          >
+            <a-select-option v-for="t in group.items" :key="t.type" :value="t.type">
+              {{ t.label }}
+            </a-select-option>
+          </a-select-opt-group>
         </a-select>
+        <p v-if="selectedTrigger?.description" class="fs-hint is-inline">
+          {{ selectedTrigger.description }}
+        </p>
       </a-form-item>
 
       <a-row v-if="selectedTrigger?.params?.length" :gutter="16">
         <a-col v-for="p in selectedTrigger.params" :key="p.key" :span="12">
           <a-form-item :label="p.label || p.key" :required="p.required !== false">
-            <a-input-number
-              v-if="p.kind === 'number'"
+            <a-select
+              v-if="p.kind === 'traffic_window'"
               v-model:value="model.trigger_params[p.key]"
+              :allow-clear="p.required === false"
+              :placeholder="p.required === false ? '任意窗口' : undefined"
+            >
+              <a-select-option
+                v-for="w in trafficWindows"
+                :key="w.value"
+                :value="w.value"
+              >{{ w.label }}</a-select-option>
+            </a-select>
+            <a-select
+              v-else-if="p.kind === 'block_window'"
+              v-model:value="model.trigger_params[p.key]"
+            >
+              <a-select-option
+                v-for="w in blockWindows"
+                :key="w.value"
+                :value="w.value"
+              >{{ w.label }}</a-select-option>
+            </a-select>
+            <a-input-number
+              v-else-if="p.kind === 'number'"
+              v-model:value="model.trigger_params[p.key]"
+              :min="p.min ?? 0"
+              :max="p.max"
               style="width: 100%"
             />
             <site-single-select
               v-else-if="p.kind === 'site_id'"
               v-model:value="model.trigger_params[p.key]"
             />
+            <p v-if="p.help" class="fs-hint is-inline">{{ p.help }}</p>
           </a-form-item>
         </a-col>
       </a-row>
@@ -89,6 +123,8 @@ const model = defineModel<any>({ required: true });
 const props = defineProps<{
   triggers: any[];
   channels: any[];
+  trafficWindows: { value: number; label: string }[];
+  blockWindows: { value: number; label: string }[];
 }>();
 
 const notifyOptions = [
@@ -97,11 +133,33 @@ const notifyOptions = [
   { label: "结果", value: "result" },
 ];
 
+/** Default trigger params aligned with alert policy defaults. */
+function defaultTriggerParams(type: string): Record<string, unknown> {
+  if (type === "traffic.burst_logging") return {};
+  if (type === "traffic_intel.anomaly") return {};
+  if (type.startsWith("traffic.baseline")) return { window_sec: 300, percent: 50 };
+  if (type.startsWith("traffic.abs")) return { window_sec: 300, threshold: 1000 };
+  if (type.startsWith("traffic.qps")) return { window_sec: 60, threshold: 100 };
+  if (type === "security.block_count") return { window_min: 5, threshold: 100 };
+  if (type === "security.block_rate") return { window_min: 5, percent: 30 };
+  return {};
+}
+
+const triggerGroups = computed(() => {
+  const map: Record<string, any[]> = {};
+  for (const t of props.triggers) {
+    const cat = t.category || "其他";
+    map[cat] = map[cat] || [];
+    map[cat].push(t);
+  }
+  return Object.entries(map).map(([name, items]) => ({ name, items }));
+});
+
 const selectedTrigger = computed(() =>
   props.triggers.find((t) => t.type === model.value.trigger_type),
 );
 
 function onTriggerChange() {
-  model.value.trigger_params = {};
+  model.value.trigger_params = defaultTriggerParams(model.value.trigger_type);
 }
 </script>

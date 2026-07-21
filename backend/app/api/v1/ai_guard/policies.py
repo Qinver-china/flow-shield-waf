@@ -10,6 +10,8 @@ from app.models.notification import NotificationChannel
 from app.schemas.ai_guard import AiGuardPolicyCreate, AiGuardPolicyOut, AiGuardPolicyUpdate
 from app.schemas.common import ok
 from app.services.ai_guard.defense.triggers import (
+    BLOCK_WINDOWS_MIN,
+    TRAFFIC_WINDOWS,
     TRIGGER_TYPES,
     validate_apply_mode,
     validate_trigger_params,
@@ -20,7 +22,11 @@ router = APIRouter()
 
 @router.get("/meta/triggers")
 async def trigger_types(_user: User = Depends(get_current_user)):
-    return ok({"triggers": TRIGGER_TYPES})
+    return ok({
+        "triggers": TRIGGER_TYPES,
+        "traffic_windows": TRAFFIC_WINDOWS,
+        "block_windows": BLOCK_WINDOWS_MIN,
+    })
 
 
 @router.get("")
