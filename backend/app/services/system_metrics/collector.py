@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import time
 from collections import deque
 from typing import Any
@@ -23,26 +22,29 @@ _METRIC_KEYS = (
     "host_cpu_pct",
 )
 
-# Require most of the theoretical samples for a window (tolerate a few missed ticks).
-_WINDOW_SAMPLE_FILL_RATIO = 0.8
-
-
-def _min_samples_for_window(window_sec: int) -> int:
-    """Minimum samples before a window average may be published."""
-    expected = window_sec / max(1, SYSTEM_METRICS_SAMPLE_INTERVAL_SEC)
-    return max(2, int(math.ceil(expected * _WINDOW_SAMPLE_FILL_RATIO)))
-
 
 class SystemMetricsCollector:
-    """Collect samples and publish 1/5/30-minute averages to Redis."""
+    """Collect samples and publish 1/5/30-minute averages to Redis.
+
+    Window readiness is sticky after process start: once wall-clock collection
+    has run for ``window_sec``, that window stays ready for the life of this
+    process. Rolling averages then use whatever samples remain in the ring
+    (gaps must not flip the UI back to empty).
+    """
 
     def __init__(self) -> None:
         self._sampler = SystemMetricsSampler()
         max_samples = int(max(SYSTEM_METRIC_WINDOWS_SEC) / SYSTEM_METRICS_SAMPLE_INTERVAL_SEC) + 12
         self._ring: deque[CpuSample] = deque(maxlen=max_samples)
+        # First sample timestamp after this process started collecting.
+        self._collecting_since: float | None = None
+        # Windows that have already unlocked; never regress until restart.
+        self._ready_windows: set[int] = set()
 
     def tick(self) -> dict[str, Any]:
         sample = self._sampler.sample()
+        if self._collecting_since is None:
+            self._collecting_since = sample.ts
         self._ring.append(sample)
         return self.build_snapshot(sample)
 
@@ -68,25 +70,27 @@ class SystemMetricsCollector:
         }
 
     def _collection_age(self, now: float) -> float:
-        """Seconds since the oldest sample still in the ring (0 if empty)."""
-        if not self._ring:
+        """Seconds since this process began collecting (0 if not started)."""
+        if self._collecting_since is None:
             return 0.0
-        return max(0.0, now - self._ring[0].ts)
+        return max(0.0, now - self._collecting_since)
 
-    def _window_ready(self, now: float, window_sec: int, rows: list[CpuSample]) -> bool:
-        """True only when we have collected for a full window with enough samples."""
-        if self._collection_age(now) < window_sec:
-            return False
-        return len(rows) >= _min_samples_for_window(window_sec)
+    def _window_ready(self, now: float, window_sec: int) -> bool:
+        """Ready after continuous collection age ≥ window; sticky until restart."""
+        if window_sec in self._ready_windows:
+            return True
+        if self._collection_age(now) >= window_sec:
+            self._ready_windows.add(window_sec)
+            return True
+        return False
 
     def _avg_window(self, now: float, window_sec: int) -> dict[str, Any]:
         cutoff = now - window_sec
         rows = [s for s in self._ring if s.ts >= cutoff]
-        ready = self._window_ready(now, window_sec, rows)
+        ready = self._window_ready(now, window_sec)
         out: dict[str, Any] = {
             "samples": len(rows),
             "ready": ready,
-            "min_samples": _min_samples_for_window(window_sec),
         }
         if not ready:
             for key in _METRIC_KEYS:
@@ -148,8 +152,9 @@ def window_metric_value(
 ) -> float | None:
     """Read a window average metric from a snapshot.
 
-    Unready windows (not enough elapsed time / samples) return None so rules,
-    alerts, and the dashboard treat them as missing data.
+    Unready windows (collection age still below the window length after
+    process start) return None so rules, alerts, and the dashboard treat
+    them as missing data.
     """
     if not snapshot:
         return None

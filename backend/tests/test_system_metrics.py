@@ -10,11 +10,7 @@ from app.constants.system_metrics import SYSTEM_METRICS_SAMPLE_INTERVAL_SEC
 from app.fields import validate_condition
 from app.fields.catalog import catalog_for_frontend, catalog_compact_for_llm
 from app.services.notifications.validators import validate_condition_params
-from app.services.system_metrics.collector import (
-    SystemMetricsCollector,
-    _min_samples_for_window,
-    window_metric_value,
-)
+from app.services.system_metrics.collector import SystemMetricsCollector, window_metric_value
 from app.services.system_metrics.sampler import CpuSample
 
 
@@ -74,7 +70,6 @@ def test_collector_1m_ready_but_longer_windows_wait():
 
     win60 = snap["windows"]["60"]
     assert win60["ready"] is True
-    assert win60["samples"] >= _min_samples_for_window(60)
     assert win60["container_cpu_pct_avg"] is not None
     assert win60["host_cpu_pct_avg"] is not None
 
@@ -94,6 +89,31 @@ def test_collector_5m_ready_after_full_span():
     assert snap["windows"]["300"]["ready"] is True
     assert snap["windows"]["1800"]["ready"] is False
     assert snap["windows"]["300"]["container_cpu_pct_avg"] is not None
+
+
+def test_collector_ready_stays_true_with_sparse_recent_samples():
+    """Once unlocked, brief sampling gaps must not blank the window again."""
+    collector = SystemMetricsCollector()
+    now = time.time()
+    _fill_window(collector, window_sec=60, now=now)
+    assert collector.build_snapshot()["windows"]["60"]["ready"] is True
+
+    # Simulate a gap: only two fresh samples in the last minute.
+    with patch.object(collector._sampler, "sample") as sample_fn:
+        sample_fn.side_effect = [
+            _sample(ts=now + 50, container_cpu_pct=11.0, host_cpu_pct=21.0),
+            _sample(ts=now + 55, container_cpu_pct=12.0, host_cpu_pct=22.0),
+        ]
+        # Advance wall clock so ring filter uses "now" far ahead; readiness
+        # still keys off collecting_since from the first fill.
+        with patch("app.services.system_metrics.collector.time.time", return_value=now + 60):
+            for _ in range(2):
+                snap = collector.tick()
+
+    win = snap["windows"]["60"]
+    assert win["ready"] is True
+    assert win["samples"] >= 2
+    assert win["container_cpu_pct_avg"] is not None
 
 
 def test_window_metric_value_reads_avg_key():
