@@ -49,11 +49,12 @@ class TrafficIntelPipeline:
         self._baseline = baseline_calc or BaselineCalculator()
         self._last_baseline_at = 0.0
 
-    async def _baseline_scopes(self, db: AsyncSession) -> list[int | None]:
+    async def _baseline_scopes(self, db: AsyncSession) -> list[int]:
+        """Per-site baselines only; global is summed at read time."""
         site_ids = (
             await db.execute(select(Site.id).where(Site.enabled.is_(True)).order_by(Site.id))
         ).scalars().all()
-        return [None, *site_ids]
+        return list(site_ids)
 
     async def run_once(self) -> None:
         if not self.config.enabled:

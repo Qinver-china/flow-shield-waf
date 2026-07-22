@@ -10,9 +10,12 @@ from app.services.traffic_intel.windows import (
 )
 
 
-def test_slot_key_includes_quarter():
+def test_slot_key_is_time_of_day_only():
     dt = datetime(2026, 7, 18, 14, 37)
-    assert slot_key_for(dt) == "dow6_h14_q2"
+    assert slot_key_for(dt) == "h14_q2"
+    # Same clock time on another weekday shares the key (no dow).
+    other = datetime(2026, 7, 20, 14, 37)
+    assert slot_key_for(other) == "h14_q2"
 
 
 def test_local_datetime_from_utc():

@@ -3,7 +3,8 @@
 Layers
 ------
 1. **采集 (ingest)** — read engine Redis snapshot, persist minute + window history to ClickHouse.
-2. **基线 (baseline)** — learn same-slot median (weekday + hour + quarter) per global/site.
+2. **基线 (baseline)** — learn same time-of-day median (hour + optional 15m quarter,
+   no weekday) per site from window snapshots; dashboard/rule "global" sums sites.
    Warm-start widens to same hour / hour-only when history is sparse.
 3. **条件比较 (detector helpers)** — used by alert / AI Guard ``traffic.baseline_*`` policies.
    Built-in auto spike alerting is disabled.

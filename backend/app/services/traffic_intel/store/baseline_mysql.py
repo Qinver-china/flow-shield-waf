@@ -12,9 +12,25 @@ from app.services.traffic_intel.timezone import local_datetime
 
 
 def slot_key_for(as_of: datetime) -> str:
-    """Same weekday + hour + 15-minute quarter in local wall-clock time."""
+    """Time-of-day slot in local wall-clock time (no weekday).
+
+    Lightweight baseline key: same hour + 15-minute quarter every day.
+    Example: 14:37 → ``h14_q2``.
+    """
     quarter = as_of.minute // 15
-    return f"dow{as_of.isoweekday()}_h{as_of.hour}_q{quarter}"
+    return f"h{as_of.hour}_q{quarter}"
+
+
+def _row_to_baseline(row: TrafficBaseline) -> Baseline:
+    return Baseline(
+        site_id=row.site_id,
+        window_sec=row.window_sec,
+        avg_requests=float(row.avg_requests),
+        sample_count=int(row.sample_count),
+        strategy=row.strategy,
+        slot_key=row.slot_key,
+        updated_at=row.updated_at or datetime.utcnow(),
+    )
 
 
 class BaselineStore:
@@ -47,6 +63,39 @@ class BaselineStore:
         await db.refresh(row)
         return row
 
+    async def _latest_site_row(
+        self,
+        db: AsyncSession,
+        *,
+        site_id: int,
+        window_sec: int,
+        prefer_slot: str | None = None,
+    ) -> TrafficBaseline | None:
+        """Prefer the current slot row; otherwise the most recently updated one."""
+        if prefer_slot:
+            row = (
+                await db.execute(
+                    select(TrafficBaseline).where(
+                        TrafficBaseline.site_id == site_id,
+                        TrafficBaseline.window_sec == window_sec,
+                        TrafficBaseline.slot_key == prefer_slot,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is not None:
+                return row
+        return (
+            await db.execute(
+                select(TrafficBaseline)
+                .where(
+                    TrafficBaseline.site_id == site_id,
+                    TrafficBaseline.window_sec == window_sec,
+                )
+                .order_by(TrafficBaseline.updated_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
     async def get(
         self,
         db: AsyncSession,
@@ -63,26 +112,51 @@ class BaselineStore:
             else as_of
         )
         slot_key = slot_key_for(local_as_of)
-        row = (
-            await db.execute(
-                select(TrafficBaseline).where(
-                    TrafficBaseline.site_id == site_id,
-                    TrafficBaseline.window_sec == window_sec,
-                    TrafficBaseline.slot_key == slot_key,
+
+        # Global view: sum per-site baselines (current slot, else latest).
+        if site_id is None:
+            site_ids = (
+                await db.execute(
+                    select(TrafficBaseline.site_id)
+                    .where(
+                        TrafficBaseline.site_id.is_not(None),
+                        TrafficBaseline.window_sec == window_sec,
+                    )
+                    .distinct()
                 )
+            ).scalars().all()
+            picked: list[TrafficBaseline] = []
+            for sid in site_ids:
+                if sid is None:
+                    continue
+                row = await self._latest_site_row(
+                    db, site_id=int(sid), window_sec=window_sec, prefer_slot=slot_key
+                )
+                if row is not None:
+                    picked.append(row)
+            if not picked:
+                return None
+            total_avg = sum(float(r.avg_requests) for r in picked)
+            min_samples = min(int(r.sample_count) for r in picked)
+            return Baseline(
+                site_id=None,
+                window_sec=window_sec,
+                avg_requests=total_avg,
+                sample_count=min_samples,
+                strategy="sum_sites",
+                slot_key=slot_key,
+                updated_at=max(
+                    (r.updated_at for r in picked if r.updated_at),
+                    default=datetime.utcnow(),
+                ),
             )
-        ).scalar_one_or_none()
+
+        row = await self._latest_site_row(
+            db, site_id=int(site_id), window_sec=window_sec, prefer_slot=slot_key
+        )
         if row is None:
             return None
-        return Baseline(
-            site_id=row.site_id,
-            window_sec=row.window_sec,
-            avg_requests=float(row.avg_requests),
-            sample_count=int(row.sample_count),
-            strategy=row.strategy,
-            slot_key=row.slot_key,
-            updated_at=row.updated_at or datetime.utcnow(),
-        )
+        return _row_to_baseline(row)
 
     async def list_all(
         self,
@@ -94,15 +168,4 @@ class BaselineStore:
         if site_id is not None:
             stmt = stmt.where(TrafficBaseline.site_id == site_id)
         rows = (await db.execute(stmt.order_by(TrafficBaseline.window_sec))).scalars().all()
-        return [
-            Baseline(
-                site_id=r.site_id,
-                window_sec=r.window_sec,
-                avg_requests=float(r.avg_requests),
-                sample_count=int(r.sample_count),
-                strategy=r.strategy,
-                slot_key=r.slot_key,
-                updated_at=r.updated_at or datetime.utcnow(),
-            )
-            for r in rows
-        ]
+        return [_row_to_baseline(r) for r in rows]

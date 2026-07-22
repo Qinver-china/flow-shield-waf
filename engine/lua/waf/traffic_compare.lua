@@ -47,10 +47,22 @@ local function baseline_avg(scope, site_id, window_sec)
         if not item then return nil end
         return tonumber(item.avg)
     end
-    local global = payload.global or {}
-    local item = global[key]
-    if not item then return nil end
-    return tonumber(item.avg)
+    -- Global baseline = sum of per-site baselines for the same window (not stored).
+    local sites = payload.sites or {}
+    local total = 0
+    local any = false
+    for _, site_item in pairs(sites) do
+        if type(site_item) == "table" then
+            local item = site_item[key]
+            local avg = item and tonumber(item.avg) or nil
+            if avg and avg > 0 then
+                total = total + avg
+                any = true
+            end
+        end
+    end
+    if not any then return nil end
+    return total
 end
 
 local function current_count(scope, site_id, window_sec)

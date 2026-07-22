@@ -3,8 +3,8 @@
 Panel and alert evaluation always read Redis. SQLite is only for disaster recovery
 when Redis has no traffic keys (e.g. volume wiped).
 
-Backup payload is intentionally minimal: sparse minute rings only (no 10s secs,
-no redundant window totals — windows are rebuilt from minutes on restore).
+Backup payload is per-site sparse minute rings only. Snapshot ``global`` is rebuilt
+as the sum of site windows on restore (never stored as a separate series).
 """
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from app.core.redis import get_redis
 from app.models.traffic_live_backup import (
     BACKUP_INTERVAL_SEC,
     BACKUP_WINDOW_SECS,
-    REDIS_MIN_G,
     REDIS_MIN_S_PREFIX,
     REDIS_SNAPSHOT_KEY,
     TrafficLiveBackup,
@@ -68,6 +67,29 @@ def _windows_from_minutes(minutes: dict[str, int], now_ts: int) -> list[dict]:
     return windows
 
 
+def _sum_windows(site_windows: list[list[dict]]) -> list[dict]:
+    """Merge per-site window rows by sec (requests sum, qps recomputed)."""
+    by_sec: dict[int, int] = {}
+    order: list[int] = []
+    for windows in site_windows:
+        for w in windows:
+            try:
+                sec = int(w.get("sec") or 0)
+                req = int(w.get("requests") or 0)
+            except (TypeError, ValueError):
+                continue
+            if sec <= 0:
+                continue
+            if sec not in by_sec:
+                order.append(sec)
+                by_sec[sec] = 0
+            by_sec[sec] += req
+    return [
+        {"sec": sec, "requests": by_sec[sec], "qps": by_sec[sec] / max(sec, 1)}
+        for sec in order
+    ]
+
+
 async def flush_backup_once() -> None:
     redis = get_redis()
     now_ts = int(datetime.utcnow().timestamp())
@@ -84,7 +106,6 @@ async def flush_backup_once() -> None:
         except (json.JSONDecodeError, TypeError):
             pass
 
-    min_g = _compact_minutes(await redis.hgetall(REDIS_MIN_G))
     if not site_ids:
         async for key in redis.scan_iter(match=f"{REDIS_MIN_S_PREFIX}*", count=100):
             k = key.decode() if isinstance(key, bytes) else str(key)
@@ -98,12 +119,11 @@ async def flush_backup_once() -> None:
         if min_s:
             sites_out[str(site_key)] = {"m": min_s}
 
-    if not min_g and not sites_out:
+    if not sites_out:
         return
 
-    # Compact payload: only sparse minute maps (windows rebuilt on restore).
     body = json.dumps(
-        {"ts": now_ts, "g": {"m": min_g}, "s": sites_out},
+        {"ts": now_ts, "s": sites_out},
         separators=(",", ":"),
     )
 
@@ -122,12 +142,15 @@ async def flush_backup_once() -> None:
 
 
 async def restore_redis_if_empty() -> bool:
-    """If Redis has no minute ring / snapshot, reload from SQLite backup.
+    """If Redis has no site minute ring / snapshot, reload from SQLite backup.
 
     Returns True when a restore was applied.
     """
     redis = get_redis()
-    if await redis.exists(REDIS_MIN_G) or await redis.exists(REDIS_SNAPSHOT_KEY):
+    # Any site minute key or snapshot means Redis already has live state.
+    async for _ in redis.scan_iter(match=f"{REDIS_MIN_S_PREFIX}*", count=1):
+        return False
+    if await redis.exists(REDIS_SNAPSHOT_KEY):
         return False
 
     async with SessionLocal() as db:
@@ -143,15 +166,11 @@ async def restore_redis_if_empty() -> bool:
             return False
 
     now_ts = int(data.get("ts") or datetime.utcnow().timestamp())
-    g = data.get("g") or {}
-    min_g = {str(k): int(v) for k, v in (g.get("m") or {}).items()}
-    # Backward compat: older backups may store window totals under g.w (ignored for rebuild).
-
     pipe = redis.pipeline(transaction=False)
-    for minute, count in min_g.items():
-        pipe.hset(REDIS_MIN_G, str(minute), int(count))
 
     sites_out: dict[str, dict] = {}
+    site_window_lists: list[list[dict]] = []
+    # New format: s only. Old format may still have g (ignored for storage).
     for site_key, site in (data.get("s") or {}).items():
         min_s = {str(k): int(v) for k, v in (site.get("m") or {}).items()}
         if not min_s:
@@ -159,14 +178,19 @@ async def restore_redis_if_empty() -> bool:
         min_key = f"{REDIS_MIN_S_PREFIX}{site_key}"
         for minute, count in min_s.items():
             pipe.hset(min_key, str(minute), int(count))
-        sites_out[str(site_key)] = {
-            "windows": _windows_from_minutes(min_s, now_ts),
-        }
+        windows = _windows_from_minutes(min_s, now_ts)
+        sites_out[str(site_key)] = {"windows": windows}
+        site_window_lists.append(windows)
+
+    if not sites_out and (data.get("g") or {}).get("m"):
+        # Legacy backup with only global minutes: cannot attribute to sites — skip.
+        log.warning("legacy global-only traffic backup ignored (site-only restore required)")
+        return False
 
     snapshot = {
         "updated_at": now_ts,
         "global": {
-            "windows": _windows_from_minutes(min_g, now_ts),
+            "windows": _sum_windows(site_window_lists),
             "burst_active": False,
         },
         "sites": sites_out,

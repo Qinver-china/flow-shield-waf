@@ -1,13 +1,13 @@
--- Per-second request counters (all requests through access phase).
--- Hot path uses ngx.shared; worker-0 tick syncs sec/min to Redis and publishes snapshot.
--- 24h windows use Redis minute rings (global + per-site); 10s is live-only (not DB-backed).
+-- Per-site request counters (access phase). Unmatched requests are not recorded.
+-- Worker-0 tick syncs each site to Redis and publishes a snapshot whose
+-- ``global`` block is the dynamic sum of configured sites (not stored separately).
+-- Live windows (10s–60m) are sliding per-second sums; 24h uses per-site minute rings.
 local cjson = require "cjson.safe"
 local rc = require "waf.redis_client"
 
 local _M = {}
 
 local dict = ngx.shared.waf_traffic
--- Live sliding windows (10s excluded from DB backup by design).
 local WINDOWS = { 10, 30, 60, 300, 1800, 3600 }
 local DAY_SEC = 86400
 local BUCKET_TTL = 3700
@@ -15,16 +15,12 @@ local SEC_REDIS_TTL = 3700
 local MINUTE_KEEP = 1440
 local SNAPSHOT_KEY = "waf:traffic:snapshot"
 local VIEWER_KEY = "waf:logs:viewer_active"
-local SEC_KEY_G = "waf:traffic:sec:g:"
 local SEC_KEY_S = "waf:traffic:sec:s:"
-local MIN_KEY_G = "waf:traffic:min:g"
 local MIN_KEY_S = "waf:traffic:min:s:"
+local TRACKED_SITES_KEY = "tracked_site_ids"
 
 local function bucket_key(site_id, sec)
-    if site_id then
-        return "s:" .. tostring(site_id) .. ":" .. tostring(sec)
-    end
-    return "g:" .. tostring(sec)
+    return "s:" .. tostring(site_id) .. ":" .. tostring(sec)
 end
 
 local function sum_window(prefix, now, window_sec)
@@ -37,7 +33,7 @@ local function sum_window(prefix, now, window_sec)
 end
 
 local function window_counts(now, site_id)
-    local prefix = site_id and ("s:" .. tostring(site_id) .. ":") or "g:"
+    local prefix = "s:" .. tostring(site_id) .. ":"
     local out = {}
     for _, w in ipairs(WINDOWS) do
         out[tostring(w)] = sum_window(prefix, now, w)
@@ -45,11 +41,28 @@ local function window_counts(now, site_id)
     return out
 end
 
-local function cache_global_windows(counts)
+local function empty_counts()
+    local out = {}
+    for _, w in ipairs(WINDOWS) do
+        out[tostring(w)] = 0
+    end
+    return out
+end
+
+local function add_counts(dst, src)
+    for _, w in ipairs(WINDOWS) do
+        local key = tostring(w)
+        dst[key] = (dst[key] or 0) + (src[key] or 0)
+    end
+    return dst
+end
+
+local function cache_global_windows(counts, day_total)
     for _, w in ipairs(WINDOWS) do
         local key = tostring(w)
         dict:set("wc:" .. key, counts[key] or 0, 120)
     end
+    dict:set("wc:86400", day_total or 0, 120)
 end
 
 local function minute_sum(prefix, now, minute_start)
@@ -62,9 +75,24 @@ local function minute_sum(prefix, now, minute_start)
     return total
 end
 
+local function tracked_site_ids()
+    if not dict then return {} end
+    local raw = dict:get(TRACKED_SITES_KEY)
+    if not raw or raw == "" then return {} end
+    local parsed = cjson.decode(raw)
+    if type(parsed) ~= "table" then return {} end
+    return parsed
+end
+
+local function set_tracked_site_ids(ids)
+    if not dict then return end
+    dict:set(TRACKED_SITES_KEY, cjson.encode(ids) or "[]", 120)
+end
+
 function _M.get_global_count(window_sec)
     if not dict then return 0 end
     local w = tonumber(window_sec) or 0
+    if w <= 0 then return 0 end
     if w == DAY_SEC then
         return tonumber(dict:get("wc:86400")) or 0
     end
@@ -73,7 +101,11 @@ function _M.get_global_count(window_sec)
         return cached
     end
     local now = math.floor(ngx.now())
-    return sum_window("g:", now, w)
+    local total = 0
+    for _, sid in ipairs(tracked_site_ids()) do
+        total = total + sum_window("s:" .. tostring(sid) .. ":", now, w)
+    end
+    return total
 end
 
 function _M.get_site_count(site_id, window_sec)
@@ -89,13 +121,13 @@ function _M.get_site_count(site_id, window_sec)
     return sum_window("s:" .. tostring(sid) .. ":", now, w)
 end
 
+-- Only matched sites are counted; no global / unassigned bucket.
 function _M.inc(site_id)
     if not dict then return end
+    local sid = tonumber(site_id)
+    if not sid then return end
     local now = math.floor(ngx.now())
-    dict:incr(bucket_key(nil, now), 1, 0, BUCKET_TTL)
-    if site_id then
-        dict:incr(bucket_key(site_id, now), 1, 0, BUCKET_TTL)
-    end
+    dict:incr(bucket_key(sid, now), 1, 0, BUCKET_TTL)
 end
 
 function _M.burst_active()
@@ -200,20 +232,13 @@ local function refresh_viewer_flag()
 end
 
 local function redis_sec_key(site_id, sec)
-    if site_id then
-        return SEC_KEY_S .. tostring(site_id) .. ":" .. tostring(sec)
-    end
-    return SEC_KEY_G .. tostring(sec)
+    return SEC_KEY_S .. tostring(site_id) .. ":" .. tostring(sec)
 end
 
 local function redis_min_key(site_id)
-    if site_id then
-        return MIN_KEY_S .. tostring(site_id)
-    end
-    return MIN_KEY_G
+    return MIN_KEY_S .. tostring(site_id)
 end
 
--- Sum minute-hash fields within the last MINUTE_KEEP minutes.
 local function sum_day_from_hash(red, min_key, now_min)
     local all = red:hgetall(min_key)
     if not all or all == ngx.null then
@@ -221,7 +246,6 @@ local function sum_day_from_hash(red, min_key, now_min)
     end
     local total = 0
     local cutoff = now_min - (MINUTE_KEEP - 1) * 60
-    -- hgetall returns flat {k1,v1,k2,v2,...}
     for i = 1, #all, 2 do
         local m = tonumber(all[i])
         local v = tonumber(all[i + 1]) or 0
@@ -229,21 +253,6 @@ local function sum_day_from_hash(red, min_key, now_min)
             total = total + v
         elseif m and m < cutoff then
             red:hdel(min_key, tostring(m))
-        end
-    end
-    return total
-end
-
--- Durable windows (>=1m): sum Redis minute ring (survives shared-dict wipe).
-local function sum_minutes(red, min_key, now, window_sec)
-    local minute_start = now - (now % 60)
-    local need = math.ceil(window_sec / 60)
-    local total = 0
-    for i = 0, need - 1 do
-        local m = minute_start - (i * 60)
-        local v = red:hget(min_key, tostring(m))
-        if v and v ~= ngx.null then
-            total = total + (tonumber(v) or 0)
         end
     end
     return total
@@ -258,14 +267,14 @@ local function shared_has_minute(prefix, minute_start, now)
     return false
 end
 
-local function sync_scope_to_redis(red, now, site_id, prefix)
+local function sync_site_to_redis(red, now, site_id)
+    local prefix = "s:" .. tostring(site_id) .. ":"
     local sec_val = tonumber(dict:get(prefix .. tostring(now))) or 0
     red:set(redis_sec_key(site_id, now), sec_val, "EX", SEC_REDIS_TTL)
 
     local minute_start = now - (now % 60)
     local min_key = redis_min_key(site_id)
     local min_count = minute_sum(prefix, now, minute_start)
-    -- After Redis restore, shared may be empty briefly — do not zero the restored minute.
     if shared_has_minute(prefix, minute_start, now) then
         red:hset(min_key, tostring(minute_start), min_count)
     else
@@ -278,20 +287,8 @@ local function sync_scope_to_redis(red, now, site_id, prefix)
     end
 
     local day_total = sum_day_from_hash(red, min_key, minute_start)
-    if site_id then
-        dict:set("wc:s:" .. tostring(site_id) .. ":86400", day_total, 120)
-    else
-        dict:set("wc:86400", day_total, 120)
-    end
-    return day_total, min_key
-end
-
-local function apply_durable_windows(red, counts, min_key, now)
-    for _, w in ipairs(WINDOWS) do
-        if w >= 60 then
-            counts[tostring(w)] = sum_minutes(red, min_key, now, w)
-        end
-    end
+    dict:set("wc:s:" .. tostring(site_id) .. ":86400", day_total, 120)
+    return day_total
 end
 
 local function windows_payload(counts, day_total, thresholds, with_threshold)
@@ -322,7 +319,23 @@ local function windows_payload(counts, day_total, thresholds, with_threshold)
     return out
 end
 
---- Load Redis second buckets into ngx.shared after process restart.
+local function configured_site_ids(cfg)
+    local ids = {}
+    local seen = {}
+    if cfg and cfg.sites then
+        for _, site in pairs(cfg.sites) do
+            local sid = tonumber(site.id)
+            if sid and not seen[sid] then
+                seen[sid] = true
+                ids[#ids + 1] = sid
+            end
+        end
+    end
+    table.sort(ids)
+    return ids
+end
+
+--- Load per-site Redis second buckets into ngx.shared after process restart.
 function _M.hydrate_from_redis()
     if not dict or ngx.worker.id() ~= 0 then
         return
@@ -335,20 +348,9 @@ function _M.hydrate_from_redis()
 
     local now = math.floor(ngx.now())
     local loaded = 0
-    for i = 0, BUCKET_TTL - 1 do
-        local sec = now - i
-        local gkey = redis_sec_key(nil, sec)
-        local gval = red:get(gkey)
-        if gval and gval ~= ngx.null then
-            local n = tonumber(gval)
-            if n and n > 0 then
-                dict:set(bucket_key(nil, sec), n, BUCKET_TTL)
-                loaded = loaded + 1
-            end
-        end
-    end
+    local site_ids = {}
+    local seen = {}
 
-    -- Per-site second buckets via SCAN
     local cursor = "0"
     repeat
         local res = red:scan(cursor, "MATCH", SEC_KEY_S .. "*", "COUNT", 200)
@@ -364,8 +366,13 @@ function _M.hydrate_from_redis()
                 if val and val ~= ngx.null then
                     local n = tonumber(val)
                     if n and n > 0 then
-                        dict:set(bucket_key(tonumber(sid), tonumber(sec)), n, BUCKET_TTL)
+                        local site_id = tonumber(sid)
+                        dict:set(bucket_key(site_id, tonumber(sec)), n, BUCKET_TTL)
                         loaded = loaded + 1
+                        if not seen[site_id] then
+                            seen[site_id] = true
+                            site_ids[#site_ids + 1] = site_id
+                        end
                     end
                 end
             end
@@ -373,10 +380,7 @@ function _M.hydrate_from_redis()
     until cursor == "0"
 
     local now_min = now - (now % 60)
-    local day_g = sum_day_from_hash(red, MIN_KEY_G, now_min)
-    dict:set("wc:86400", day_g, 120)
-
-    -- Per-site 24h caches from minute rings
+    local day_total = 0
     cursor = "0"
     repeat
         local res = red:scan(cursor, "MATCH", MIN_KEY_S .. "*", "COUNT", 50)
@@ -390,26 +394,32 @@ function _M.hydrate_from_redis()
             if sid then
                 local day_s = sum_day_from_hash(red, key, now_min)
                 dict:set("wc:s:" .. sid .. ":86400", day_s, 120)
+                day_total = day_total + day_s
+                local site_id = tonumber(sid)
+                if site_id and not seen[site_id] then
+                    seen[site_id] = true
+                    site_ids[#site_ids + 1] = site_id
+                end
             end
         end
     until cursor == "0"
 
+    table.sort(site_ids)
+    set_tracked_site_ids(site_ids)
+    dict:set("wc:86400", day_total, 120)
+
     rc.release(red)
-    ngx.log(ngx.INFO, "waf traffic: hydrated ", loaded, " sec buckets from redis; day_g=", day_g)
+    ngx.log(ngx.INFO, "waf traffic: hydrated ", loaded, " site sec buckets; day_sum=", day_total)
 end
 
 function _M.tick(cfg)
     if not dict then return end
-
-    -- Heavy window aggregation + Redis publish only on worker 0.
     if ngx.worker.id() ~= 0 then
         return
     end
 
     local now = math.floor(ngx.now())
-    local global_counts = window_counts(now, nil)
     local thresholds, logging = thresholds_from_settings(cfg)
-
     refresh_viewer_flag()
 
     local red, err = rc.connect()
@@ -418,27 +428,26 @@ function _M.tick(cfg)
         return
     end
 
-    local day_g, min_g = sync_scope_to_redis(red, now, nil, "g:")
-    apply_durable_windows(red, global_counts, min_g, now)
-    cache_global_windows(global_counts)
+    local site_ids = configured_site_ids(cfg)
+    set_tracked_site_ids(site_ids)
+
+    local global_counts = empty_counts()
+    local day_g = 0
+    local sites_out = {}
+
+    for _, sid in ipairs(site_ids) do
+        local counts = window_counts(now, sid)
+        local day_s = sync_site_to_redis(red, now, sid)
+        add_counts(global_counts, counts)
+        day_g = day_g + (day_s or 0)
+        sites_out[tostring(sid)] = {
+            windows = windows_payload(counts, day_s, nil, false),
+        }
+    end
+
+    cache_global_windows(global_counts, day_g)
     local burst = update_burst(global_counts, logging)
     local windows_out = windows_payload(global_counts, day_g, thresholds, true)
-
-    local sites_out = {}
-    if cfg and cfg.sites then
-        for _, site in pairs(cfg.sites) do
-            local sid = tonumber(site.id)
-            if sid then
-                local counts = window_counts(now, sid)
-                local prefix = "s:" .. tostring(sid) .. ":"
-                local day_s, min_s = sync_scope_to_redis(red, now, sid, prefix)
-                apply_durable_windows(red, counts, min_s, now)
-                sites_out[tostring(sid)] = {
-                    windows = windows_payload(counts, day_s, nil, false),
-                }
-            end
-        end
-    end
 
     local payload = cjson.encode({
         updated_at = now,
@@ -449,7 +458,6 @@ function _M.tick(cfg)
         sites = sites_out,
     })
     if payload then
-        -- Longer TTL: readers should not fall through to empty on brief stalls.
         red:set(SNAPSHOT_KEY, payload, "EX", 120)
     end
     rc.release(red)

@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS waf.traffic_minute (
 )
 ENGINE = SummingMergeTree
 ORDER BY (minute, site_id)
-TTL minute + INTERVAL 90 DAY
+TTL minute + INTERVAL 35 DAY
 SETTINGS allow_nullable_key = 1;
 
 CREATE TABLE IF NOT EXISTS waf.traffic_window_snapshot (
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS waf.traffic_window_snapshot (
 )
 ENGINE = MergeTree
 ORDER BY (site_id, window_sec, ts)
-TTL ts + INTERVAL 90 DAY
+TTL ts + INTERVAL 35 DAY
 SETTINGS allow_nullable_key = 1;
 
 CREATE TABLE IF NOT EXISTS waf.ai_guard_incidents (

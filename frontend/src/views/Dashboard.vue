@@ -127,24 +127,33 @@
                 </div>
                 <div class="traffic-live-card__value">{{ formatTrafficCount(w.requests) }}</div>
                 <div class="traffic-live-card__qps">{{ formatQps(w.qps) }} QPS</div>
+                <a-tooltip
+                  v-if="liveTrafficHasBaselineWindow(w)"
+                  :title="liveTrafficBaselineTip(w)"
+                  :mouse-enter-delay="0.25"
+                >
+                  <div class="traffic-live-card__status">
+                    <component :is="liveTrafficStatusIcon(w)" class="traffic-live-card__status-icon" />
+                    <span class="traffic-live-card__baseline-text">
+                      <template v-if="w.baseline_avg != null">
+                        <span>{{ formatTrafficCount(w.baseline_avg) }}</span>
+                        <span
+                          v-if="w.deviation_ratio != null"
+                          class="traffic-live-card__ratio"
+                        >
+                          {{ formatIntelDeviation(w.deviation_ratio) }}
+                        </span>
+                      </template>
+                      <template v-else>暂无基线</template>
+                    </span>
+                  </div>
+                </a-tooltip>
                 <div
-                  class="traffic-live-card__status"
-                  :class="{ 'is-baseline-ghost': !liveTrafficHasBaselineWindow(w) }"
+                  v-else
+                  class="traffic-live-card__status is-baseline-ghost"
                 >
                   <component :is="liveTrafficStatusIcon(w)" class="traffic-live-card__status-icon" />
-                  <span class="traffic-live-card__baseline-text">
-                    <template v-if="w.baseline_avg != null">
-                      <span>基线 {{ formatTrafficCount(w.baseline_avg) }}</span>
-                      <span
-                        v-if="w.deviation_ratio != null"
-                        class="traffic-live-card__ratio"
-                      >
-                        {{ formatIntelDeviation(w.deviation_ratio) }}
-                      </span>
-                      <span v-if="w.baseline_warmup" class="traffic-live-card__learning">学习中</span>
-                    </template>
-                    <template v-else>暂无基线</template>
-                  </span>
+                  <span class="traffic-live-card__baseline-text">暂无基线</span>
                 </div>
                 <a-progress
                   :percent="liveTrafficBarPercent(w)"
@@ -805,6 +814,17 @@ function liveTrafficHasBaselineWindow(w: LiveTrafficWindow) {
   return w.window_sec !== 10 && w.window_sec !== 30;
 }
 
+function liveTrafficBaselineTip(w: LiveTrafficWindow) {
+  if (!liveTrafficHasBaselineWindow(w)) return "";
+  if (w.baseline_avg == null) return "暂无可用基线";
+  const parts = [`基线 ${formatTrafficCount(w.baseline_avg)}`];
+  if (w.deviation_ratio != null) {
+    parts.push(`相对 ${formatIntelDeviation(w.deviation_ratio)}`);
+  }
+  parts.push(w.baseline_warmup ? "学习中" : "已稳定");
+  return parts.join(" · ");
+}
+
 function liveTrafficCardClass(w: LiveTrafficWindow) {
   if (w.baseline_avg == null && (w.threshold == null || w.threshold <= 0)) {
     return "is-neutral";
@@ -824,29 +844,31 @@ function liveTrafficStatusIcon(w: LiveTrafficWindow) {
   return CheckCircleOutlined;
 }
 
-/** 有阈值按阈值；否则相对基线（基线=50%，2×=100%）；都没有则为 0 */
+/** 有基线：持平≈30%，5×基线满格；否则有阈值按阈值；都没有则占位。 */
 function liveTrafficBarPercent(w: LiveTrafficWindow) {
+  if (w.baseline_avg != null && w.baseline_avg > 0) {
+    return Math.min(100, Math.round((w.requests / w.baseline_avg) * 30));
+  }
   if (w.threshold != null && w.threshold > 0) {
     return Math.min(100, Math.round((w.requests / w.threshold) * 100));
-  }
-  if (w.baseline_avg != null && w.baseline_avg > 0) {
-    return Math.min(100, Math.round((w.requests / w.baseline_avg) * 50));
   }
   return w.requests > 0 ? 28 : 0;
 }
 
 function liveTrafficBarColor(w: LiveTrafficWindow) {
+  if (w.baseline_avg != null) {
+    const tone = baselineTone(w.deviation_ratio);
+    if (tone === "danger") return "#ef4444";
+    if (tone === "warn") return "#f59e0b";
+    return "#3474ff";
+  }
   if (w.threshold != null && w.threshold > 0) {
     const ratio = w.requests / w.threshold;
     if (ratio >= 1) return "#ef4444";
     if (ratio >= 0.7) return "#f59e0b";
     return "#22c55e";
   }
-  if (w.baseline_avg == null) return "#94a3b8";
-  const tone = baselineTone(w.deviation_ratio);
-  if (tone === "danger") return "#ef4444";
-  if (tone === "warn") return "#f59e0b";
-  return "#3474ff";
+  return "#94a3b8";
 }
 
 function formatTrendTime(value: string) {
@@ -1861,12 +1883,12 @@ onUnmounted(() => {
 
 
 .traffic-live-card.is-warn {
-  border-color: color-mix(in srgb, var(--fs-color-warning) 50%, var(--fs-border));
+  border-color: color-mix(in srgb, var(--fs-color-warning) 40%, var(--fs-border));
   background: color-mix(in srgb, var(--fs-color-warning) 5%, var(--fs-bg-muted));
 }
 
 .traffic-live-card.is-danger {
-  border-color: color-mix(in srgb, var(--fs-color-danger) 50%, var(--fs-border));
+  border-color: color-mix(in srgb, var(--fs-color-danger) 40%, var(--fs-border));
   background: color-mix(in srgb, var(--fs-color-danger) 5%, var(--fs-bg-muted));
 }
 
@@ -1902,9 +1924,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 5px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   color: var(--fs-text-secondary);
   min-height: 18px;
+  min-width: 0;
 }
 
 .traffic-live-card__status.is-baseline-ghost {
@@ -1922,9 +1945,13 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
   font-size: 11px;
   line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .traffic-live-card.is-ok .traffic-live-card__status { color: #15803d; }
@@ -1935,11 +1962,6 @@ onUnmounted(() => {
 .traffic-live-card__ratio {
   font-weight: 600;
   opacity: 0.9;
-}
-
-.traffic-live-card__learning {
-  font-weight: 500;
-  opacity: 0.85;
 }
 
 .traffic-live-card__bar {

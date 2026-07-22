@@ -1,4 +1,8 @@
-"""Ingest engine Redis snapshots into durable ClickHouse rollups."""
+"""Ingest engine Redis snapshots into durable ClickHouse rollups.
+
+Only per-site windows are persisted. Snapshot ``global`` is a derived sum and
+must not be written as site_id=NULL history.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +25,8 @@ def parse_snapshot(raw: str | bytes) -> TrafficSnapshot | None:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return None
+
+    # Keep global_windows as the derived sum for API/overview readers only.
     windows = []
     for w in data.get("global", {}).get("windows") or []:
         try:
@@ -66,7 +72,7 @@ def parse_snapshot(raw: str | bytes) -> TrafficSnapshot | None:
 
 
 class SnapshotIngestor:
-    """Read live snapshot → persist minute rollup + window history."""
+    """Read live snapshot → persist per-site minute rollup + window history."""
 
     def __init__(self, store: ClickHouseTrafficStore | None = None):
         self._store = store or ClickHouseTrafficStore()
@@ -84,47 +90,38 @@ class SnapshotIngestor:
             return None
 
         now = datetime.utcnow().replace(second=0, microsecond=0)
-        minute_requests = 0
         analysis_samples: list[WindowSample] = []
-
-        for w in snapshot.global_windows:
-            if w.window_sec == 60:
-                minute_requests = w.requests
-            if w.window_sec in ANALYSIS_WINDOWS_SEC:
-                analysis_samples.append(
-                    WindowSample(
-                        window_sec=w.window_sec,
-                        requests=w.requests,
-                        qps=w.qps,
-                        site_id=None,
-                        observed_at=now,
-                    )
-                )
-
-        if minute_requests > 0:
-            await asyncio.to_thread(
-                self._store.insert_minute, now, minute_requests, site_id=None
-            )
+        sites_written = 0
 
         for site_id, site_samples in snapshot.site_windows.items():
             site_minute = 0
             for w in site_samples:
                 if w.window_sec == 60:
                     site_minute = w.requests
-                    break
+                if w.window_sec in ANALYSIS_WINDOWS_SEC:
+                    analysis_samples.append(
+                        WindowSample(
+                            window_sec=w.window_sec,
+                            requests=w.requests,
+                            qps=w.qps,
+                            site_id=site_id,
+                            observed_at=now,
+                        )
+                    )
             if site_minute > 0:
                 await asyncio.to_thread(
                     self._store.insert_minute, now, site_minute, site_id=site_id
                 )
+                sites_written += 1
 
         if analysis_samples:
             await asyncio.to_thread(
                 self._store.insert_window_snapshots, now, analysis_samples
             )
             log.debug(
-                "ingested traffic minute=%s requests=%d windows=%d sites=%d",
+                "ingested traffic minute=%s site_minutes=%d windows=%d sites=%d",
                 now.isoformat(),
-                minute_requests,
+                sites_written,
                 len(analysis_samples),
                 len(snapshot.site_windows),
             )

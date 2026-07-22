@@ -22,9 +22,11 @@ REDIS_SNAPSHOT_KEY = "waf:traffic:snapshot"
 # Default anomaly: current > baseline * (1 + SPIKE_RATIO)  →  50% above average.
 DEFAULT_SPIKE_RATIO = 0.5
 DEFAULT_BASELINE_LOOKBACK_DAYS = 28
+# Disk TTL for traffic history: lookback (28d) + ~7d buffer; MergeTree auto-expires.
+TRAFFIC_HISTORY_TTL_DAYS = 35
 # Legacy global floor; per-window thresholds live in windows.warmup_min_samples / stable_min_samples.
 DEFAULT_MIN_BASELINE_SAMPLES = 12
-DEFAULT_BASELINE_OUTLIER_QUANTILE = 0.95
+DEFAULT_BASELINE_OUTLIER_QUANTILE = 0.99
 DEFAULT_ALERT_COOLDOWN_SEC = 300
 DEFAULT_INGEST_INTERVAL_SEC = 60
 DEFAULT_BASELINE_RECALC_INTERVAL_SEC = 900

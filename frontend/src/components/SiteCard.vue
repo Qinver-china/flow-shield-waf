@@ -134,16 +134,17 @@
             {{ formatCount(w.requests) }}
             <span class="traffic-card__qps">{{ formatQps(w.qps) }}</span>
           </div>
-          <div class="traffic-card__baseline">
-            <template v-if="w.baseline_avg != null">
-              基线 {{ formatBaseline(w.baseline_avg) }}
-              <span v-if="w.baseline_warmup" class="traffic-card__warmup">· 学习中</span>
-              <span v-else-if="w.deviation_ratio != null" class="traffic-card__deviation">
-                · {{ formatDeviation(w.deviation_ratio) }}
-              </span>
-            </template>
-            <template v-else>暂无基线</template>
-          </div>
+          <a-tooltip :title="trafficBaselineTip(w)" :mouse-enter-delay="0.25">
+            <div class="traffic-card__baseline">
+              <template v-if="w.baseline_avg != null">
+                基线 {{ formatBaseline(w.baseline_avg) }}
+                <span v-if="w.deviation_ratio != null" class="traffic-card__deviation">
+                  · {{ formatDeviation(w.deviation_ratio) }}
+                </span>
+              </template>
+              <template v-else>暂无基线</template>
+            </div>
+          </a-tooltip>
         </div>
       </div>
     </div>
@@ -319,6 +320,16 @@ function formatDeviation(ratio: number) {
   const delta = ratio * 100 - 100;
   const sign = delta > 0 ? "+" : "";
   return `${sign}${delta.toFixed(0)}%`;
+}
+
+function trafficBaselineTip(w: SiteTrafficWindow) {
+  if (w.baseline_avg == null) return "暂无可用基线";
+  const parts = [`基线 ${formatBaseline(w.baseline_avg)}`];
+  if (w.deviation_ratio != null) {
+    parts.push(`相对 ${formatDeviation(w.deviation_ratio)}`);
+  }
+  parts.push(w.baseline_warmup ? "状态：学习中（样本仍在积累）" : "状态：已稳定");
+  return parts.join(" · ");
 }
 
 function trafficBaselineClass(w: SiteTrafficWindow) {
@@ -608,10 +619,6 @@ function trafficBaselineClass(w: SiteTrafficWindow) {
   font-size: 10px;
   line-height: 1.35;
   color: var(--fs-text-muted);
-}
-
-.traffic-card__warmup {
-  color: var(--fs-color-warning);
 }
 
 .traffic-card__deviation {

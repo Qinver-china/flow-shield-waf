@@ -39,9 +39,11 @@ class BaselineCalculator:
 
         if timezone_name is None:
             timezone_name = await get_traffic_timezone(db)
-        scopes = site_ids if site_ids is not None else [None]
+        scopes = site_ids if site_ids is not None else []
         saved: list[Baseline] = []
         for site_id in scopes:
+            if site_id is None:
+                continue
             for window_sec in config.analysis_windows_sec:
                 baseline = await asyncio.to_thread(
                     self._strategy.compute,

@@ -11,12 +11,22 @@ from app.services.traffic_intel.timezone import local_datetime
 from app.services.traffic_intel.types import Baseline, TrafficIntelConfig
 from app.services.traffic_intel.windows import warmup_min_samples
 
-# Try the most specific slot first; widen when history is still sparse.
-_SLOT_FALLBACK_CHAIN: tuple[tuple[str, str], ...] = (
-    ("same_slot_hourly", "quarter"),
-    ("same_slot_hourly:hour", "hour"),
-    ("same_slot_hourly:hour_only", "hour_only"),
+# Lightweight daily alignment (no weekday):
+# - short windows: 15-minute quarter within the hour, then hour
+# - long windows: hour only (quarter would chop 30m/60m semantics)
+_SLOT_FALLBACK_SHORT: tuple[tuple[str, str], ...] = (
+    ("same_tod_quarter", "quarter"),
+    ("same_tod_hour", "hour"),
 )
+_SLOT_FALLBACK_LONG: tuple[tuple[str, str], ...] = (
+    ("same_tod_hour", "hour"),
+)
+
+
+def _slot_chain_for_window(window_sec: int) -> tuple[tuple[str, str], ...]:
+    if window_sec >= 1800:
+        return _SLOT_FALLBACK_LONG
+    return _SLOT_FALLBACK_SHORT
 
 
 class BaselineStrategy(ABC):
@@ -36,9 +46,9 @@ class BaselineStrategy(ABC):
 
 
 class SameSlotHourlyStrategy(BaselineStrategy):
-    """Learn median traffic for aligned historical slots over lookback days."""
+    """Learn median of window-snapshot readings for the same time-of-day."""
 
-    name = "same_slot_hourly"
+    name = "same_tod"
 
     def compute(
         self,
@@ -54,7 +64,7 @@ class SameSlotHourlyStrategy(BaselineStrategy):
         local_as_of = local_datetime(as_of, timezone_name)
         warmup_min = warmup_min_samples(window_sec)
 
-        for strategy_name, slot_mode in _SLOT_FALLBACK_CHAIN:
+        for strategy_name, slot_mode in _slot_chain_for_window(window_sec):
             avg_r, samples = store.same_slot_window_averages(
                 window_sec,
                 site_id=site_id,
