@@ -216,6 +216,11 @@ code,
   }
 }
 
+/* Hover tip for traffic baseline status (portal; keep outside scoped SFC CSS). */
+.baseline-status-tooltip .ant-tooltip-inner {
+  font-size: 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

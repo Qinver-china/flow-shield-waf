@@ -130,6 +130,7 @@
                 <a-tooltip
                   v-if="liveTrafficHasBaselineWindow(w)"
                   :title="liveTrafficBaselineTip(w)"
+                  overlay-class-name="baseline-status-tooltip"
                   :mouse-enter-delay="0.25"
                 >
                   <div class="traffic-live-card__status">
@@ -844,10 +845,22 @@ function liveTrafficStatusIcon(w: LiveTrafficWindow) {
   return CheckCircleOutlined;
 }
 
-/** 有基线：持平≈30%，5×基线满格；否则有阈值按阈值；都没有则占位。 */
+/** 10s/30s 无基线：按 QPS 映射进度条（0.1→10%，10→100%）。 */
+function liveTrafficQpsBarPercent(qps: number | null | undefined) {
+  const q = Math.round(Number(qps || 0) * 10) / 10;
+  if (q <= 0) return 0;
+  const pct = 10 + ((q - 0.1) / (10 - 0.1)) * 90;
+  return Math.min(100, Math.max(0, Math.round(pct)));
+}
+
+/** 有基线：相对 -100%（0×）≈10%，3× 基线满格；10s/30s 按 QPS；否则阈值/占位。 */
 function liveTrafficBarPercent(w: LiveTrafficWindow) {
+  if (!liveTrafficHasBaselineWindow(w)) {
+    return liveTrafficQpsBarPercent(w.qps);
+  }
   if (w.baseline_avg != null && w.baseline_avg > 0) {
-    return Math.min(100, Math.round((w.requests / w.baseline_avg) * 30));
+    const ratio = w.requests / w.baseline_avg;
+    return Math.min(100, Math.max(0, Math.round(10 + ratio * 30)));
   }
   if (w.threshold != null && w.threshold > 0) {
     return Math.min(100, Math.round((w.requests / w.threshold) * 100));
@@ -856,6 +869,12 @@ function liveTrafficBarPercent(w: LiveTrafficWindow) {
 }
 
 function liveTrafficBarColor(w: LiveTrafficWindow) {
+  if (!liveTrafficHasBaselineWindow(w)) {
+    const pct = liveTrafficQpsBarPercent(w.qps);
+    if (pct > 70) return "#ef4444";
+    if (pct > 40) return "#f59e0b";
+    return "#3474ff";
+  }
   if (w.baseline_avg != null) {
     const tone = baselineTone(w.deviation_ratio);
     if (tone === "danger") return "#ef4444";

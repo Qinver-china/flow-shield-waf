@@ -134,13 +134,30 @@
             {{ formatCount(w.requests) }}
             <span class="traffic-card__qps">{{ formatQps(w.qps) }}</span>
           </div>
-          <a-tooltip :title="trafficBaselineTip(w)" :mouse-enter-delay="0.25">
+          <a-tooltip
+            :title="trafficBaselineTip(w)"
+            overlay-class-name="baseline-status-tooltip"
+            :mouse-enter-delay="0.25"
+          >
             <div class="traffic-card__baseline">
               <template v-if="w.baseline_avg != null">
-                基线 {{ formatBaseline(w.baseline_avg) }}
-                <span v-if="w.deviation_ratio != null" class="traffic-card__deviation">
-                  · {{ formatDeviation(w.deviation_ratio) }}
-                </span>
+                <div class="traffic-card__baseline-line">
+                  基线 {{ formatBaseline(w.baseline_avg) }}
+                </div>
+                <div
+                  v-if="w.deviation_ratio != null"
+                  class="traffic-card__deviation"
+                >
+                  <ArrowUpOutlined
+                    v-if="deviationDelta(w.deviation_ratio) > 0"
+                    class="traffic-card__deviation-icon"
+                  />
+                  <ArrowDownOutlined
+                    v-else-if="deviationDelta(w.deviation_ratio) < 0"
+                    class="traffic-card__deviation-icon"
+                  />
+                  <span>{{ formatDeviation(w.deviation_ratio) }}</span>
+                </div>
               </template>
               <template v-else>暂无基线</template>
             </div>
@@ -173,6 +190,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Modal } from "ant-design-vue";
+import { ArrowDownOutlined, ArrowUpOutlined } from "@ant-design/icons-vue";
 import { clientIpSourceLabel } from "@/constants/clientIpSource";
 import { useLogNavigation } from "@/composables/useLogNavigation";
 import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
@@ -316,8 +334,12 @@ function formatBaseline(value: number) {
   return String(Math.round(value));
 }
 
+function deviationDelta(ratio: number) {
+  return ratio * 100 - 100;
+}
+
 function formatDeviation(ratio: number) {
-  const delta = ratio * 100 - 100;
+  const delta = deviationDelta(ratio);
   const sign = delta > 0 ? "+" : "";
   return `${sign}${delta.toFixed(0)}%`;
 }
@@ -621,8 +643,21 @@ function trafficBaselineClass(w: SiteTrafficWindow) {
   color: var(--fs-text-muted);
 }
 
+.traffic-card__baseline-line {
+  display: block;
+}
+
 .traffic-card__deviation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 2px;
   color: var(--fs-text-secondary);
+}
+
+.traffic-card__deviation-icon {
+  font-size: 10px;
 }
 
 .traffic-card--warn .traffic-card__deviation {
