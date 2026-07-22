@@ -134,9 +134,9 @@
                   <component :is="liveTrafficStatusIcon(w)" class="traffic-live-card__status-icon" />
                   <span class="traffic-live-card__baseline-text">
                     <template v-if="w.baseline_avg != null">
-                      <span>基线</span>
+                      <span>基线 {{ formatTrafficCount(w.baseline_avg) }}</span>
                       <span
-                        v-if="w.deviation_ratio != null && !w.baseline_warmup"
+                        v-if="w.deviation_ratio != null"
                         class="traffic-live-card__ratio"
                       >
                         {{ formatIntelDeviation(w.deviation_ratio) }}
@@ -1898,7 +1898,7 @@ onUnmounted(() => {
 }
 
 .traffic-live-card__status {
-  margin-top: 10px;
+  margin-top: 6px;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1944,7 +1944,7 @@ onUnmounted(() => {
 
 .traffic-live-card__bar {
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 0;
   margin-bottom: -8px;
 }
 
