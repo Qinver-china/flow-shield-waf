@@ -756,7 +756,7 @@ const securityCards = computed(() => [
   { key: "blocked", label: "已拦截", value: stats.blocked, sub: `占比 ${stats.block_rate}%`, color: "#ef4444", valueColor: "#dc2626", icon: StopOutlined, delta: summary.blocked_delta_pct ?? undefined },
   { key: "passed", label: "已放行", value: stats.passed, sub: "观察 / 验证后放行", color: "#22c55e", valueColor: "#16a34a", icon: CheckCircleOutlined, delta: summary.passed_delta_pct ?? undefined },
   { key: "unique_ips", label: "独立 IP", value: stats.unique_ips, sub: "去重后的来源地址", color: "#8b5cf6", valueColor: "#7c3aed", icon: UserOutlined, delta: summary.unique_ips_delta_pct ?? undefined },
-  { key: "rules", label: "命中规则", value: stats.unique_rules, sub: topRuleSummary(), color: "#7c3aed", valueColor: "#6d28d9", icon: SafetyOutlined },
+  { key: "rules", label: "命中规则", value: stats.unique_rules, sub: topRuleSummary(), color: "#ed673e", valueColor: "#f5663a", icon: SafetyOutlined },
   { key: "methods", label: "请求方法种类", value: stats.top_methods?.length || 0, sub: topMethodSummary(), color: "#0ea5e9", valueColor: "#0284c7", icon: FileTextOutlined },
 ]);
 
@@ -852,13 +852,13 @@ function liveTrafficStatusIcon(w: LiveTrafficWindow) {
   return CheckCircleOutlined;
 }
 
-/** 10s/30s 无基线：按 QPS 映射进度条（0.1→10%，10→100%）。
+/** 10s/30s 无基线：按 QPS 映射进度条（0.1→10%，16→100%）。
  * 全部站点时 QPS 已是「各站请求合计 ÷ 窗口」，仍用同一刻度。
  */
 function liveTrafficQpsBarPercent(qps: number | null | undefined) {
   const q = Math.round(Number(qps || 0) * 10) / 10;
   if (q <= 0) return 0;
-  const pct = 10 + ((q - 0.1) / (10 - 0.1)) * 90;
+  const pct = 10 + ((q - 0.1) / (16 - 0.1)) * 90;
   return Math.min(100, Math.max(0, Math.round(pct)));
 }
 
