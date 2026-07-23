@@ -4,9 +4,9 @@
 
 ### 部署
 
-- 前端镜像构建改为先 COPY 源码再 `npm ci`，并忽略上下文中的 `node_modules`，避免线上空目录覆盖安装结果导致 `vite: not found`
-- 将 `vite` / `@vitejs/plugin-vue` 挪入 dependencies，构建脚本改用 `node ./node_modules/vite/bin/vite.js`
-- 构建默认改用国内源：Alpine→阿里云、npm→npmmirror、PyPI→清华，避免线上访问不了 `dl-cdn.alpinelinux.org` 导致 `apk add` 失败
+- 还原构建默认行为：不再强制国内 Alpine/npm 镜像；`ALPINE_MIRROR` 改为可选 build-arg
+- 前端构建恢复分层 `npm ci` + `.dockerignore` 排除 `node_modules`，避免上下文空目录覆盖依赖
+- `docker-compose.yml` 注释说明：Linux 宿主机构建容器出网失败时可启用 `build.network: host`
 
 ## [0.3.8] - 2026-07-23
 

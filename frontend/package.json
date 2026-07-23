@@ -6,13 +6,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node ./node_modules/vite/bin/vite.js build",
+    "build": "vite build",
     "typecheck": "vue-tsc -b",
     "preview": "vite preview"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
-    "@vitejs/plugin-vue": "^5.0.5",
     "ant-design-vue": "^4.2.3",
     "ant-design-x-vue": "^1.6.0",
     "axios": "^1.7.2",
@@ -21,13 +20,14 @@
     "echarts": "^5.5.1",
     "marked": "^18.0.6",
     "pinia": "^2.1.7",
-    "vite": "^5.3.3",
     "vue": "^3.4.31",
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
     "@types/dompurify": "^3.0.5",
+    "@vitejs/plugin-vue": "^5.0.5",
     "typescript": "^5.5.3",
+    "vite": "^5.3.3",
     "vue-tsc": "^2.0.26"
   }
 }

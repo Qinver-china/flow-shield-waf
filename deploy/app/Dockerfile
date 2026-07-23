@@ -5,31 +5,24 @@
 # ---- 1) 构建前端 ----
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-# 避免宿主机 NODE_ENV=production 跳过构建依赖；安装必须在 COPY 源码之后，
-# 否则后续 COPY frontend/ 可能用空的 node_modules 覆盖掉 npm ci 结果。
+# 本 stage 单独设 development，避免宿主机 NODE_ENV=production 跳过 vite 等 devDependencies
 ENV NODE_ENV=development
-# 国内默认 npmmirror；海外可覆盖：--build-arg NPM_REGISTRY=https://registry.npmjs.org
-ARG NPM_REGISTRY=https://registry.npmmirror.com
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 COPY frontend/ ./
-RUN npm config set registry "${NPM_REGISTRY}" \
-    && rm -rf node_modules \
-    && npm ci --include=dev \
-    && test -x node_modules/.bin/vite \
-    && npm run build
+RUN npm run build
 
 # ---- 2) 应用运行镜像（基于已有 OpenResty 引擎镜像，避免重复装系统包）----
 FROM openresty/openresty:1.25.3.1-2-alpine-fat
 
-# 默认国内镜像：PyPI=清华，Alpine=阿里云；海外可覆盖：
-#   docker compose build \
-#     --build-arg PIP_INDEX_URL=https://pypi.org/simple \
-#     --build-arg PIP_TRUSTED_HOST= \
-#     --build-arg ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine \
-#     --build-arg NPM_REGISTRY=https://registry.npmjs.org \
-#     app
+# 默认清华 PyPI 镜像，加速国内 docker build；海外可覆盖：
+#   docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple --build-arg PIP_TRUSTED_HOST= app
+# 可选 Alpine 镜像（仅构建 apk 慢/失败时）：
+#   --build-arg ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
+# 若构建容器无法访问外网 apk 源，在 Linux 宿主机可用 host 网络构建，见 docker-compose.yml 注释
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
-ARG ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
+ARG ALPINE_MIRROR=
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -44,18 +37,12 @@ RUN set -eux; \
       sed -i "s#https\\?://dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
       sed -i "s#https\\?://[^/]*/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
     fi; \
-    cat /etc/apk/repositories; \
     apk add --no-cache python3 py3-pip nginx supervisor curl redis libjpeg-turbo tzdata
 
 # OpenResty fat 镜像仅含旧版 GeoIP(.dat) 模块，不含 GeoIP2(.mmdb)；编译动态模块以启用地理字段。
 # 模块源码已 vendored（避免构建时依赖 GitHub）；nginx 版本取 openresty/x.y.z.N → x.y.z。
 COPY deploy/app/vendor/ngx_http_geoip2_module /tmp/ngx_http_geoip2_module
-RUN set -eux; \
-    if [ -n "${ALPINE_MIRROR}" ]; then \
-      sed -i "s#https\\?://dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
-      sed -i "s#https\\?://[^/]*/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
-    fi; \
-    apk add --no-cache --virtual .geoip2-build \
+RUN apk add --no-cache --virtual .geoip2-build \
         build-base pcre-dev zlib-dev openssl-dev linux-headers libmaxminddb-dev curl \
     && openresty_ver=$(/usr/local/openresty/nginx/sbin/nginx -v 2>&1 | sed -n 's/.*openresty\///p' | cut -d' ' -f1) \
     && nginx_version=$(echo "$openresty_ver" | cut -d. -f1-3) \

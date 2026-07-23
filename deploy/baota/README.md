@@ -96,6 +96,8 @@ docker compose restart app        # 重启应用容器
 docker compose down               # 停止（勿加 -v，否则会删数据卷）
 ```
 
+**构建失败（容器内 `apk add` / `npm ci` 报 temporary error）**：多为 Docker 桥接网络出网问题，与项目代码无关。Linux 宿主机可在 `docker-compose.yml` 的 `app.build` 下取消注释 `network: host` 后重新 `docker compose build app`；或在本机构建镜像后 `docker save` 传到服务器 `docker load`。
+
 ## 七、数据与备份
 
 | 数据卷 | 内容 |
