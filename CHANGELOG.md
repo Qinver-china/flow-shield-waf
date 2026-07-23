@@ -5,6 +5,7 @@
 ### 部署
 
 - App 容器启动：entrypoint 集中等待 Redis（默认 120s，可用 `WAIT_REDIS_MAX_SEC` 覆盖）；panel 在 backend 就绪后再监听 :9000，避免重启时 `/health` 反代刷屏 `Connection refused`
+- App 容器启动：增加分步流程日志与就绪后品牌展示（`[startup]` 前缀，5 步进度 + 流盾 WAF 标语）
 - 还原构建默认行为：不再强制国内 Alpine/npm 镜像；`ALPINE_MIRROR` 改为可选 build-arg
 - 前端构建恢复分层 `npm ci` + `.dockerignore` 排除 `node_modules`，避免上下文空目录覆盖依赖
 - `docker-compose.yml` 注释说明：Linux 宿主机构建容器出网失败时可启用 `build.network: host`

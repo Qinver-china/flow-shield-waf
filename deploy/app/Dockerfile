@@ -101,7 +101,10 @@ COPY deploy/app/supervisord.conf /etc/supervisor/supervisord.conf
 COPY deploy/app/entrypoint.sh /entrypoint.sh
 COPY deploy/app/wait-for.sh /opt/flowshield/wait-for.sh
 COPY deploy/app/wait-for-backend.sh /opt/flowshield/wait-for-backend.sh
-RUN chmod +x /entrypoint.sh /opt/flowshield/wait-for.sh /opt/flowshield/wait-for-backend.sh
+COPY deploy/app/startup-log.sh /opt/flowshield/startup-log.sh
+COPY deploy/app/startup-ready.sh /opt/flowshield/startup-ready.sh
+RUN chmod +x /entrypoint.sh /opt/flowshield/wait-for.sh /opt/flowshield/wait-for-backend.sh \
+    /opt/flowshield/startup-log.sh /opt/flowshield/startup-ready.sh
 
 EXPOSE 80 443 9000
 

@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/opt/flowshield/startup-log.sh
+source /opt/flowshield/startup-log.sh
+startup_init
+startup_header
+
 mkdir -p /data/engine/conf.d /data/engine/certs /var/log/supervisor /etc/flowshield /etc/nginx/geoip
+
+startup_step "1/5" "初始化运行环境"
 
 GEOIP_DIR="${WAF_GEOIP_DIR:-/etc/nginx/geoip}"
 GEOIP_MODULE="/usr/local/openresty/nginx/modules/ngx_http_geoip2_module.so"
@@ -12,6 +19,7 @@ SNIP_HTTP="/etc/nginx/snippets/geoip2-http.conf"
 : >"$SNIP_HTTP"
 
 if [ -f "$GEOIP_MODULE" ] && compgen -G "$GEOIP_DIR/*.mmdb" >/dev/null; then
+  startup_sub "GeoIP2 已启用 (${GEOIP_DIR})"
   echo "GeoIP2 enabled: using MaxMind databases from ${GEOIP_DIR}" >&2
   echo "load_module modules/ngx_http_geoip2_module.so;" >"$SNIP_LOAD"
   {
@@ -87,4 +95,5 @@ fi
 # 集中等待 Redis，避免 backend/worker/engine 各自轮询并刷屏
 /opt/flowshield/wait-for.sh
 
+startup_step "3/5" "启动服务进程 (backend / worker / engine / panel)"
 exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
