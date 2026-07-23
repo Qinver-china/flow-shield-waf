@@ -4,9 +4,12 @@
 **/.mypy_cache
 **/.ruff_cache
 **/.venv
+**/node_modules
 frontend/node_modules
+frontend/dist
 backend/.venv
 *.md
 !deploy/**/*.md
 .luacheck
 .cursor
+*.code-workspace

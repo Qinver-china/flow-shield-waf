@@ -4,7 +4,8 @@
 
 ### 部署
 
-- 前端镜像构建显式 `NODE_ENV=development` + `npm ci --include=dev`，避免宿主机/CI 的 `NODE_ENV=production` 跳过 vite 导致 `vite: not found`
+- 前端镜像构建改为先 COPY 源码再 `npm ci`，并忽略上下文中的 `node_modules`，避免线上空目录覆盖安装结果导致 `vite: not found`
+- 将 `vite` / `@vitejs/plugin-vue` 挪入 dependencies，构建脚本改用 `node ./node_modules/vite/bin/vite.js`
 
 ## [0.3.8] - 2026-07-23
 

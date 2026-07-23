@@ -5,12 +5,14 @@
 # ---- 1) 构建前端 ----
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-# Host/CI 若带 NODE_ENV=production，npm ci 会跳过 vite 等 devDependencies → `vite: not found`
+# 避免宿主机 NODE_ENV=production 跳过构建依赖；安装必须在 COPY 源码之后，
+# 否则后续 COPY frontend/ 可能用空的 node_modules 覆盖掉 npm ci 结果。
 ENV NODE_ENV=development
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --include=dev
 COPY frontend/ ./
-RUN npm run build
+RUN rm -rf node_modules \
+    && npm ci --include=dev \
+    && test -x node_modules/.bin/vite \
+    && npm run build
 
 # ---- 2) 应用运行镜像（基于已有 OpenResty 引擎镜像，避免重复装系统包）----
 FROM openresty/openresty:1.25.3.1-2-alpine-fat
