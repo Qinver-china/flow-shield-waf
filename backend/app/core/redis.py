@@ -12,6 +12,9 @@ def get_redis() -> aioredis.Redis:
         kwargs: dict = {
             "password": settings.redis_password or None,
             "encoding": "utf-8",
+            # Log stream payloads may contain non-UTF8 bytes (UA/cookie/path).
+            # Never crash the shared client on decode; replace and let callers handle.
+            "encoding_errors": "replace",
             "decode_responses": True,
             "max_connections": settings.redis_max_connections,
             "socket_keepalive": True,

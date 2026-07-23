@@ -128,6 +128,8 @@ import {
   statsDimensionGroups,
   statsDimensions,
   trendGranularityOptions,
+  buildTrendModeSeries,
+  trendModeValue,
   type StatsDimension,
   type TrendGranularity,
 } from "./constants";
@@ -169,7 +171,13 @@ function resolveDimension(query: LocationQuery): StatsDimension {
   return "rule_id";
 }
 
-const overview = reactive({ total: 0, blocked: 0, passed: 0, trend: [] as any[] });
+const overview = reactive({
+  total: 0,
+  blocked: 0,
+  passed: 0,
+  trend: [] as any[],
+  trend_modes: [] as Array<{ mode: string; label?: string }>,
+});
 const groupLoading = ref(false);
 const groupItems = ref<any[]>([]);
 const groupTotal = ref(0);
@@ -246,6 +254,7 @@ async function fetchOverview() {
     blocked: resp.data.blocked,
     passed: resp.data.passed,
     trend: resp.data.trend || [],
+    trend_modes: resp.data.trend_modes || [],
   });
 }
 
@@ -294,44 +303,19 @@ function renderTrendChart() {
   disposeChart(trendChart);
   trendChart = echarts.init(trendChartEl.value, echartsThemeName(isDark.value));
   const times = overview.trend.map((item) => formatTrendLabel(item.time));
-  const hasSplit = overview.trend.some((item) => item.blocked !== undefined);
-  const series = hasSplit
-    ? [
-        {
-          name: "已拦截",
-          type: "line",
-          smooth: true,
-          stack: "hits",
-          showSymbol: false,
-          symbol: "none",
-          areaStyle: lineAreaGradient("#ef4444"),
-          data: overview.trend.map((item) => item.blocked ?? 0),
-        },
-        {
-          name: "已放行",
-          type: "line",
-          smooth: true,
-          stack: "hits",
-          showSymbol: false,
-          symbol: "none",
-          areaStyle: lineAreaGradient("#22c55e"),
-          data: overview.trend.map((item) => item.passed ?? 0),
-        },
-      ]
-    : [
-        {
-          name: "命中",
-          type: "line",
-          smooth: true,
-          showSymbol: false,
-          symbol: "none",
-          areaStyle: lineAreaGradient("#38bdf8"),
-          itemStyle: { color: "#38bdf8" },
-          data: overview.trend.map((item) => item.count ?? 0),
-        },
-      ];
+  const seriesDefs = buildTrendModeSeries(overview.trend, overview.trend_modes);
+  const series = seriesDefs.map((s) => ({
+    name: s.name,
+    type: "line" as const,
+    smooth: true,
+    showSymbol: false,
+    symbol: "none",
+    itemStyle: { color: s.color },
+    areaStyle: lineAreaGradient(s.color),
+    data: overview.trend.map((item) => trendModeValue(item, s.key)),
+  }));
   trendChart.setOption(withTransparentChartBg({
-    color: hasSplit ? ["#ef4444", "#22c55e"] : ["#38bdf8"],
+    color: seriesDefs.map((s) => s.color),
     tooltip: {
       trigger: "axis",
       formatter(params: unknown) {

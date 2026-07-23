@@ -367,7 +367,7 @@ import { useThemeStore } from "@/stores/theme";
 import { formatClockTime, formatDateTime, formatDateTimeShort } from "@/utils/datetime";
 import { lineAreaGradient } from "@/utils/lineAreaGradient";
 import { baselineTone } from "@/utils/baselineTone";
-import { trafficWindowLabels } from "@/views/logs/constants";
+import { trafficWindowLabels, buildTrendModeSeries, modeChartColor, trendModeValue } from "@/views/logs/constants";
 
 interface CountPair {
   total: number;
@@ -408,15 +408,6 @@ const RESOURCE_ROUTES: Record<string, string> = {
   ratelimits: "/ratelimit",
 };
 
-const MODE_CHART_COLORS: Record<string, string> = {
-  observe: "#3b82f6",
-  block: "#ef4444",
-  captcha: "#f59e0b",
-  js_challenge: "#a855f7",
-  slide_captcha: "#06b6d4",
-  unknown: "#94a3b8",
-};
-
 /** Sequential palette for ranked bar charts (source / country). */
 const RANK_BAR_COLORS = [
   "#2563eb",
@@ -454,6 +445,7 @@ const stats = reactive<any>({
   start: "",
   end: "",
   trend: [],
+  trend_modes: [],
   top_rules: [],
   top_ips: [],
   top_domains: [],
@@ -1296,38 +1288,27 @@ function updateLoadChart(silent = false) {
 
 function updateCharts(silent = false) {
   const times = stats.trend.map((t: any) => formatTrendTime(t.time));
+  const seriesDefs = buildTrendModeSeries(stats.trend, stats.trend_modes);
   upsertChart(
     "trend",
     trendEl.value,
     {
-      color: ["#ef4444", "#22c55e"],
+      color: seriesDefs.map((s) => s.color),
       tooltip: { trigger: "axis" },
-      legend: { data: ["已拦截", "已放行"], bottom: 0 },
+      legend: { data: seriesDefs.map((s) => s.name), bottom: 0 },
       grid: { left: 12, right: 12, top: 24, bottom: 40, containLabel: true },
       xAxis: { type: "category", boundaryGap: false, data: times },
       yAxis: { type: "value", minInterval: 1 },
-      series: [
-        {
-          name: "已拦截",
-          type: "line",
-          smooth: true,
-          stack: "total",
-          showSymbol: false,
-          symbol: "none",
-          areaStyle: lineAreaGradient("#ef4444"),
-          data: stats.trend.map((t: any) => t.blocked ?? 0),
-        },
-        {
-          name: "已放行",
-          type: "line",
-          smooth: true,
-          stack: "total",
-          showSymbol: false,
-          symbol: "none",
-          areaStyle: lineAreaGradient("#22c55e"),
-          data: stats.trend.map((t: any) => t.passed ?? t.count ?? 0),
-        },
-      ],
+      series: seriesDefs.map((s) => ({
+        name: s.name,
+        type: "line",
+        smooth: true,
+        showSymbol: false,
+        symbol: "none",
+        itemStyle: { color: s.color },
+        areaStyle: lineAreaGradient(s.color),
+        data: stats.trend.map((t: any) => trendModeValue(t, s.key)),
+      })),
     },
     () => goToLogs({ tab: "detail" }),
     silent,
@@ -1354,7 +1335,7 @@ function updateCharts(silent = false) {
         data: stats.mode_split.map((m: any) => ({
           name: m.label || m.mode,
           value: m.count,
-          itemStyle: { color: MODE_CHART_COLORS[m.mode] || MODE_CHART_COLORS.unknown },
+          itemStyle: { color: modeChartColor[m.mode] || modeChartColor.unknown },
         })),
       }],
     },

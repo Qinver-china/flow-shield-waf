@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import OrderedDict
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
@@ -13,11 +14,59 @@ from app.models import BotProfile, IpList, RateLimit, Rule
 from app.models.site import Site
 from app.schemas.log import LogQuery, LogStatsGroupItem, LogStatsGroupOut
 from app.services.logging.labels import (
+    MODE_LABELS,
     format_dimension_label,
     format_rule_stats_label,
     set_bot_category_labels,
 )
 from app.services.bot_catalog import category_label_map
+
+# Preferred chart series order for known protection modes (unknown/new modes append after).
+_TREND_MODE_ORDER = (
+    "block",
+    "js_challenge",
+    "captcha",
+    "slide_captcha",
+    "observe",
+)
+
+
+def _order_trend_modes(mode_totals: dict[str, int]) -> list[str]:
+    """Modes with total>0 in preferred order; unknown last; other new modes alphabetically."""
+    present = {m for m, n in mode_totals.items() if n > 0}
+    ordered = [m for m in _TREND_MODE_ORDER if m in present]
+    rest = sorted(m for m in present if m not in _TREND_MODE_ORDER and m != "unknown")
+    if "unknown" in present:
+        rest.append("unknown")
+    return ordered + rest
+
+
+def _assemble_trend_by_mode(rows: list) -> tuple[list[dict], list[dict]]:
+    """Build per-bucket by_mode trend + trend_modes (non-zero over the whole window)."""
+    by_time: OrderedDict[str, dict] = OrderedDict()
+    mode_totals: dict[str, int] = {}
+    for t, m, c in rows:
+        t_s = str(t)
+        m_s = str(m or "unknown")
+        c_i = int(c)
+        point = by_time.get(t_s)
+        if point is None:
+            point = {"time": t_s, "count": 0, "total": 0, "by_mode": {}}
+            by_time[t_s] = point
+        point["by_mode"][m_s] = c_i
+        point["count"] += c_i
+        point["total"] += c_i
+        mode_totals[m_s] = mode_totals.get(m_s, 0) + c_i
+    trend_modes = [
+        {
+            "mode": mode,
+            "label": MODE_LABELS.get(mode)
+            or format_dimension_label("mode", mode, mode),
+        }
+        for mode in _order_trend_modes(mode_totals)
+    ]
+    return list(by_time.values()), trend_modes
+
 
 TREND_GRANULARITIES = {
     "1m": "toStartOfMinute(ts)",
@@ -754,11 +803,14 @@ async def stats_overview(
         window = end_ts - start_ts
         effective_granularity = trend_granularity or _auto_trend_granularity(window)
         bucket = _trend_bucket_expr(window, effective_granularity)
-        trend_rows = client.query(
-            f"SELECT {bucket} AS t, count() AS total, countIf({_col('blocked')} = 1) AS blocked_cnt "
-            f"FROM waf_logs WHERE {where} GROUP BY t ORDER BY t",
+        trend_mode_rows = client.query(
+            f"SELECT {bucket} AS t, "
+            f"if({_col('mode')} = '', 'unknown', {_col('mode')}) AS m, "
+            f"count() AS c "
+            f"FROM waf_logs WHERE {where} GROUP BY t, m ORDER BY t, m",
             parameters=params,
         ).result_rows
+        trend, trend_modes = _assemble_trend_by_mode(trend_mode_rows)
         top_rules = client.query(
             f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
             f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
@@ -810,16 +862,8 @@ async def stats_overview(
             "block_rate": round((int(blocked) / int(total)) * 100, 2) if total else 0.0,
             "unique_ips": int(unique_ips),
             "unique_rules": int(unique_rules),
-            "trend": [
-                {
-                    "time": str(r[0]),
-                    "count": int(r[1]),
-                    "total": int(r[1]),
-                    "blocked": int(r[2]),
-                    "passed": int(r[1]) - int(r[2]),
-                }
-                for r in trend_rows
-            ],
+            "trend": trend,
+            "trend_modes": trend_modes,
             "top_rules_rows": top_rules,
             "top_ips": [{"ip": r[0], "count": r[1]} for r in top_ips],
             "top_domains": [{"domain": r[0], "count": r[1]} for r in top_domains],

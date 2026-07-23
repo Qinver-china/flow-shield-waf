@@ -350,7 +350,7 @@ function trafficBaselineTip(w: SiteTrafficWindow) {
   if (w.deviation_ratio != null) {
     parts.push(`相对 ${formatDeviation(w.deviation_ratio)}`);
   }
-  parts.push(w.baseline_warmup ? "状态：学习中（样本仍在积累）" : "状态：已稳定");
+  parts.push(w.baseline_warmup ? "学习中" : "已稳定");
   return parts.join(" · ");
 }
 

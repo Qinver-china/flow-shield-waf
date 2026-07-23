@@ -49,8 +49,10 @@ server {{
     location / {{
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Use WAF-resolved client IP (access.lua → $waf_geoip_client), not TCP peer.
+        # Needed for xff_* modes where nginx real_ip module does not rewrite $remote_addr.
+        proxy_set_header X-Real-IP $waf_geoip_client;
+        proxy_set_header X-Forwarded-For $waf_geoip_client;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -69,8 +71,9 @@ server {{
     location / {{
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Use WAF-resolved client IP (access.lua → $waf_geoip_client), not TCP peer.
+        proxy_set_header X-Real-IP $waf_geoip_client;
+        proxy_set_header X-Forwarded-For $waf_geoip_client;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

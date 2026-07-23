@@ -137,3 +137,5 @@ def test_render_site_keeps_default_buffering():
     )
     conf = render_site(site)
     assert "proxy_buffering" not in conf
+    assert "proxy_set_header X-Real-IP $waf_geoip_client;" in conf
+    assert "proxy_set_header X-Forwarded-For $waf_geoip_client;" in conf

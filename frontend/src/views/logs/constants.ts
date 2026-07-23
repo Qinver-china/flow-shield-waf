@@ -32,6 +32,108 @@ export const modeColor: Record<string, string> = {
   slide_captcha: "cyan",
 };
 
+/** 命中趋势图：已知防护方式的展示色（新方式自动回退到备用色板） */
+export const modeChartColor: Record<string, string> = {
+  block: "#ef4444",
+  js_challenge: "#a855f7",
+  captcha: "#f59e0b",
+  slide_captcha: "#06b6d4",
+  observe: "#3b82f6",
+  unknown: "#94a3b8",
+};
+
+const MODE_TREND_ORDER = [
+  "block",
+  "js_challenge",
+  "captcha",
+  "slide_captcha",
+  "observe",
+] as const;
+
+const FALLBACK_CHART_COLORS = [
+  "#8b5cf6",
+  "#14b8a6",
+  "#f97316",
+  "#ec4899",
+  "#84cc16",
+  "#0ea5e9",
+];
+
+export type TrendModeSeriesItem = { key: string; name: string; color: string };
+
+export type TrendPoint = {
+  time?: string;
+  by_mode?: Record<string, number>;
+  [key: string]: unknown;
+};
+
+export type TrendModeMeta = string | { mode: string; label?: string };
+
+function orderModeKeys(keys: string[]): string[] {
+  const set = new Set(keys);
+  const ordered = MODE_TREND_ORDER.filter((k) => set.has(k));
+  const rest = [...set]
+    .filter((k) => !(MODE_TREND_ORDER as readonly string[]).includes(k) && k !== "unknown")
+    .sort();
+  if (set.has("unknown")) rest.push("unknown");
+  return [...ordered, ...rest];
+}
+
+export function trendModeValue(row: TrendPoint, key: string): number {
+  if (row.by_mode && row.by_mode[key] !== undefined) {
+    return Number(row.by_mode[key] || 0);
+  }
+  return Number(row[key] ?? 0);
+}
+
+/**
+ * 按防护方式构建趋势系列：包含时间段内出现过的全部 mode（含未来新增），
+ * 全程为 0 的不展示。优先使用后端 trend_modes。
+ */
+export function buildTrendModeSeries(
+  trend: TrendPoint[],
+  trendModes?: TrendModeMeta[],
+): TrendModeSeriesItem[] {
+  const labelByMode = new Map<string, string>();
+  let keys: string[] = [];
+
+  if (trendModes?.length) {
+    for (const item of trendModes) {
+      if (typeof item === "string") {
+        keys.push(item);
+      } else if (item?.mode) {
+        keys.push(item.mode);
+        if (item.label) labelByMode.set(item.mode, item.label);
+      }
+    }
+  } else {
+    const totals = new Map<string, number>();
+    for (const row of trend) {
+      const bm = row.by_mode;
+      if (bm && typeof bm === "object") {
+        for (const [k, v] of Object.entries(bm)) {
+          totals.set(k, (totals.get(k) || 0) + Number(v || 0));
+        }
+      } else {
+        for (const k of MODE_TREND_ORDER) {
+          const v = Number(row[k] ?? 0);
+          if (v) totals.set(k, (totals.get(k) || 0) + v);
+        }
+      }
+    }
+    keys = [...totals.entries()].filter(([, n]) => n > 0).map(([k]) => k);
+  }
+
+  keys = keys.filter((k) => trend.some((row) => trendModeValue(row, k) > 0));
+  keys = orderModeKeys(keys);
+
+  return keys.map((key, i) => ({
+    key,
+    name: labelByMode.get(key) || modeLabel[key] || key,
+    color: modeChartColor[key] || FALLBACK_CHART_COLORS[i % FALLBACK_CHART_COLORS.length],
+  }));
+}
+
 export const botCategoryLabel: Record<string, string> = {
   search_engine: "搜索引擎",
   monitoring: "监控探测",

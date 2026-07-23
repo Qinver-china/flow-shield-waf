@@ -18,6 +18,7 @@ DLQ_STREAM_KEY = "waf:logs:dlq"
 GROUP = "waf-log-ingest"
 CONSUMER = "worker-1"
 IDLE_SLEEP = 0.5
+ERROR_SLEEP = 2.0
 MAX_PERSIST_RETRIES = 3
 
 _last_bot_catalog_refresh = 0.0
@@ -31,12 +32,20 @@ async def _ensure_group(redis) -> None:
             log.debug("xgroup_create: %s", exc)
 
 
+def _as_text(value) -> str:
+    """Decode Redis field values without raising on invalid UTF-8."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else str(value)
+
+
 def _parse_entry(fields: dict) -> dict | None:
     raw = fields.get("data") or fields.get(b"data")
     if raw is None and len(fields) == 1:
         raw = next(iter(fields.values()))
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8", errors="replace")
+    raw = _as_text(raw)
     try:
         return json.loads(raw)
     except (ValueError, TypeError):
@@ -52,15 +61,9 @@ async def _read_stream_batch(redis, *, count: int, block_ms: int) -> list[tuple[
     out = []
     for _stream, messages in resp:
         for msg_id, fields in messages:
-            if isinstance(msg_id, bytes):
-                msg_id = msg_id.decode()
-            parsed_fields = {
-                (k.decode() if isinstance(k, bytes) else k): (
-                    v.decode() if isinstance(v, bytes) else v
-                )
-                for k, v in fields.items()
-            }
-            out.append((msg_id, parsed_fields))
+            msg_id_s = _as_text(msg_id)
+            parsed_fields = {_as_text(k): _as_text(v) for k, v in fields.items()}
+            out.append((msg_id_s, parsed_fields))
     return out
 
 
@@ -112,6 +115,48 @@ async def _ack_messages(redis, msg_ids: list[str]) -> None:
         await redis.xack(STREAM_KEY, GROUP, *msg_ids)
 
 
+async def _process_batch(redis, store: ClickHouseLogStore, stream_msgs: list[tuple[str, dict]]) -> None:
+    entries: list[dict] = []
+    ack_ids: list[str] = []
+
+    for msg_id, fields in stream_msgs:
+        entry = _parse_entry(fields)
+        if entry:
+            entries.append(entry)
+            ack_ids.append(msg_id)
+        else:
+            log.warning("malformed log stream message %s, moving to dlq", msg_id)
+            await _send_dlq(redis, msg_id, "parse_failed", fields)
+            await _ack_messages(redis, [msg_id])
+
+    if not entries:
+        return
+
+    persisted = False
+    for attempt in range(MAX_PERSIST_RETRIES):
+        try:
+            await store.add_many(entries)
+            await _ack_messages(redis, ack_ids)
+            log.debug("persisted %d log entries", len(entries))
+            persisted = True
+            break
+        except Exception:  # noqa: BLE001
+            log.exception(
+                "failed to persist log batch (attempt %d/%d)",
+                attempt + 1,
+                MAX_PERSIST_RETRIES,
+            )
+            if attempt < MAX_PERSIST_RETRIES - 1:
+                await asyncio.sleep(IDLE_SLEEP * (attempt + 1))
+
+    if not persisted:
+        for msg_id in ack_ids:
+            await _send_dlq(redis, msg_id, "persist_failed")
+        await _ack_messages(redis, ack_ids)
+        log.error("gave up on batch of %d messages after dlq", len(ack_ids))
+        await asyncio.sleep(IDLE_SLEEP)
+
+
 async def run_consumer(stop_event: asyncio.Event | None = None) -> None:
     redis = get_redis()
     store = ClickHouseLogStore()
@@ -135,47 +180,15 @@ async def run_consumer(stop_event: asyncio.Event | None = None) -> None:
     )
 
     while stop_event is None or not stop_event.is_set():
-        await _maybe_refresh_bot_catalog(redis)
-        stream_msgs = await _drain_stream_batch(redis)
-        if not stream_msgs:
-            continue
-
-        entries: list[dict] = []
-        ack_ids: list[str] = []
-
-        for msg_id, fields in stream_msgs:
-            entry = _parse_entry(fields)
-            if entry:
-                entries.append(entry)
-                ack_ids.append(msg_id)
-            else:
-                log.warning("malformed log stream message %s, moving to dlq", msg_id)
-                await _send_dlq(redis, msg_id, "parse_failed", fields)
-                await _ack_messages(redis, [msg_id])
-
-        if not entries:
-            continue
-
-        persisted = False
-        for attempt in range(MAX_PERSIST_RETRIES):
-            try:
-                await store.add_many(entries)
-                await _ack_messages(redis, ack_ids)
-                log.debug("persisted %d log entries", len(entries))
-                persisted = True
-                break
-            except Exception:  # noqa: BLE001
-                log.exception(
-                    "failed to persist log batch (attempt %d/%d)",
-                    attempt + 1,
-                    MAX_PERSIST_RETRIES,
-                )
-                if attempt < MAX_PERSIST_RETRIES - 1:
-                    await asyncio.sleep(IDLE_SLEEP * (attempt + 1))
-
-        if not persisted:
-            for msg_id in ack_ids:
-                await _send_dlq(redis, msg_id, "persist_failed")
-            await _ack_messages(redis, ack_ids)
-            log.error("gave up on batch of %d messages after dlq", len(ack_ids))
-            await asyncio.sleep(IDLE_SLEEP)
+        try:
+            await _maybe_refresh_bot_catalog(redis)
+            stream_msgs = await _drain_stream_batch(redis)
+            if not stream_msgs:
+                continue
+            await _process_batch(redis, store, stream_msgs)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            # Never let a poison Redis payload / transient CH error kill the worker process.
+            log.exception("log collector loop error; backing off %.1fs", ERROR_SLEEP)
+            await asyncio.sleep(ERROR_SLEEP)
