@@ -852,13 +852,21 @@ function liveTrafficStatusIcon(w: LiveTrafficWindow) {
   return CheckCircleOutlined;
 }
 
-/** 10s/30s 无基线：按 QPS 映射进度条（0.1→10%，16→100%）。
- * 全部站点时 QPS 已是「各站请求合计 ÷ 窗口」，仍用同一刻度。
+/** 10s/30s 无基线：按 QPS 映射进度条。
+ * 单站：0.1→10%，10→100%；全部站点：满分 = 10 × 站点数。
  */
+function liveTrafficQpsBarScaleMax() {
+  if (trafficSiteId.value != null) return 10;
+  const n = Math.max(1, Number(traffic.site_count) || 1);
+  return 10 * n;
+}
+
 function liveTrafficQpsBarPercent(qps: number | null | undefined) {
   const q = Math.round(Number(qps || 0) * 10) / 10;
   if (q <= 0) return 0;
-  const pct = 10 + ((q - 0.1) / (16 - 0.1)) * 90;
+  const scaleMax = liveTrafficQpsBarScaleMax();
+  const floor = 0.1;
+  const pct = 10 + ((q - floor) / Math.max(scaleMax - floor, 0.1)) * 90;
   return Math.min(100, Math.max(0, Math.round(pct)));
 }
 
