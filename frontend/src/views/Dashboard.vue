@@ -605,7 +605,7 @@ const liveTrafficWindows = computed(() => {
     const requests = Number(w.requests || 0);
     const baselineAvg =
       intelW?.baseline_avg != null ? Number(intelW.baseline_avg) : null;
-    # QPS = 窗口内请求合计 ÷ 窗口秒数（全部站点即各站请求之和 ÷ 时间）。
+    // QPS = 窗口内请求合计 ÷ 窗口秒数（全部站点即各站请求之和 ÷ 时间）。
     const qps = sec > 0 ? requests / sec : 0;
     return {
       window_sec: sec,
