@@ -76,9 +76,14 @@ services:
       context: .
       dockerfile: deploy/app/Dockerfile
       args:
-        # 海外构建可改为 https://pypi.org/simple 并清空 PIP_TRUSTED_HOST
+        # 海外构建可改为官方源，例如：
+        # PIP_INDEX_URL=https://pypi.org/simple  PIP_TRUSTED_HOST=
+        # ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+        # NPM_REGISTRY=https://registry.npmjs.org
         PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
         PIP_TRUSTED_HOST: pypi.tuna.tsinghua.edu.cn
+        ALPINE_MIRROR: https://mirrors.aliyun.com/alpine
+        NPM_REGISTRY: https://registry.npmmirror.com
     image: flowshield-waf-app:latest
     container_name: flowshield-waf-app
     restart: unless-stopped

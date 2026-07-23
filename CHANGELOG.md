@@ -6,6 +6,7 @@
 
 - 前端镜像构建改为先 COPY 源码再 `npm ci`，并忽略上下文中的 `node_modules`，避免线上空目录覆盖安装结果导致 `vite: not found`
 - 将 `vite` / `@vitejs/plugin-vue` 挪入 dependencies，构建脚本改用 `node ./node_modules/vite/bin/vite.js`
+- 构建默认改用国内源：Alpine→阿里云、npm→npmmirror、PyPI→清华，避免线上访问不了 `dl-cdn.alpinelinux.org` 导致 `apk add` 失败
 
 ## [0.3.8] - 2026-07-23
 
