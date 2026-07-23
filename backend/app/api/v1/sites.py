@@ -180,7 +180,7 @@ async def sites_metrics(
         for sec in SITE_CARD_TRAFFIC_WINDOWS_SEC:
             w = by_sec.get(sec) or {}
             current = int(w.get("requests") or 0)
-            qps = float(w.get("qps") or 0)
+            qps = (current / sec) if sec > 0 else 0.0
             baseline_avg = None
             baseline_warmup = False
             deviation_ratio = None

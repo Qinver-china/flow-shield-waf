@@ -477,9 +477,14 @@ const feed = reactive<{ items: any[]; pending_ai_incidents: number }>({
 });
 const intel = reactive<any>({ windows: [] });
 const trafficSiteId = ref<number | undefined>(undefined);
-const traffic = reactive<{ burst_active: boolean; windows: any[] }>({
+const traffic = reactive<{
+  burst_active: boolean;
+  windows: any[];
+  site_count: number;
+}>({
   burst_active: false,
   windows: [],
+  site_count: 0,
 });
 
 const systemMetrics = reactive({
@@ -600,11 +605,13 @@ const liveTrafficWindows = computed(() => {
     const requests = Number(w.requests || 0);
     const baselineAvg =
       intelW?.baseline_avg != null ? Number(intelW.baseline_avg) : null;
+    # QPS = 窗口内请求合计 ÷ 窗口秒数（全部站点即各站请求之和 ÷ 时间）。
+    const qps = sec > 0 ? requests / sec : 0;
     return {
       window_sec: sec,
       label: windowLabel(sec),
       requests,
-      qps: Number(w.qps || 0),
+      qps,
       threshold: w.threshold != null ? Number(w.threshold) : null,
       baseline_avg: baselineAvg,
       baseline_warmup: Boolean(intelW?.baseline_warmup),
@@ -845,7 +852,9 @@ function liveTrafficStatusIcon(w: LiveTrafficWindow) {
   return CheckCircleOutlined;
 }
 
-/** 10s/30s 无基线：按 QPS 映射进度条（0.1→10%，10→100%）。 */
+/** 10s/30s 无基线：按 QPS 映射进度条（0.1→10%，10→100%）。
+ * 全部站点时 QPS 已是「各站请求合计 ÷ 窗口」，仍用同一刻度。
+ */
 function liveTrafficQpsBarPercent(qps: number | null | undefined) {
   const q = Math.round(Number(qps || 0) * 10) / 10;
   if (q <= 0) return 0;
@@ -873,13 +882,13 @@ function liveTrafficBarColor(w: LiveTrafficWindow) {
     const pct = liveTrafficQpsBarPercent(w.qps);
     if (pct > 70) return "#ef4444";
     if (pct > 40) return "#f59e0b";
-    return "#3474ff";
+    return "#22c55e";
   }
   if (w.baseline_avg != null) {
     const tone = baselineTone(w.deviation_ratio);
     if (tone === "danger") return "#ef4444";
     if (tone === "warn") return "#f59e0b";
-    return "#3474ff";
+    return "#22c55e";
   }
   if (w.threshold != null && w.threshold > 0) {
     const ratio = w.requests / w.threshold;
@@ -1079,7 +1088,7 @@ function destroyCharts() {
 function loadCpuRingColor(pct: number): string {
   if (pct >= 85) return "#ef4444";
   if (pct >= 60) return "#f59e0b";
-  return "#3474ff";
+  return "#22c55e";
 }
 
 function cpuRingTrackColor(): string {
@@ -1448,6 +1457,7 @@ async function loadTraffic() {
   const resp = await api.get("/api/v1/traffic/stats", params);
   traffic.burst_active = resp.data.burst_active || false;
   traffic.windows = resp.data.windows || resp.data.global?.windows || [];
+  traffic.site_count = Number(resp.data.site_count || (resp.data.sites || []).length || 0);
 }
 
 async function loadIntel() {
@@ -1858,7 +1868,7 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
-.traffic-live-hero__status.is-ok .traffic-live-hero__status-title { color: var(--fs-color-primary); }
+.traffic-live-hero__status.is-ok .traffic-live-hero__status-title { color: var(--fs-color-accent); }
 .traffic-live-hero__status.is-warn .traffic-live-hero__status-title { color: var(--fs-color-warning); }
 .traffic-live-hero__status.is-danger .traffic-live-hero__status-title { color: var(--fs-color-danger); }
 .traffic-live-hero__status.is-neutral .traffic-live-hero__status-title { color: var(--fs-text-secondary); }

@@ -29,20 +29,79 @@ def _default_windows(thresholds: dict[int, int]) -> list[dict]:
     return windows
 
 
+def _window_row(sec: int, requests: int, thresholds: dict[int, int], *, threshold=None) -> dict:
+    sec = int(sec)
+    requests = int(requests or 0)
+    return {
+        "sec": sec,
+        "requests": requests,
+        # Always derive QPS from the requests being returned (never trust a stale field).
+        "qps": (requests / sec) if sec > 0 else 0.0,
+        "threshold": threshold if threshold is not None else thresholds.get(sec),
+    }
+
+
 def _windows_from_snapshot(
     snapshot_windows: list[dict],
     thresholds: dict[int, int],
 ) -> list[dict]:
     out: list[dict] = []
     for w in snapshot_windows:
-        sec = int(w.get("sec", 0))
-        out.append({
-            "sec": sec,
-            "requests": int(w.get("requests") or 0),
-            "qps": float(w.get("qps") or 0),
-            "threshold": w.get("threshold") if w.get("threshold") is not None else thresholds.get(sec),
-        })
+        try:
+            sec = int(w.get("sec", 0))
+        except (TypeError, ValueError):
+            continue
+        if sec <= 0:
+            continue
+        try:
+            requests = int(w.get("requests") or 0)
+        except (TypeError, ValueError):
+            requests = 0
+        thr = w.get("threshold")
+        out.append(_window_row(sec, requests, thresholds, threshold=thr))
     return out
+
+
+def _windows_sum_sites(
+    sites: dict,
+    thresholds: dict[int, int],
+    *,
+    fallback_global: list[dict] | None = None,
+) -> list[dict]:
+    """Build all-sites windows by summing per-site requests, then recompute QPS."""
+    by_sec: dict[int, int] = {}
+    order: list[int] = []
+    for site_data in (sites or {}).values():
+        for w in (site_data or {}).get("windows") or []:
+            try:
+                sec = int(w.get("sec", 0))
+                req = int(w.get("requests") or 0)
+            except (TypeError, ValueError):
+                continue
+            if sec <= 0:
+                continue
+            if sec not in by_sec:
+                order.append(sec)
+                by_sec[sec] = 0
+            by_sec[sec] += req
+
+    if not order and fallback_global:
+        return _windows_from_snapshot(fallback_global, thresholds)
+
+    # Prefer global row thresholds when present (logging auto thresholds attach there).
+    thr_by_sec: dict[int, object] = {}
+    for w in fallback_global or []:
+        try:
+            sec = int(w.get("sec", 0))
+        except (TypeError, ValueError):
+            continue
+        if sec > 0 and w.get("threshold") is not None:
+            thr_by_sec[sec] = w.get("threshold")
+
+    return [
+        _window_row(sec, by_sec[sec], thresholds, threshold=thr_by_sec.get(sec))
+        for sec in order
+    ]
 
 
 @router.get("/stats")
@@ -62,21 +121,26 @@ async def traffic_stats(
     if raw:
         try:
             data = json.loads(raw)
+            sites_map = data.get("sites") or {}
+            global_windows = data.get("global", {}).get("windows") or []
             if site_id is None:
-                windows = _windows_from_snapshot(
-                    data.get("global", {}).get("windows") or [],
+                # All-sites: total requests across sites, QPS = total / window.
+                windows = _windows_sum_sites(
+                    sites_map,
                     thresholds,
+                    fallback_global=global_windows,
                 )
                 burst_active = bool(data.get("global", {}).get("burst_active"))
             else:
-                site_data = (data.get("sites") or {}).get(str(site_id), {})
+                site_data = sites_map.get(str(site_id), {})
                 windows = _windows_from_snapshot(site_data.get("windows") or [], thresholds)
                 burst_active = bool(data.get("global", {}).get("burst_active"))
             return ok({
                 "updated_at": data.get("updated_at"),
                 "site_id": site_id,
                 "global": data.get("global", {}),
-                "sites": list((data.get("sites") or {}).keys()),
+                "sites": list(sites_map.keys()),
+                "site_count": len(sites_map),
                 "windows": windows,
                 "burst_active": burst_active,
             })
@@ -88,6 +152,7 @@ async def traffic_stats(
         "site_id": site_id,
         "global": {"windows": _default_windows(thresholds), "burst_active": False},
         "sites": [],
+        "site_count": 0,
         "windows": _default_windows(thresholds),
         "burst_active": False,
     })
