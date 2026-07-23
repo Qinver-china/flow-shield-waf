@@ -84,4 +84,7 @@ if [ ! -d "${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}/tiles" ] || \
   cp -R /opt/flowshield/slide-captcha-defaults/. "${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}/"
 fi
 
+# 集中等待 Redis，避免 backend/worker/engine 各自轮询并刷屏
+/opt/flowshield/wait-for.sh
+
 exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
