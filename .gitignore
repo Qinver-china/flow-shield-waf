@@ -30,6 +30,7 @@ engine/conf.d/*.conf
 
 # editor / local tooling
 .cursor/
+*.code-workspace
 *.tsbuildinfo
 
 # os
