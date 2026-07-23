@@ -5,8 +5,10 @@
 # ---- 1) 构建前端 ----
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
+# Host/CI 若带 NODE_ENV=production，npm ci 会跳过 vite 等 devDependencies → `vite: not found`
+ENV NODE_ENV=development
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 COPY frontend/ ./
 RUN npm run build
 

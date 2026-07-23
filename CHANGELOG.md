@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 部署
+
+- 前端镜像构建显式 `NODE_ENV=development` + `npm ci --include=dev`，避免宿主机/CI 的 `NODE_ENV=production` 跳过 vite 导致 `vite: not found`
+
 ## [0.3.8] - 2026-07-23
 
 ### 修复
