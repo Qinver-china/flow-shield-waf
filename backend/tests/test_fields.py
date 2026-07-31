@@ -214,6 +214,35 @@ def test_traffic_invalid_window_rejected():
         })
 
 
+def test_traffic_origin_global_condition_ok():
+    cond = validate_condition({
+        "field": "traffic.origin_global",
+        "op": "compare",
+        "value": {"window_sec": 60, "compare": "qps_gt", "threshold": 20},
+    })
+    assert cond["conditions"][0]["field"] == "traffic.origin_global"
+
+
+def test_traffic_origin_baseline_rejected():
+    with pytest.raises(ValueError, match="回源请求量不支持基线比较"):
+        validate_condition({
+            "field": "traffic.origin_site",
+            "op": "compare",
+            "value": {"window_sec": 300, "compare": "baseline_gt", "percent": 50},
+        })
+
+
+def test_traffic_llm_alias_origin_request_count_normalized():
+    cond = validate_condition({
+        "field": "traffic.origin_global.request_count",
+        "op": "gt",
+        "value": 500,
+    })
+    leaf = cond["conditions"][0]
+    assert leaf["field"] == "traffic.origin_global"
+    assert leaf["value"]["compare"] == "abs_gt"
+
+
 def test_contains_accepts_multiple_values():
     cond = validate_condition({
         "field": "http.uri.path",

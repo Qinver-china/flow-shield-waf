@@ -171,6 +171,11 @@
                   :max="p.max"
                   style="width: 100%"
                 />
+                <alert-site-scope-select
+                  v-else-if="p.kind === 'alert_site_scope'"
+                  v-model:site-scope="form.condition_params.site_scope"
+                  v-model:site-id="form.condition_params.site_id"
+                />
                 <site-single-select
                   v-else-if="p.kind === 'site_id'"
                   v-model:value="form.condition_params[p.key]"
@@ -221,6 +226,7 @@ import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import PageShell from "@/components/PageShell.vue";
 import SiteSingleSelect from "@/components/SiteSingleSelect.vue";
+import AlertSiteScopeSelect from "@/components/AlertSiteScopeSelect.vue";
 import { commonBatchEditFields } from "@/constants/batch";
 import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { useSiteOptions } from "@/composables/useSiteOptions";
@@ -317,6 +323,12 @@ function formatChannels(ids: number[]) {
     .join("、");
 }
 
+function formatSiteScope(p: Record<string, unknown>) {
+  if (p.site_scope === "any") return "任意站点";
+  if (p.site_scope === "single" || p.site_id != null) return formatSiteId(Number(p.site_id));
+  return "全站";
+}
+
 function formatParams(record: any) {
   const p = record.condition_params || {};
   const parts: string[] = [];
@@ -332,7 +344,7 @@ function formatParams(record: any) {
   }
   if (p.percent != null) parts.push(`${p.percent}%`);
   if (p.threshold != null) parts.push(`阈值 ${p.threshold}`);
-  if (p.site_id != null) parts.push(formatSiteId(p.site_id));
+  if (p.site_scope != null || p.site_id != null) parts.push(formatSiteScope(p));
   return parts.join(" · ") || "—";
 }
 

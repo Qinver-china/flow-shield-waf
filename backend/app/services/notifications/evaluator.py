@@ -4,12 +4,20 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.alert_conditions import CONDITION_TYPE_MAP
+from app.constants.alert_site_scope import (
+    SITE_SCOPE_ALL,
+    SITE_SCOPE_ANY,
+    SITE_SCOPE_SINGLE,
+    parse_site_scope,
+    site_scope_label,
+)
 from app.core.redis import get_redis
 from app.models.notification import AlertPolicy, NotificationChannel
 from app.services.analytics.alert_log_store import AlertLogStore
@@ -27,6 +35,12 @@ log = logging.getLogger("waf.notify.evaluator")
 
 TRAFFIC_SNAPSHOT_KEY = REDIS_SNAPSHOT_KEY
 _alert_logs = AlertLogStore()
+
+
+@dataclass(frozen=True)
+class EvalHit:
+    message: str
+    matched_site_id: int | None = None
 
 
 class AlertPolicyEvaluator:
@@ -60,6 +74,10 @@ class AlertPolicyEvaluator:
         return datetime.utcnow() - policy.last_fired_at < timedelta(seconds=policy.cooldown_sec)
 
     async def _evaluate(self, policy: AlertPolicy, db: AsyncSession) -> str | None:
+        hit = await self.evaluate_hit(policy, db)
+        return hit.message if hit else None
+
+    async def evaluate_hit(self, policy: AlertPolicy, db: AsyncSession) -> EvalHit | None:
         ctype = policy.condition_type
         params = policy.condition_params or {}
         meta = CONDITION_TYPE_MAP.get(ctype)
@@ -77,6 +95,14 @@ class AlertPolicyEvaluator:
             return await self._traffic_qps(params, direction="gt", label=label)
         if ctype == "traffic.qps_lt":
             return await self._traffic_qps(params, direction="lt", label=label)
+        if ctype == "traffic.origin_abs_gt":
+            return await self._traffic_abs(params, direction="gt", label=label, origin=True)
+        if ctype == "traffic.origin_abs_lt":
+            return await self._traffic_abs(params, direction="lt", label=label, origin=True)
+        if ctype == "traffic.origin_qps_gt":
+            return await self._traffic_qps(params, direction="gt", label=label, origin=True)
+        if ctype == "traffic.origin_qps_lt":
+            return await self._traffic_qps(params, direction="lt", label=label, origin=True)
         if ctype == "traffic.burst_logging":
             return await self._traffic_burst(label)
         if ctype == "security.block_count":
@@ -94,11 +120,74 @@ class AlertPolicyEvaluator:
         params: dict,
         *,
         direction: str,
-    ) -> str | None:
+    ) -> EvalHit | None:
         window_sec = int(params.get("window_sec", 300))
         percent = float(params.get("percent", 50))
-        site_id = params.get("site_id")
+        scope, site_id = parse_site_scope(params)
         timezone_name = await get_traffic_timezone(db)
+
+        if scope == SITE_SCOPE_ANY:
+            snapshot = await self._load_snapshot()
+            if not snapshot:
+                return None
+            for sid_str in sorted((snapshot.get("sites") or {}).keys(), key=lambda x: int(x)):
+                sid = int(sid_str)
+                hit = await self._traffic_baseline_for_site(
+                    policy,
+                    db,
+                    window_sec=window_sec,
+                    percent=percent,
+                    site_id=sid,
+                    direction=direction,
+                    timezone_name=timezone_name,
+                )
+                if hit:
+                    return hit
+            return None
+
+        baseline = await self._baselines.get(
+            db,
+            site_id=site_id if scope == SITE_SCOPE_SINGLE else None,
+            window_sec=window_sec,
+            as_of=datetime.utcnow(),
+            timezone_name=timezone_name,
+        )
+        if not baseline or baseline.avg_requests <= 0:
+            return None
+        if not is_baseline_stable(window_sec, baseline.sample_count):
+            return None
+        current = await self._window_requests(window_sec, site_id=site_id, scope=scope)
+        if direction == "gt":
+            cfg = TrafficIntelConfig(spike_ratio=percent / 100)
+            anomaly = self._detector._compare(  # noqa: SLF001
+                current, baseline, cfg, datetime.utcnow()
+            )
+            if anomaly is None:
+                return None
+            return EvalHit(message=f"【{policy.name}】{anomaly.message}", matched_site_id=site_id)
+        threshold = baseline.avg_requests * (1 - percent / 100)
+        if current >= threshold:
+            return None
+        scope_label = site_scope_label(scope, site_id)
+        return EvalHit(
+            message=(
+                f"【{policy.name}】{scope_label} {window_sec}s 窗口内当前 {current} 次请求，"
+                f"低于基线 {baseline.avg_requests:.0f} 的 {percent:.0f}%"
+            ),
+            matched_site_id=site_id,
+        )
+
+    async def _traffic_baseline_for_site(
+        self,
+        policy: AlertPolicy,
+        db: AsyncSession,
+        *,
+        window_sec: int,
+        percent: float,
+        site_id: int,
+        direction: str,
+        timezone_name: str,
+    ) -> EvalHit | None:
         baseline = await self._baselines.get(
             db,
             site_id=site_id,
@@ -110,7 +199,11 @@ class AlertPolicyEvaluator:
             return None
         if not is_baseline_stable(window_sec, baseline.sample_count):
             return None
-        current = await self._window_requests(window_sec, site_id=site_id)
+        current = await self._window_requests(
+            window_sec,
+            site_id=site_id,
+            scope=SITE_SCOPE_SINGLE,
+        )
         if direction == "gt":
             cfg = TrafficIntelConfig(spike_ratio=percent / 100)
             anomaly = self._detector._compare(  # noqa: SLF001
@@ -118,53 +211,150 @@ class AlertPolicyEvaluator:
             )
             if anomaly is None:
                 return None
-            return f"【{policy.name}】{anomaly.message}"
+            return EvalHit(
+                message=f"【{policy.name}】站点 #{site_id} {anomaly.message}",
+                matched_site_id=site_id,
+            )
         threshold = baseline.avg_requests * (1 - percent / 100)
         if current >= threshold:
             return None
-        return (
-            f"【{policy.name}】{window_sec}s 窗口内当前 {current} 次请求，"
-            f"低于基线 {baseline.avg_requests:.0f} 的 {percent:.0f}%"
+        return EvalHit(
+            message=(
+                f"【{policy.name}】站点 #{site_id} {window_sec}s 窗口内当前 {current} 次请求，"
+                f"低于基线 {baseline.avg_requests:.0f} 的 {percent:.0f}%"
+            ),
+            matched_site_id=site_id,
         )
 
-    async def _traffic_abs(self, params: dict, *, direction: str, label: str) -> str | None:
+    async def _traffic_abs(
+        self,
+        params: dict,
+        *,
+        direction: str,
+        label: str,
+        origin: bool = False,
+    ) -> EvalHit | None:
         window_sec = int(params.get("window_sec", 300))
         threshold = int(params.get("threshold", 0))
-        site_id = params.get("site_id")
-        current = await self._window_requests(window_sec, site_id=site_id)
-        scope = f"站点 #{site_id}" if site_id else "全站"
+        scope, site_id = parse_site_scope(params)
+        metric = "回源请求" if origin else "请求"
+
+        if scope == SITE_SCOPE_ANY:
+            snapshot = await self._load_snapshot()
+            if not snapshot:
+                return None
+            for sid_str in sorted((snapshot.get("sites") or {}).keys(), key=lambda x: int(x)):
+                sid = int(sid_str)
+                current = self._requests_from_site_data(snapshot, sid, window_sec, origin=origin)
+                if direction == "gt" and current > threshold:
+                    return EvalHit(
+                        message=(
+                            f"【预警】{label}：站点 #{sid} {window_sec}s 窗口内 {current} 次{metric}，"
+                            f"高于阈值 {threshold}"
+                        ),
+                        matched_site_id=sid,
+                    )
+                if direction == "lt" and current < threshold:
+                    return EvalHit(
+                        message=(
+                            f"【预警】{label}：站点 #{sid} {window_sec}s 窗口内 {current} 次{metric}，"
+                            f"低于阈值 {threshold}"
+                        ),
+                        matched_site_id=sid,
+                    )
+            return None
+
+        current = await self._window_requests(
+            window_sec,
+            site_id=site_id,
+            scope=scope,
+            origin=origin,
+        )
+        scope_label = site_scope_label(scope, site_id)
         if direction == "gt" and current > threshold:
-            return (
-                f"【预警】{label}：{scope} {window_sec}s 窗口内 {current} 次请求，"
-                f"高于阈值 {threshold}"
+            return EvalHit(
+                message=(
+                    f"【预警】{label}：{scope_label} {window_sec}s 窗口内 {current} 次{metric}，"
+                    f"高于阈值 {threshold}"
+                ),
+                matched_site_id=site_id,
             )
         if direction == "lt" and current < threshold:
-            return (
-                f"【预警】{label}：{scope} {window_sec}s 窗口内 {current} 次请求，"
-                f"低于阈值 {threshold}"
+            return EvalHit(
+                message=(
+                    f"【预警】{label}：{scope_label} {window_sec}s 窗口内 {current} 次{metric}，"
+                    f"低于阈值 {threshold}"
+                ),
+                matched_site_id=site_id,
             )
         return None
 
-    async def _traffic_qps(self, params: dict, *, direction: str, label: str) -> str | None:
+    async def _traffic_qps(
+        self,
+        params: dict,
+        *,
+        direction: str,
+        label: str,
+        origin: bool = False,
+    ) -> EvalHit | None:
         window_sec = int(params.get("window_sec", 300))
         threshold = float(params.get("threshold", 0))
-        site_id = params.get("site_id")
-        current = await self._window_requests(window_sec, site_id=site_id)
+        scope, site_id = parse_site_scope(params)
+        metric = "回源 QPS" if origin else "QPS"
+
+        if scope == SITE_SCOPE_ANY:
+            snapshot = await self._load_snapshot()
+            if not snapshot:
+                return None
+            for sid_str in sorted((snapshot.get("sites") or {}).keys(), key=lambda x: int(x)):
+                sid = int(sid_str)
+                current = self._requests_from_site_data(snapshot, sid, window_sec, origin=origin)
+                qps = current / window_sec if window_sec > 0 else 0
+                if direction == "gt" and qps > threshold:
+                    return EvalHit(
+                        message=(
+                            f"【预警】{label}：站点 #{sid} {window_sec}s 窗口平均 {metric} {qps:.2f}，"
+                            f"高于阈值 {threshold}"
+                        ),
+                        matched_site_id=sid,
+                    )
+                if direction == "lt" and qps < threshold:
+                    return EvalHit(
+                        message=(
+                            f"【预警】{label}：站点 #{sid} {window_sec}s 窗口平均 {metric} {qps:.2f}，"
+                            f"低于阈值 {threshold}"
+                        ),
+                        matched_site_id=sid,
+                    )
+            return None
+
+        current = await self._window_requests(
+            window_sec,
+            site_id=site_id,
+            scope=scope,
+            origin=origin,
+        )
         qps = current / window_sec if window_sec > 0 else 0
-        scope = f"站点 #{site_id}" if site_id else "全站"
+        scope_label = site_scope_label(scope, site_id)
         if direction == "gt" and qps > threshold:
-            return (
-                f"【预警】{label}：{scope} {window_sec}s 窗口平均 QPS {qps:.2f}，"
-                f"高于阈值 {threshold}"
+            return EvalHit(
+                message=(
+                    f"【预警】{label}：{scope_label} {window_sec}s 窗口平均 {metric} {qps:.2f}，"
+                    f"高于阈值 {threshold}"
+                ),
+                matched_site_id=site_id,
             )
         if direction == "lt" and qps < threshold:
-            return (
-                f"【预警】{label}：{scope} {window_sec}s 窗口平均 QPS {qps:.2f}，"
-                f"低于阈值 {threshold}"
+            return EvalHit(
+                message=(
+                    f"【预警】{label}：{scope_label} {window_sec}s 窗口平均 {metric} {qps:.2f}，"
+                    f"低于阈值 {threshold}"
+                ),
+                matched_site_id=site_id,
             )
         return None
 
-    async def _traffic_burst(self, label: str) -> str | None:
+    async def _traffic_burst(self, label: str) -> EvalHit | None:
         redis = get_redis()
         raw = await redis.get(TRAFFIC_SNAPSHOT_KEY)
         if not raw:
@@ -174,39 +364,82 @@ class AlertPolicyEvaluator:
         except (json.JSONDecodeError, TypeError):
             return None
         if data.get("global", {}).get("burst_active"):
-            return f"【预警】{label}：系统已进入流量自动取证模式，建议关注攻击日志。"
-        return None
-
-    async def _block_count(self, params: dict, label: str) -> str | None:
-        window_min = int(params.get("window_min", 5))
-        threshold = int(params.get("threshold", 100))
-        site_id = params.get("site_id")
-        count = await self._query_log_count(window_min, site_id=site_id, blocked_only=True)
-        if count > threshold:
-            scope = f"站点 #{site_id}" if site_id else "全站"
-            return (
-                f"【预警】{label}：{scope} 近 {window_min} 分钟拦截 {count} 次，"
-                f"超过阈值 {threshold}"
+            return EvalHit(
+                message=f"【预警】{label}：系统已进入流量自动取证模式，建议关注攻击日志。"
             )
         return None
 
-    async def _block_rate(self, params: dict, label: str) -> str | None:
+    async def _block_count(self, params: dict, label: str) -> EvalHit | None:
+        window_min = int(params.get("window_min", 5))
+        threshold = int(params.get("threshold", 100))
+        scope, site_id = parse_site_scope(params)
+
+        if scope == SITE_SCOPE_ANY:
+            for sid, blocked in sorted(
+                (await self._query_block_stats_by_site(window_min)).items(),
+                key=lambda item: item[0],
+            ):
+                if blocked > threshold:
+                    return EvalHit(
+                        message=(
+                            f"【预警】{label}：站点 #{sid} 近 {window_min} 分钟拦截 {blocked} 次，"
+                            f"超过阈值 {threshold}"
+                        ),
+                        matched_site_id=sid,
+                    )
+            return None
+
+        count = await self._query_log_count(window_min, site_id=site_id, scope=scope, blocked_only=True)
+        if count > threshold:
+            scope_label = site_scope_label(scope, site_id)
+            return EvalHit(
+                message=(
+                    f"【预警】{label}：{scope_label} 近 {window_min} 分钟拦截 {count} 次，"
+                    f"超过阈值 {threshold}"
+                ),
+                matched_site_id=site_id,
+            )
+        return None
+
+    async def _block_rate(self, params: dict, label: str) -> EvalHit | None:
         window_min = int(params.get("window_min", 5))
         percent = float(params.get("percent", 30))
-        site_id = params.get("site_id")
-        total, blocked = await self._query_block_stats(window_min, site_id=site_id)
+        scope, site_id = parse_site_scope(params)
+
+        if scope == SITE_SCOPE_ANY:
+            for sid, (total, blocked) in sorted(
+                (await self._query_block_stats_by_site(window_min, with_total=True)).items(),
+                key=lambda item: item[0],
+            ):
+                if total <= 0:
+                    continue
+                rate = blocked / total * 100
+                if rate > percent:
+                    return EvalHit(
+                        message=(
+                            f"【预警】{label}：站点 #{sid} 近 {window_min} 分钟拦截率 {rate:.1f}%，"
+                            f"超过阈值 {percent:.0f}%（{blocked}/{total}）"
+                        ),
+                        matched_site_id=sid,
+                    )
+            return None
+
+        total, blocked = await self._query_block_stats(window_min, site_id=site_id, scope=scope)
         if total <= 0:
             return None
         rate = blocked / total * 100
         if rate > percent:
-            scope = f"站点 #{site_id}" if site_id else "全站"
-            return (
-                f"【预警】{label}：{scope} 近 {window_min} 分钟拦截率 {rate:.1f}%，"
-                f"超过阈值 {percent:.0f}%（{blocked}/{total}）"
+            scope_label = site_scope_label(scope, site_id)
+            return EvalHit(
+                message=(
+                    f"【预警】{label}：{scope_label} 近 {window_min} 分钟拦截率 {rate:.1f}%，"
+                    f"超过阈值 {percent:.0f}%（{blocked}/{total}）"
+                ),
+                matched_site_id=site_id,
             )
         return None
 
-    async def _system_metric(self, ctype: str, params: dict, label: str) -> str | None:
+    async def _system_metric(self, ctype: str, params: dict, label: str) -> EvalHit | None:
         from app.services.system_metrics import read_system_metrics_snapshot, window_metric_value
 
         window_sec = int(params.get("window_sec", 300))
@@ -226,25 +459,65 @@ class AlertPolicyEvaluator:
         if current <= threshold:
             return None
         unit_text = unit or ""
-        return (
-            f"【预警】{label}：近 {window_sec}s 平均{metric_label} {current:.2f}{unit_text}，"
-            f"高于阈值 {threshold:g}{unit_text}"
+        return EvalHit(
+            message=(
+                f"【预警】{label}：近 {window_sec}s 平均{metric_label} {current:.2f}{unit_text}，"
+                f"高于阈值 {threshold:g}{unit_text}"
+            )
         )
+
+    async def _load_snapshot(self) -> dict | None:
+        redis = get_redis()
+        raw = await redis.get(TRAFFIC_SNAPSHOT_KEY)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def _requests_from_site_data(
+        self,
+        data: dict,
+        site_id: int,
+        window_sec: int,
+        *,
+        origin: bool = False,
+    ) -> int:
+        window_key = "origin_windows" if origin else "windows"
+        windows = (data.get("sites") or {}).get(str(site_id), {}).get(window_key) or []
+        for w in windows:
+            try:
+                if int(w.get("sec", 0)) == window_sec:
+                    return int(w.get("requests") or 0)
+            except (TypeError, ValueError):
+                continue
+        return 0
 
     async def _window_requests(
         self,
         window_sec: int,
         *,
         site_id: int | None,
+        scope: str = SITE_SCOPE_ALL,
+        origin: bool = False,
     ) -> int:
-        # Live traffic judgments always read Redis snapshot (DB is backup only).
-        return await self._snapshot_window_requests(window_sec, site_id=site_id)
+        if scope == SITE_SCOPE_SINGLE:
+            effective_site_id = site_id
+        else:
+            effective_site_id = None
+        return await self._snapshot_window_requests(
+            window_sec,
+            site_id=effective_site_id,
+            origin=origin,
+        )
 
     async def _snapshot_window_requests(
         self,
         window_sec: int,
         *,
         site_id: int | None = None,
+        origin: bool = False,
     ) -> int:
         redis = get_redis()
         raw = await redis.get(TRAFFIC_SNAPSHOT_KEY)
@@ -254,10 +527,11 @@ class AlertPolicyEvaluator:
             data = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             return 0
+        window_key = "origin_windows" if origin else "windows"
         if site_id is None:
-            windows = data.get("global", {}).get("windows") or []
+            windows = data.get("global", {}).get(window_key) or []
         else:
-            windows = (data.get("sites") or {}).get(str(site_id), {}).get("windows") or []
+            windows = (data.get("sites") or {}).get(str(site_id), {}).get(window_key) or []
         for w in windows:
             try:
                 if int(w.get("sec", 0)) == window_sec:
@@ -271,9 +545,14 @@ class AlertPolicyEvaluator:
         window_min: int,
         *,
         site_id: int | None,
+        scope: str = SITE_SCOPE_ALL,
         blocked_only: bool,
     ) -> int:
-        total, blocked = await self._query_block_stats(window_min, site_id=site_id)
+        total, blocked = await self._query_block_stats(
+            window_min,
+            site_id=site_id,
+            scope=scope,
+        )
         return blocked if blocked_only else total
 
     async def _query_block_stats(
@@ -281,13 +560,14 @@ class AlertPolicyEvaluator:
         window_min: int,
         *,
         site_id: int | None,
+        scope: str = SITE_SCOPE_ALL,
     ) -> tuple[int, int]:
         def _query() -> tuple[int, int]:
             from app.core.clickhouse import get_clickhouse
 
             clauses = ["ts >= now() - INTERVAL {mins:UInt16} MINUTE"]
             params: dict = {"mins": window_min}
-            if site_id is not None:
+            if scope == SITE_SCOPE_SINGLE and site_id is not None:
                 clauses.append("site_id = {site_id:UInt32}")
                 params["site_id"] = int(site_id)
             where = " AND ".join(clauses)
@@ -301,6 +581,35 @@ class AlertPolicyEvaluator:
             return int(row[0][0]), int(row[0][1])
 
         return await asyncio.to_thread(_query)
+
+    async def _query_block_stats_by_site(
+        self,
+        window_min: int,
+        *,
+        with_total: bool = False,
+    ) -> dict[int, int] | dict[int, tuple[int, int]]:
+        def _query() -> dict[int, tuple[int, int]]:
+            from app.core.clickhouse import get_clickhouse
+
+            client = get_clickhouse()
+            rows = client.query(
+                """
+                SELECT site_id, count(), countIf(blocked = 1)
+                FROM waf_logs
+                WHERE ts >= now() - INTERVAL {mins:UInt16} MINUTE
+                GROUP BY site_id
+                """,
+                parameters={"mins": window_min},
+            ).result_rows
+            out: dict[int, tuple[int, int]] = {}
+            for row in rows or []:
+                out[int(row[0])] = (int(row[1]), int(row[2]))
+            return out
+
+        stats = await asyncio.to_thread(_query)
+        if with_total:
+            return stats
+        return {sid: blocked for sid, (_total, blocked) in stats.items()}
 
     async def _dispatch(self, db: AsyncSession, policy: AlertPolicy, message: str) -> bool:
         channel_ids = policy.channel_ids or []
@@ -341,6 +650,8 @@ class AlertPolicyEvaluator:
             try:
                 focus_site_id = int(focus_site_id) if focus_site_id not in (None, "") else None
             except (TypeError, ValueError):
+                focus_site_id = None
+            if params.get("site_scope") == SITE_SCOPE_ANY:
                 focus_site_id = None
             focus_window_sec = params.get("window_sec")
             try:

@@ -48,7 +48,7 @@ def normalize_legacy_trigger_params(
 ) -> dict[str, Any]:
     """Map legacy ``qps`` key to ``threshold`` for QPS triggers."""
     out = dict(params or {})
-    if trigger_type in ("traffic.qps_gt", "traffic.qps_lt"):
+    if trigger_type in ("traffic.qps_gt", "traffic.qps_lt", "traffic.origin_qps_gt", "traffic.origin_qps_lt"):
         if out.get("threshold") in (None, "") and out.get("qps") not in (None, ""):
             out["threshold"] = out.pop("qps")
         else:

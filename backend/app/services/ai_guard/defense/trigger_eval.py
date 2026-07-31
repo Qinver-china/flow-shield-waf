@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.alert_conditions import CONDITION_TYPE_MAP
+from app.constants.alert_site_scope import SITE_SCOPE_ANY, SITE_SCOPE_SINGLE
 from app.models.ai_guard import AiGuardPolicy
 from app.services.ai_guard.defense.triggers import normalize_legacy_trigger_params
 from app.services.notifications.evaluator import AlertPolicyEvaluator
@@ -54,6 +55,7 @@ def _snapshot_from_hit(
     snapshot: dict = {
         "type": trigger_type,
         "window_min": _analysis_window_min(params),
+        "site_scope": params.get("site_scope"),
         "site_id": params.get("site_id"),
     }
     if params.get("window_sec") not in (None, ""):
@@ -86,15 +88,23 @@ async def evaluate_policy(db: AsyncSession, policy: AiGuardPolicy) -> dict | Non
         condition_type=ttype,
         condition_params=params,
     )
-    message = await _alert_evaluator._evaluate(fake_alert, db)  # noqa: SLF001
-    if not message:
+    hit = await _alert_evaluator.evaluate_hit(fake_alert, db)
+    if not hit:
         return None
+
+    params = dict(params)
+    matched_site_id = hit.matched_site_id
+    if params.get("site_scope") == SITE_SCOPE_ANY and matched_site_id is not None:
+        params["site_scope"] = SITE_SCOPE_SINGLE
+        params["site_id"] = matched_site_id
+    elif params.get("site_scope") in (None, "") and matched_site_id is not None:
+        params["site_id"] = matched_site_id
 
     site_id = params.get("site_id")
-    if not _matches_filter(policy, site_id if site_id is not None else None):
+    if not _matches_filter(policy, int(site_id) if site_id is not None else None):
         return None
 
-    return _snapshot_from_hit(trigger_type=ttype, params=params, message=message)
+    return _snapshot_from_hit(trigger_type=ttype, params=params, message=hit.message)
 
 
 async def list_enabled_policies(db: AsyncSession) -> list[AiGuardPolicy]:

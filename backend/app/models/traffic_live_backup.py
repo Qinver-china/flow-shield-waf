@@ -13,6 +13,7 @@ BACKUP_WINDOW_SECS = (30, 60, 300, 1800, 3600, 86400)
 BACKUP_INTERVAL_SEC = 30
 REDIS_SNAPSHOT_KEY = "waf:traffic:snapshot"
 REDIS_MIN_S_PREFIX = "waf:traffic:min:s:"
+REDIS_MIN_O_PREFIX = "waf:traffic:min:o:"
 
 
 class TrafficLiveBackup(Base):

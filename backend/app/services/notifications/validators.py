@@ -4,12 +4,18 @@ from __future__ import annotations
 from typing import Any
 
 from app.constants.alert_conditions import CONDITION_TYPE_MAP
+from app.constants.alert_site_scope import normalize_site_scope_params
 from app.constants.system_metrics import SYSTEM_METRIC_WINDOWS_SEC
 from app.constants.traffic_windows import TRAFFIC_BASELINE_MIN_WINDOW_SEC, TRAFFIC_WINDOWS_SEC
 
 
 _BASELINE_CONDITIONS = frozenset({"traffic.baseline_gt", "traffic.baseline_lt"})
-_QPS_CONDITIONS = frozenset({"traffic.qps_gt", "traffic.qps_lt"})
+_QPS_CONDITIONS = frozenset({
+    "traffic.qps_gt",
+    "traffic.qps_lt",
+    "traffic.origin_qps_gt",
+    "traffic.origin_qps_lt",
+})
 _SYSTEM_CONDITIONS = frozenset({
     "system.container_cpu_gt",
     "system.host_cpu_gt",
@@ -26,6 +32,8 @@ def validate_condition_params(condition_type: str, params: dict[str, Any] | None
     for spec in meta["params"]:
         key = spec["key"]
         required = spec.get("required", True)
+        if spec.get("kind") == "alert_site_scope":
+            continue
         if required and params.get(key) in (None, ""):
             raise ValueError(f"条件参数「{spec['label']}」不能为空")
         if key in params and params[key] not in (None, ""):
@@ -45,6 +53,8 @@ def validate_condition_params(condition_type: str, params: dict[str, Any] | None
                     params[key] = int(params[key])
         elif spec.get("kind") == "site_id" and not required:
             params.pop(key, None)
+    if any(spec.get("kind") == "alert_site_scope" for spec in meta.get("params") or []):
+        params = normalize_site_scope_params(params)
     if condition_type in _BASELINE_CONDITIONS:
         window_sec = params.get("window_sec")
         if window_sec is not None and int(window_sec) < TRAFFIC_BASELINE_MIN_WINDOW_SEC:

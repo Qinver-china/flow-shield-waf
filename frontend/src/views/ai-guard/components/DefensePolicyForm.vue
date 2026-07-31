@@ -72,6 +72,11 @@
               :max="p.max"
               style="width: 100%"
             />
+            <alert-site-scope-select
+              v-else-if="p.kind === 'alert_site_scope'"
+              v-model:site-scope="model.trigger_params.site_scope"
+              v-model:site-id="model.trigger_params.site_id"
+            />
             <site-single-select
               v-else-if="p.kind === 'site_id'"
               v-model:value="model.trigger_params[p.key]"
@@ -127,6 +132,7 @@ import { computed } from "vue";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import SiteSingleSelect from "@/components/SiteSingleSelect.vue";
+import AlertSiteScopeSelect from "@/components/AlertSiteScopeSelect.vue";
 
 const model = defineModel<any>({ required: true });
 

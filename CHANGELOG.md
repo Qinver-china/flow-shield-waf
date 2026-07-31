@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-07-31
+
+### 新增
+
+- 预警通知与 AI 防护策略的「生效站点」支持「任意站点」：任一站点满足阈值即触发（区别于「全部站点合计」与「指定站点」）
+- 总览「实时请求量」各时间窗口展示回源请求量与回源 QPS
+- 回源请求量：WAF 放行后按与请求量相同的时间窗口（10s–24h）记录全站/分站点回源计数，同步至 Redis 快照
+- 防护规则条件新增 `traffic.origin_global` / `traffic.origin_site`（回源请求量、回源 QPS）
+- 预警通知与 AI 防护策略新增「回源请求量」「回源 QPS」触发条件
+- AI 防护「事件记录」「防护策略」移动端改为卡片列表；`FsDataTable` 支持移动端卡片模式
+- AI 分析记录 PC 端「分析摘要」列限制宽度并省略过长文本
+
 ### 部署
 
 - App 容器启动：entrypoint 集中等待 Redis（默认 120s，可用 `WAIT_REDIS_MAX_SEC` 覆盖）；panel 在 backend 就绪后再监听 :9000，避免重启时 `/health` 反代刷屏 `Connection refused`

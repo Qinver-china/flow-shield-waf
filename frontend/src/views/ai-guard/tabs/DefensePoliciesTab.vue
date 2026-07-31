@@ -15,6 +15,7 @@
       api-base="/api/v1/ai-guard/policies"
       :batch="batchConfig"
       has-enabled-column
+      mobile-title-key="name"
       @change="onTableChange"
       @refresh="load"
     >
@@ -185,6 +186,14 @@ function formatTriggerParams(record: any) {
       display = blockWindows.value.find((x) => x.value === Number(value))?.label || `${value} 分钟`;
     } else if (p.key === "percent") {
       display = `${value}%`;
+    } else if (p.key === "site_scope" || p.kind === "alert_site_scope") {
+      if (params.site_scope === "any") {
+        display = "任意站点";
+      } else if (params.site_scope === "single" || params.site_id != null) {
+        display = formatSiteId(Number(params.site_id));
+      } else {
+        display = "全站";
+      }
     } else if (p.key === "site_id") {
       display = formatSiteId(Number(value));
     } else if (p.key === "threshold") {
@@ -310,6 +319,8 @@ defineExpose({ openCreate });
 .sub {
   font-size: 12px;
   color: #888;
+  line-height: 1.5;
+  word-break: break-word;
 }
 .danger {
   color: #ff4d4f;

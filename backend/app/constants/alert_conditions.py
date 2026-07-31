@@ -1,5 +1,6 @@
 """Catalog of alert policy condition types for admin notifications."""
 
+from app.constants.alert_site_scope import SITE_SCOPE_OPTIONS
 from app.constants.system_metrics import system_metric_window_options
 from app.constants.traffic_windows import traffic_window_options
 
@@ -14,11 +15,12 @@ BLOCK_WINDOWS_MIN = [
 ]
 
 _SITE_PARAM = {
-    "key": "site_id",
+    "key": "site_scope",
     "label": "生效站点",
-    "kind": "site_id",
+    "kind": "alert_site_scope",
     "required": False,
-    "help": "留空表示全站；选择站点则使用该站点的基线与请求量统计",
+    "help": "全部站点：各站流量合计后判断；任意站点：任一站点满足即触发；也可指定单个站点",
+    "options": SITE_SCOPE_OPTIONS,
 }
 
 _SYSTEM_WINDOW_PARAM = {
@@ -96,6 +98,50 @@ ALERT_CONDITION_TYPES: list[dict] = [
         ],
     },
     {
+        "type": "traffic.origin_abs_gt",
+        "label": "回源请求量高于固定值",
+        "category": "流量异常",
+        "description": "统计 WAF 放行后实际回源的请求量（不含拦截）。",
+        "params": [
+            _SITE_PARAM,
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "回源请求量上限", "kind": "number", "min": 1, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.origin_abs_lt",
+        "label": "回源请求量低于固定值",
+        "category": "流量异常",
+        "description": "回源流量异常偏低时提醒（可能源站故障或大量请求被拦截）。",
+        "params": [
+            _SITE_PARAM,
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "回源请求量下限", "kind": "number", "min": 0, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.origin_qps_gt",
+        "label": "回源 QPS 高于固定值",
+        "category": "流量异常",
+        "description": "按所选时间窗口内的平均回源 QPS（回源请求量 ÷ 窗口秒数）判断。",
+        "params": [
+            _SITE_PARAM,
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "回源 QPS 上限", "kind": "number", "min": 0, "required": True},
+        ],
+    },
+    {
+        "type": "traffic.origin_qps_lt",
+        "label": "回源 QPS 低于固定值",
+        "category": "流量异常",
+        "description": "检测平均回源 QPS 异常偏低。",
+        "params": [
+            _SITE_PARAM,
+            {"key": "window_sec", "label": "时间窗口", "kind": "traffic_window", "required": True},
+            {"key": "threshold", "label": "回源 QPS 下限", "kind": "number", "min": 0, "required": True},
+        ],
+    },
+    {
         "type": "traffic.burst_logging",
         "label": "流量自动取证已触发",
         "category": "流量异常",
@@ -110,7 +156,7 @@ ALERT_CONDITION_TYPES: list[dict] = [
         "params": [
             {"key": "window_min", "label": "统计窗口", "kind": "block_window", "required": True},
             {"key": "threshold", "label": "拦截次数", "kind": "number", "min": 1, "required": True},
-            {"key": "site_id", "label": "生效站点", "kind": "site_id", "required": False},
+            _SITE_PARAM,
         ],
     },
     {
@@ -121,7 +167,7 @@ ALERT_CONDITION_TYPES: list[dict] = [
         "params": [
             {"key": "window_min", "label": "统计窗口", "kind": "block_window", "required": True},
             {"key": "percent", "label": "拦截率 (%)", "kind": "number", "min": 1, "max": 100, "required": True},
-            {"key": "site_id", "label": "生效站点", "kind": "site_id", "required": False},
+            _SITE_PARAM,
         ],
     },
     {

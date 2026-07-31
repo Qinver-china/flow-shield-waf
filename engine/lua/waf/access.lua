@@ -94,6 +94,11 @@ local function flush_pending_observe()
     )
 end
 
+-- Record origin pass-through after WAF allows the request to proxy upstream.
+local function record_origin(site_id)
+    traffic_counter.inc_origin(site_id)
+end
+
 -- Apply a protection mode. Returns "continue" to keep evaluating, or exits the
 -- request for terminal actions (block / captcha / js_challenge / slide_captcha).
 local function apply_mode(cfg, site, ctx, mode, meta, ext, trace)
@@ -181,6 +186,7 @@ function _M.run()
 
     for _, w in ipairs(cfg.whitelist) do
         if w.enabled ~= false and applies(w) and matcher.match(w.conditions, ext) then
+            record_origin(site_id)
             return
         end
     end
@@ -208,7 +214,10 @@ function _M.run()
             end
         end
     end
-    if skip_all then return end
+    if skip_all then
+        record_origin(site_id)
+        return
+    end
 
     if not skip_rate then
         for _, rl in ipairs(cfg.ratelimits) do
@@ -240,6 +249,7 @@ function _M.run()
     end
 
     flush_pending_observe()
+    record_origin(site_id)
 end
 
 return _M

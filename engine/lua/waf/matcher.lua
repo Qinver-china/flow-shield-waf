@@ -25,6 +25,12 @@ local function match_leaf(node, ext)
     if node.field == "traffic.site" and node.op == "compare" then
         return traffic_compare.match(node.value, "site", ext.cache.site_id)
     end
+    if node.field == "traffic.origin_global" and node.op == "compare" then
+        return traffic_compare.match(node.value, "origin_global", nil)
+    end
+    if node.field == "traffic.origin_site" and node.op == "compare" then
+        return traffic_compare.match(node.value, "origin_site", ext.cache.site_id)
+    end
     if node.field == "system.cpu" and node.op == "compare" then
         return system_compare.match(node.value)
     end

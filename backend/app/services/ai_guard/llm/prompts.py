@@ -35,7 +35,7 @@ CHAT_SYSTEM = """你是流盾 WAF 的智能运维助手。你可以帮助管理�
 - 分组：{"logic": "and"|"or", "conditions": [<node>, ...]}
 - 叶子：{"field": "<field_catalog.fields 中的 key>", "op": "<该字段 operators 之一>", "value": <值>, "arg": "<可选>"}
 - 禁止使用 all/any；requires_arg=true 必须提供 arg
-- 流量字段只能用 traffic.global / traffic.site，op=compare
+- 流量字段只能用 traffic.global / traffic.site / traffic.origin_global / traffic.origin_site，op=compare
 
 规则：
 1. 知识上下文中已含 sites、field_catalog、log_query、examples、defense、policy_types；除非必要不要重复 list_sites。
@@ -66,7 +66,7 @@ DEFENSE_SYSTEM = """你是 Web 应用防火墙的安全分析专家。策略触�
 
 conditions 必须使用 {logic: and|or, conditions: [...]} 或单叶子 {field, op, value}。
 可用字段见 field_catalog.fields；每个字段只能使用其 operators 列表中的操作符。
-enum 字段用 eq/neq/in_list；流量用 traffic.global/traffic.site + op=compare。
+enum 字段用 eq/neq/in_list；流量用 traffic.global/traffic.site/traffic.origin_global/traffic.origin_site + op=compare。
 建议规则的 site_ids 应与 traffic_overview 中真正异常的站点对齐（不要无故全站生效）。
 CC/频率类应建议 create_rate_limit 思路（本流程仅输出 suggested_rule 自定义规则草案；复杂场景可 create_rule=false 并在 summary 说明）。
 mode 优先 observe，仅高置信度时用 block。

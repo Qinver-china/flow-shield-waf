@@ -73,6 +73,8 @@ FIELD_OPTIONS: dict[str, list[dict[str, str]]] = {
     ],
     "traffic.global": traffic_window_options(as_string=True),
     "traffic.site": traffic_window_options(as_string=True),
+    "traffic.origin_global": traffic_window_options(as_string=True),
+    "traffic.origin_site": traffic_window_options(as_string=True),
     "system.cpu": system_metric_window_options(as_string=True),
 }
 
@@ -83,6 +85,13 @@ TRAFFIC_COMPARE_MODES: list[dict[str, str]] = [
     {"value": "qps_lt", "label": "QPS 低于"},
     {"value": "baseline_gt", "label": "高于基线百分比"},
     {"value": "baseline_lt", "label": "低于基线百分比"},
+]
+
+ORIGIN_TRAFFIC_COMPARE_MODES: list[dict[str, str]] = [
+    {"value": "abs_gt", "label": "回源请求量高于"},
+    {"value": "abs_lt", "label": "回源请求量低于"},
+    {"value": "qps_gt", "label": "回源 QPS 高于"},
+    {"value": "qps_lt", "label": "回源 QPS 低于"},
 ]
 
 SYSTEM_CPU_COMPARE_MODES: list[dict[str, str]] = [
@@ -97,6 +106,13 @@ _TRAFFIC_FIELD_DEF = {
     "requires_arg": False,
     "operators": ["compare"],
     "compare_modes": TRAFFIC_COMPARE_MODES,
+}
+
+_ORIGIN_TRAFFIC_FIELD_DEF = {
+    "value_type": TRAFFIC,
+    "requires_arg": False,
+    "operators": ["compare"],
+    "compare_modes": ORIGIN_TRAFFIC_COMPARE_MODES,
 }
 
 _SYSTEM_CPU_FIELD_DEF = {
@@ -261,6 +277,18 @@ FIELDS: list[dict] = [
         **_TRAFFIC_FIELD_DEF,
     },
     {
+        "key": "traffic.origin_global",
+        "label": "全站回源请求量",
+        "category": "时间与流量",
+        **_ORIGIN_TRAFFIC_FIELD_DEF,
+    },
+    {
+        "key": "traffic.origin_site",
+        "label": "当前站点回源请求量",
+        "category": "时间与流量",
+        **_ORIGIN_TRAFFIC_FIELD_DEF,
+    },
+    {
         "key": "system.cpu",
         "label": "系统CPU负载",
         "category": "时间与流量",
@@ -320,7 +348,7 @@ def catalog_compact_for_llm() -> dict:
                 "单条叶子条件可省略外层分组，系统会自动包裹",
                 "requires_arg=true 的字段必须提供 arg（如 http.header 的 Header 名）",
                 "field 必须严格使用 fields 列表中的 key，禁止自造字段名",
-                "流量只能用 traffic.global / traffic.site；系统 CPU 用 system.cpu；CC/频率限制用 create_rate_limit",
+                "流量只能用 traffic.global / traffic.site / traffic.origin_global / traffic.origin_site；系统 CPU 用 system.cpu；CC/频率限制用 create_rate_limit",
             ],
         },
         "operator_selection": {
@@ -355,7 +383,12 @@ def catalog_compact_for_llm() -> dict:
                 "bool": {"use": ["eq"], "values": ["true", "false"]},
                 "traffic": {
                     "use": ["compare"],
-                    "fields": ["traffic.global", "traffic.site"],
+                    "fields": [
+                        "traffic.global",
+                        "traffic.site",
+                        "traffic.origin_global",
+                        "traffic.origin_site",
+                    ],
                 },
                 "system": {
                     "use": ["compare"],
@@ -368,12 +401,13 @@ def catalog_compact_for_llm() -> dict:
             },
         },
         "traffic_value": {
-            "field": "traffic.global | traffic.site",
+            "field": "traffic.global | traffic.site | traffic.origin_global | traffic.origin_site",
             "op": "compare",
             "invalid_field_examples": [
                 "traffic.global.request_count",
                 "traffic.global.qps",
                 "traffic.site.request_count",
+                "traffic.origin_global.request_count",
             ],
             "value": {
                 "window_sec": list(TRAFFIC_WINDOWS_SEC),
@@ -410,6 +444,14 @@ def catalog_compact_for_llm() -> dict:
                         "field": "traffic.global",
                         "op": "compare",
                         "value": {"window_sec": 300, "compare": "baseline_gt", "percent": 200},
+                    },
+                },
+                {
+                    "description": "全站 5 分钟回源请求量超过 500",
+                    "leaf": {
+                        "field": "traffic.origin_global",
+                        "op": "compare",
+                        "value": {"window_sec": 300, "compare": "abs_gt", "threshold": 500},
                     },
                 },
             ],

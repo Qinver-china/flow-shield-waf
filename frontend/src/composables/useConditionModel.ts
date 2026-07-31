@@ -42,7 +42,12 @@ export const LIST_OPS = ["in_list", "not_in", "in_cidr", "geo_in", "between"];
 export const STRING_MULTI_OPS = ["contains", "not_contains"];
 export const IP_GROUP_OPS = ["in_ip_group", "not_in_ip_group"];
 export const NUMBER_OPS = ["len_gt", "len_lt"];
-export const TRAFFIC_FIELDS = ["traffic.global", "traffic.site"] as const;
+export const TRAFFIC_FIELDS = [
+  "traffic.global",
+  "traffic.site",
+  "traffic.origin_global",
+  "traffic.origin_site",
+] as const;
 export const SYSTEM_CPU_FIELD = "system.cpu";
 export const TRAFFIC_BASELINE_COMPARES = ["baseline_gt", "baseline_lt"];
 export const TRAFFIC_QPS_COMPARES = ["qps_gt", "qps_lt"];
@@ -53,6 +58,10 @@ export const SYSTEM_CPU_PCT_COMPARES = [
   "host_cpu_lt",
 ];
 export const MAX_GROUP_DEPTH = 10;
+
+export function isOriginTrafficField(fieldKey?: string) {
+  return !!fieldKey && (fieldKey === "traffic.origin_global" || fieldKey === "traffic.origin_site");
+}
 
 export function isTrafficField(fieldKey?: string) {
   return !!fieldKey && (TRAFFIC_FIELDS as readonly string[]).includes(fieldKey);
@@ -273,6 +282,9 @@ export function onFieldChange(row: UiLeaf, fieldMap: Record<string, Field>) {
   if (isTrafficField(row.field)) {
     row.op = "compare";
     row.trafficWindow = row.trafficWindow ?? 300;
+    if (isOriginTrafficField(row.field) && isTrafficBaselineCompare(row.trafficCompare)) {
+      row.trafficCompare = "abs_gt";
+    }
     if (isSystemCpuPctCompare(row.trafficCompare) || !row.trafficCompare) {
       row.trafficCompare = "abs_gt";
       row.trafficThreshold = 1000;

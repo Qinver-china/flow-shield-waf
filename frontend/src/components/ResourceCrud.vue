@@ -88,15 +88,17 @@
         <a-empty v-if="!rows.length" description="暂无数据" />
         <div v-for="row in rows" :key="row.id" class="mobile-card fs-card">
           <div class="mobile-card-head">
-            <a-checkbox
-              v-if="batchEnabled"
-              :checked="isMobileRowSelected(row.id)"
-              class="mobile-card-check"
-              @change="(e: any) => toggleMobileRow(row.id, e.target.checked)"
-            />
-            <a class="mobile-card-title" @click="openView(row)">
-              {{ nameField ? row[nameField] : `#${row.id}` }}
-            </a>
+            <div class="mobile-card-head-left">
+              <a-checkbox
+                v-if="batchEnabled"
+                :checked="isMobileRowSelected(row.id)"
+                class="mobile-card-check"
+                @change="(e: any) => toggleMobileRow(row.id, e.target.checked)"
+              />
+              <a class="mobile-card-title" @click="openView(row)">
+                {{ nameField ? row[nameField] : `#${row.id}` }}
+              </a>
+            </div>
             <a-switch
               v-if="hasEnabledColumn"
               :checked="row.enabled"
@@ -763,6 +765,7 @@ watch(
   font-weight: 600;
   font-size: 15px;
   color: var(--fs-color-primary);
+  margin-left: 10px;
 }
 
 .mobile-card-body {

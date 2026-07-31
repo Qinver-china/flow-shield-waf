@@ -96,6 +96,10 @@
                 <div class="traffic-live-hero__value">{{ formatTrafficCount(liveTrafficDay.requests) }}</div>
                 <div class="traffic-live-hero__meta">
                   <span>平均 {{ formatQps(liveTrafficDay.qps) }} QPS</span>
+                  <span class="traffic-live-hero__origin">
+                    回源 <b>{{ formatTrafficCount(liveTrafficDay.origin_requests) }}</b>
+                    · {{ formatQps(liveTrafficDay.origin_qps) }} QPS
+                  </span>
                   <span
                     v-if="liveTrafficDay.deviation_ratio != null && !liveTrafficDay.baseline_warmup"
                     class="traffic-live-hero__delta"
@@ -127,6 +131,10 @@
                 </div>
                 <div class="traffic-live-card__value">{{ formatTrafficCount(w.requests) }}</div>
                 <div class="traffic-live-card__qps">{{ formatQps(w.qps) }} QPS</div>
+                <div class="traffic-live-card__origin">
+                  <span>回源请求 <b>{{ formatTrafficCount(w.origin_requests) }}</b></span>
+                  <span>回源 QPS <b>{{ formatQps(w.origin_qps) }}</b></span>
+                </div>
                 <a-tooltip
                   v-if="liveTrafficHasBaselineWindow(w)"
                   :title="liveTrafficBaselineTip(w)"
@@ -595,15 +603,19 @@ const liveTrafficWindows = computed(() => {
     const sec = Number(w.sec);
     const intelW = intelBySec.get(sec);
     const requests = Number(w.requests || 0);
+    const originRequests = Number(w.origin_requests || 0);
     const baselineAvg =
       intelW?.baseline_avg != null ? Number(intelW.baseline_avg) : null;
     // QPS = 窗口内请求合计 ÷ 窗口秒数（全部站点即各站请求之和 ÷ 时间）。
     const qps = sec > 0 ? requests / sec : 0;
+    const originQps = sec > 0 ? originRequests / sec : 0;
     return {
       window_sec: sec,
       label: windowLabel(sec),
       requests,
       qps,
+      origin_requests: originRequests,
+      origin_qps: originQps,
       threshold: w.threshold != null ? Number(w.threshold) : null,
       baseline_avg: baselineAvg,
       baseline_warmup: Boolean(intelW?.baseline_warmup),
@@ -626,6 +638,8 @@ const liveTrafficWindows = computed(() => {
       label: w.label || windowLabel(sec),
       requests,
       qps: requests / Math.max(sec, 1),
+      origin_requests: 0,
+      origin_qps: 0,
       threshold: null as number | null,
       baseline_avg: w.baseline_avg != null ? Number(w.baseline_avg) : null,
       baseline_warmup: Boolean(w.baseline_warmup),
@@ -648,6 +662,8 @@ const liveTrafficDay = computed(() => {
     label: windowLabel(86400),
     requests: 0,
     qps: 0,
+    origin_requests: 0,
+    origin_qps: 0,
     threshold: null as number | null,
     baseline_avg: null as number | null,
     baseline_warmup: false,
@@ -1935,6 +1951,25 @@ onUnmounted(() => {
   margin-top: 2px;
   font-size: 12px;
   color: var(--fs-text-muted);
+}
+
+.traffic-live-card__origin {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--fs-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-live-card__origin span:last-child {
+  color: var(--fs-text-muted);
+}
+
+.traffic-live-hero__origin {
+  color: var(--fs-text-secondary);
 }
 
 .traffic-live-card__status {

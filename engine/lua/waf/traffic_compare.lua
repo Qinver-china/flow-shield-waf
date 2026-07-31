@@ -66,6 +66,12 @@ local function baseline_avg(scope, site_id, window_sec)
 end
 
 local function current_count(scope, site_id, window_sec)
+    if scope == "origin_site" then
+        return traffic_counter.get_site_origin_count(site_id, window_sec)
+    end
+    if scope == "origin_global" then
+        return traffic_counter.get_global_origin_count(window_sec)
+    end
     if scope == "site" then
         return traffic_counter.get_site_count(site_id, window_sec)
     end
@@ -107,6 +113,10 @@ function _M.match(value, scope, site_id)
         local threshold = tonumber(value.threshold)
         if not threshold then return false end
         return current_qps(scope, site_id, window_sec) < threshold
+    end
+
+    if scope == "origin_global" or scope == "origin_site" then
+        return false
     end
 
     if window_sec < BASELINE_MIN_WINDOW then

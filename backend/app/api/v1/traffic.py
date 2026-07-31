@@ -24,19 +24,44 @@ def _default_windows(thresholds: dict[int, int]) -> list[dict]:
             "sec": sec,
             "requests": 0,
             "qps": 0.0,
+            "origin_requests": 0,
+            "origin_qps": 0.0,
             "threshold": thresholds.get(sec, int(t["max_requests"])),
         })
     return windows
 
 
-def _window_row(sec: int, requests: int, thresholds: dict[int, int], *, threshold=None) -> dict:
+def _origin_by_sec(windows: list[dict] | None) -> dict[int, int]:
+    out: dict[int, int] = {}
+    for w in windows or []:
+        try:
+            sec = int(w.get("sec", 0))
+            req = int(w.get("requests") or 0)
+        except (TypeError, ValueError):
+            continue
+        if sec > 0:
+            out[sec] = req
+    return out
+
+
+def _window_row(
+    sec: int,
+    requests: int,
+    thresholds: dict[int, int],
+    *,
+    threshold=None,
+    origin_requests: int = 0,
+) -> dict:
     sec = int(sec)
     requests = int(requests or 0)
+    origin_requests = int(origin_requests or 0)
     return {
         "sec": sec,
         "requests": requests,
         # Always derive QPS from the requests being returned (never trust a stale field).
         "qps": (requests / sec) if sec > 0 else 0.0,
+        "origin_requests": origin_requests,
+        "origin_qps": (origin_requests / sec) if sec > 0 else 0.0,
         "threshold": threshold if threshold is not None else thresholds.get(sec),
     }
 
@@ -44,7 +69,10 @@ def _window_row(sec: int, requests: int, thresholds: dict[int, int], *, threshol
 def _windows_from_snapshot(
     snapshot_windows: list[dict],
     thresholds: dict[int, int],
+    *,
+    origin_windows: list[dict] | None = None,
 ) -> list[dict]:
+    origin_by_sec = _origin_by_sec(origin_windows)
     out: list[dict] = []
     for w in snapshot_windows:
         try:
@@ -58,7 +86,15 @@ def _windows_from_snapshot(
         except (TypeError, ValueError):
             requests = 0
         thr = w.get("threshold")
-        out.append(_window_row(sec, requests, thresholds, threshold=thr))
+        out.append(
+            _window_row(
+                sec,
+                requests,
+                thresholds,
+                threshold=thr,
+                origin_requests=origin_by_sec.get(sec, 0),
+            )
+        )
     return out
 
 
@@ -67,9 +103,11 @@ def _windows_sum_sites(
     thresholds: dict[int, int],
     *,
     fallback_global: list[dict] | None = None,
+    fallback_origin_global: list[dict] | None = None,
 ) -> list[dict]:
     """Build all-sites windows by summing per-site requests, then recompute QPS."""
     by_sec: dict[int, int] = {}
+    origin_by_sec: dict[int, int] = {}
     order: list[int] = []
     for site_data in (sites or {}).values():
         for w in (site_data or {}).get("windows") or []:
@@ -84,9 +122,25 @@ def _windows_sum_sites(
                 order.append(sec)
                 by_sec[sec] = 0
             by_sec[sec] += req
+        for w in (site_data or {}).get("origin_windows") or []:
+            try:
+                sec = int(w.get("sec", 0))
+                req = int(w.get("requests") or 0)
+            except (TypeError, ValueError):
+                continue
+            if sec <= 0:
+                continue
+            origin_by_sec[sec] = origin_by_sec.get(sec, 0) + req
+            if sec not in by_sec:
+                order.append(sec)
+                by_sec.setdefault(sec, 0)
 
     if not order and fallback_global:
-        return _windows_from_snapshot(fallback_global, thresholds)
+        return _windows_from_snapshot(
+            fallback_global,
+            thresholds,
+            origin_windows=fallback_origin_global,
+        )
 
     # Prefer global row thresholds when present (logging auto thresholds attach there).
     thr_by_sec: dict[int, object] = {}
@@ -99,7 +153,13 @@ def _windows_sum_sites(
             thr_by_sec[sec] = w.get("threshold")
 
     return [
-        _window_row(sec, by_sec[sec], thresholds, threshold=thr_by_sec.get(sec))
+        _window_row(
+            sec,
+            by_sec[sec],
+            thresholds,
+            threshold=thr_by_sec.get(sec),
+            origin_requests=origin_by_sec.get(sec, 0),
+        )
         for sec in order
     ]
 
@@ -123,17 +183,23 @@ async def traffic_stats(
             data = json.loads(raw)
             sites_map = data.get("sites") or {}
             global_windows = data.get("global", {}).get("windows") or []
+            global_origin_windows = data.get("global", {}).get("origin_windows") or []
             if site_id is None:
                 # All-sites: total requests across sites, QPS = total / window.
                 windows = _windows_sum_sites(
                     sites_map,
                     thresholds,
                     fallback_global=global_windows,
+                    fallback_origin_global=global_origin_windows,
                 )
                 burst_active = bool(data.get("global", {}).get("burst_active"))
             else:
                 site_data = sites_map.get(str(site_id), {})
-                windows = _windows_from_snapshot(site_data.get("windows") or [], thresholds)
+                windows = _windows_from_snapshot(
+                    site_data.get("windows") or [],
+                    thresholds,
+                    origin_windows=site_data.get("origin_windows") or [],
+                )
                 burst_active = bool(data.get("global", {}).get("burst_active"))
             return ok({
                 "updated_at": data.get("updated_at"),

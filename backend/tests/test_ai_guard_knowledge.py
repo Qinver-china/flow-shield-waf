@@ -57,6 +57,7 @@ def test_knowledge_for_defense_exports_rule_fields():
     assert defense["system_value"]["examples"]
     assert defense["operator_selection"]["rule"]
     assert any(f["key"] == "traffic.global" for f in defense["fields"])
+    assert any(f["key"] == "traffic.origin_global" for f in defense["fields"])
     assert any(f["key"] == "system.cpu" for f in defense["fields"])
     assert defense["operators_by_type"]["traffic"] == ["compare"]
     assert defense["operators_by_type"]["system"] == ["compare"]
@@ -65,7 +66,8 @@ def test_knowledge_for_defense_exports_rule_fields():
 def test_defense_knowledge_includes_trigger_types():
     defense = _defense_knowledge()
     types = {item["type"] for item in defense["trigger_types"]}
-    assert "traffic.qps_gt" in types
+    assert "traffic.origin_qps_gt" in types
+    assert "traffic.origin_abs_gt" in types
     assert "traffic.baseline_gt" in types
     assert "security.block_count" in types
     assert "security.block_rate" in types

@@ -172,6 +172,7 @@ import {
   isIpGroupOp,
   isListOp,
   isNumberOp,
+  isOriginTrafficField,
   isStringMultiOp,
   isSystemCpuPctCompare,
   isTrafficBaselineCompare,
@@ -208,9 +209,11 @@ const thresholdAddon = computed(() => {
 });
 
 const thresholdPlaceholder = computed(() => {
-  if (isTrafficQpsCompare(props.row.trafficCompare)) return "QPS";
+  if (isTrafficQpsCompare(props.row.trafficCompare)) {
+    return isOriginTrafficField(props.row.field) ? "回源 QPS" : "QPS";
+  }
   if (isSystemCpuPctCompare(props.row.trafficCompare)) return "CPU%";
-  return "请求量";
+  return isOriginTrafficField(props.row.field) ? "回源请求量" : "请求量";
 });
 
 const ipGroupSelectOptions = computed(() =>

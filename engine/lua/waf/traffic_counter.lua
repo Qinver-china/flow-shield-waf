@@ -17,10 +17,16 @@ local SNAPSHOT_KEY = "waf:traffic:snapshot"
 local VIEWER_KEY = "waf:logs:viewer_active"
 local SEC_KEY_S = "waf:traffic:sec:s:"
 local MIN_KEY_S = "waf:traffic:min:s:"
+local ORIGIN_SEC_KEY_S = "waf:traffic:sec:o:"
+local ORIGIN_MIN_KEY_S = "waf:traffic:min:o:"
 local TRACKED_SITES_KEY = "tracked_site_ids"
 
 local function bucket_key(site_id, sec)
     return "s:" .. tostring(site_id) .. ":" .. tostring(sec)
+end
+
+local function origin_bucket_key(site_id, sec)
+    return "o:" .. tostring(site_id) .. ":" .. tostring(sec)
 end
 
 local function sum_window(prefix, now, window_sec)
@@ -32,8 +38,8 @@ local function sum_window(prefix, now, window_sec)
     return total
 end
 
-local function window_counts(now, site_id)
-    local prefix = "s:" .. tostring(site_id) .. ":"
+local function window_counts(now, site_id, prefix)
+    prefix = prefix or ("s:" .. tostring(site_id) .. ":")
     local out = {}
     for _, w in ipairs(WINDOWS) do
         out[tostring(w)] = sum_window(prefix, now, w)
@@ -57,12 +63,13 @@ local function add_counts(dst, src)
     return dst
 end
 
-local function cache_global_windows(counts, day_total)
+local function cache_global_windows(counts, day_total, cache_prefix)
+    cache_prefix = cache_prefix or "wc:"
     for _, w in ipairs(WINDOWS) do
         local key = tostring(w)
-        dict:set("wc:" .. key, counts[key] or 0, 120)
+        dict:set(cache_prefix .. key, counts[key] or 0, 120)
     end
-    dict:set("wc:86400", day_total or 0, 120)
+    dict:set(cache_prefix .. "86400", day_total or 0, 120)
 end
 
 local function minute_sum(prefix, now, minute_start)
@@ -121,6 +128,38 @@ function _M.get_site_count(site_id, window_sec)
     return sum_window("s:" .. tostring(sid) .. ":", now, w)
 end
 
+function _M.get_global_origin_count(window_sec)
+    if not dict then return 0 end
+    local w = tonumber(window_sec) or 0
+    if w <= 0 then return 0 end
+    if w == DAY_SEC then
+        return tonumber(dict:get("wc:o:86400")) or 0
+    end
+    local cached = dict:get("wc:o:" .. tostring(w))
+    if cached ~= nil then
+        return cached
+    end
+    local now = math.floor(ngx.now())
+    local total = 0
+    for _, sid in ipairs(tracked_site_ids()) do
+        total = total + sum_window("o:" .. tostring(sid) .. ":", now, w)
+    end
+    return total
+end
+
+function _M.get_site_origin_count(site_id, window_sec)
+    if not dict or site_id == nil then return 0 end
+    local sid = tonumber(site_id)
+    if not sid then return 0 end
+    local w = tonumber(window_sec) or 0
+    if w <= 0 then return 0 end
+    if w == DAY_SEC then
+        return tonumber(dict:get("wc:o:s:" .. tostring(sid) .. ":86400")) or 0
+    end
+    local now = math.floor(ngx.now())
+    return sum_window("o:" .. tostring(sid) .. ":", now, w)
+end
+
 -- Only matched sites are counted; no global / unassigned bucket.
 function _M.inc(site_id)
     if not dict then return end
@@ -128,6 +167,15 @@ function _M.inc(site_id)
     if not sid then return end
     local now = math.floor(ngx.now())
     dict:incr(bucket_key(sid, now), 1, 0, BUCKET_TTL)
+end
+
+-- Origin requests: counted after WAF passes (proxied to upstream, not blocked).
+function _M.inc_origin(site_id)
+    if not dict then return end
+    local sid = tonumber(site_id)
+    if not sid then return end
+    local now = math.floor(ngx.now())
+    dict:incr(origin_bucket_key(sid, now), 1, 0, BUCKET_TTL)
 end
 
 function _M.burst_active()
@@ -235,8 +283,16 @@ local function redis_sec_key(site_id, sec)
     return SEC_KEY_S .. tostring(site_id) .. ":" .. tostring(sec)
 end
 
+local function redis_origin_sec_key(site_id, sec)
+    return ORIGIN_SEC_KEY_S .. tostring(site_id) .. ":" .. tostring(sec)
+end
+
 local function redis_min_key(site_id)
     return MIN_KEY_S .. tostring(site_id)
+end
+
+local function redis_origin_min_key(site_id)
+    return ORIGIN_MIN_KEY_S .. tostring(site_id)
 end
 
 local function sum_day_from_hash(red, min_key, now_min)
@@ -267,13 +323,18 @@ local function shared_has_minute(prefix, minute_start, now)
     return false
 end
 
-local function sync_site_to_redis(red, now, site_id)
-    local prefix = "s:" .. tostring(site_id) .. ":"
+local function sync_site_to_redis(red, now, site_id, kind)
+    local prefix = (kind == "origin") and ("o:" .. tostring(site_id) .. ":") or ("s:" .. tostring(site_id) .. ":")
+    local sec_key_fn = (kind == "origin") and redis_origin_sec_key or redis_sec_key
+    local min_key = (kind == "origin") and redis_origin_min_key(site_id) or redis_min_key(site_id)
+    local day_cache_key = (kind == "origin")
+        and ("wc:o:s:" .. tostring(site_id) .. ":86400")
+        or ("wc:s:" .. tostring(site_id) .. ":86400")
+
     local sec_val = tonumber(dict:get(prefix .. tostring(now))) or 0
-    red:set(redis_sec_key(site_id, now), sec_val, "EX", SEC_REDIS_TTL)
+    red:set(sec_key_fn(site_id, now), sec_val, "EX", SEC_REDIS_TTL)
 
     local minute_start = now - (now % 60)
-    local min_key = redis_min_key(site_id)
     local min_count = minute_sum(prefix, now, minute_start)
     if shared_has_minute(prefix, minute_start, now) then
         red:hset(min_key, tostring(minute_start), min_count)
@@ -287,7 +348,7 @@ local function sync_site_to_redis(red, now, site_id)
     end
 
     local day_total = sum_day_from_hash(red, min_key, minute_start)
-    dict:set("wc:s:" .. tostring(site_id) .. ":86400", day_total, 120)
+    dict:set(day_cache_key, day_total, 120)
     return day_total
 end
 
@@ -335,6 +396,67 @@ local function configured_site_ids(cfg)
     return ids
 end
 
+local function hydrate_sec_keys(red, match_prefix, key_pattern, set_bucket_fn, seen, site_ids)
+    local loaded = 0
+    local cursor = "0"
+    repeat
+        local res = red:scan(cursor, "MATCH", match_prefix .. "*", "COUNT", 200)
+        if not res or res == ngx.null then
+            break
+        end
+        cursor = tostring(res[1])
+        local keys = res[2] or {}
+        for _, key in ipairs(keys) do
+            local sid, sec = string.match(key, key_pattern)
+            if sid and sec then
+                local val = red:get(key)
+                if val and val ~= ngx.null then
+                    local n = tonumber(val)
+                    if n and n > 0 then
+                        local site_id = tonumber(sid)
+                        set_bucket_fn(site_id, tonumber(sec), n)
+                        loaded = loaded + 1
+                        if site_id and not seen[site_id] then
+                            seen[site_id] = true
+                            site_ids[#site_ids + 1] = site_id
+                        end
+                    end
+                end
+            end
+        end
+    until cursor == "0"
+    return loaded
+end
+
+local function hydrate_min_keys(red, match_prefix, key_pattern, day_cache_fmt, seen, site_ids)
+    local day_total = 0
+    local now = math.floor(ngx.now())
+    local now_min = now - (now % 60)
+    local cursor = "0"
+    repeat
+        local res = red:scan(cursor, "MATCH", match_prefix .. "*", "COUNT", 50)
+        if not res or res == ngx.null then
+            break
+        end
+        cursor = tostring(res[1])
+        local keys = res[2] or {}
+        for _, key in ipairs(keys) do
+            local sid = string.match(key, key_pattern)
+            if sid then
+                local day_s = sum_day_from_hash(red, key, now_min)
+                dict:set(string.format(day_cache_fmt, sid), day_s, 120)
+                day_total = day_total + day_s
+                local site_id = tonumber(sid)
+                if site_id and not seen[site_id] then
+                    seen[site_id] = true
+                    site_ids[#site_ids + 1] = site_id
+                end
+            end
+        end
+    until cursor == "0"
+    return day_total
+end
+
 --- Load per-site Redis second buckets into ngx.shared after process restart.
 function _M.hydrate_from_redis()
     if not dict or ngx.worker.id() ~= 0 then
@@ -346,70 +468,55 @@ function _M.hydrate_from_redis()
         return
     end
 
-    local now = math.floor(ngx.now())
-    local loaded = 0
     local site_ids = {}
     local seen = {}
 
-    local cursor = "0"
-    repeat
-        local res = red:scan(cursor, "MATCH", SEC_KEY_S .. "*", "COUNT", 200)
-        if not res or res == ngx.null then
-            break
-        end
-        cursor = tostring(res[1])
-        local keys = res[2] or {}
-        for _, key in ipairs(keys) do
-            local sid, sec = string.match(key, "^waf:traffic:sec:s:(%d+):(%d+)$")
-            if sid and sec then
-                local val = red:get(key)
-                if val and val ~= ngx.null then
-                    local n = tonumber(val)
-                    if n and n > 0 then
-                        local site_id = tonumber(sid)
-                        dict:set(bucket_key(site_id, tonumber(sec)), n, BUCKET_TTL)
-                        loaded = loaded + 1
-                        if not seen[site_id] then
-                            seen[site_id] = true
-                            site_ids[#site_ids + 1] = site_id
-                        end
-                    end
-                end
-            end
-        end
-    until cursor == "0"
+    local loaded_req = hydrate_sec_keys(
+        red,
+        SEC_KEY_S,
+        "^waf:traffic:sec:s:(%d+):(%d+)$",
+        function(site_id, sec, n)
+            dict:set(bucket_key(site_id, sec), n, BUCKET_TTL)
+        end,
+        seen,
+        site_ids
+    )
+    local loaded_origin = hydrate_sec_keys(
+        red,
+        ORIGIN_SEC_KEY_S,
+        "^waf:traffic:sec:o:(%d+):(%d+)$",
+        function(site_id, sec, n)
+            dict:set(origin_bucket_key(site_id, sec), n, BUCKET_TTL)
+        end,
+        seen,
+        site_ids
+    )
 
-    local now_min = now - (now % 60)
-    local day_total = 0
-    cursor = "0"
-    repeat
-        local res = red:scan(cursor, "MATCH", MIN_KEY_S .. "*", "COUNT", 50)
-        if not res or res == ngx.null then
-            break
-        end
-        cursor = tostring(res[1])
-        local keys = res[2] or {}
-        for _, key in ipairs(keys) do
-            local sid = string.match(key, "^waf:traffic:min:s:(%d+)$")
-            if sid then
-                local day_s = sum_day_from_hash(red, key, now_min)
-                dict:set("wc:s:" .. sid .. ":86400", day_s, 120)
-                day_total = day_total + day_s
-                local site_id = tonumber(sid)
-                if site_id and not seen[site_id] then
-                    seen[site_id] = true
-                    site_ids[#site_ids + 1] = site_id
-                end
-            end
-        end
-    until cursor == "0"
+    local day_total = hydrate_min_keys(
+        red,
+        MIN_KEY_S,
+        "^waf:traffic:min:s:(%d+)$",
+        "wc:s:%s:86400",
+        seen,
+        site_ids
+    )
+    local origin_day_total = hydrate_min_keys(
+        red,
+        ORIGIN_MIN_KEY_S,
+        "^waf:traffic:min:o:(%d+)$",
+        "wc:o:s:%s:86400",
+        seen,
+        site_ids
+    )
 
     table.sort(site_ids)
     set_tracked_site_ids(site_ids)
     dict:set("wc:86400", day_total, 120)
+    dict:set("wc:o:86400", origin_day_total, 120)
 
     rc.release(red)
-    ngx.log(ngx.INFO, "waf traffic: hydrated ", loaded, " site sec buckets; day_sum=", day_total)
+    ngx.log(ngx.INFO, "waf traffic: hydrated req=", loaded_req, " origin=", loaded_origin,
+        " day_sum=", day_total, " origin_day_sum=", origin_day_total)
 end
 
 function _M.tick(cfg)
@@ -432,27 +539,37 @@ function _M.tick(cfg)
     set_tracked_site_ids(site_ids)
 
     local global_counts = empty_counts()
+    local origin_global_counts = empty_counts()
     local day_g = 0
+    local origin_day_g = 0
     local sites_out = {}
 
     for _, sid in ipairs(site_ids) do
         local counts = window_counts(now, sid)
+        local origin_counts = window_counts(now, sid, "o:" .. tostring(sid) .. ":")
         local day_s = sync_site_to_redis(red, now, sid)
+        local origin_day_s = sync_site_to_redis(red, now, sid, "origin")
         add_counts(global_counts, counts)
+        add_counts(origin_global_counts, origin_counts)
         day_g = day_g + (day_s or 0)
+        origin_day_g = origin_day_g + (origin_day_s or 0)
         sites_out[tostring(sid)] = {
             windows = windows_payload(counts, day_s, nil, false),
+            origin_windows = windows_payload(origin_counts, origin_day_s, nil, false),
         }
     end
 
     cache_global_windows(global_counts, day_g)
+    cache_global_windows(origin_global_counts, origin_day_g, "wc:o:")
     local burst = update_burst(global_counts, logging)
     local windows_out = windows_payload(global_counts, day_g, thresholds, true)
+    local origin_windows_out = windows_payload(origin_global_counts, origin_day_g, nil, false)
 
     local payload = cjson.encode({
         updated_at = now,
         global = {
             windows = windows_out,
+            origin_windows = origin_windows_out,
             burst_active = burst,
         },
         sites = sites_out,

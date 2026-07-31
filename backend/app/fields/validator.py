@@ -14,6 +14,7 @@ from app.constants.traffic_windows import TRAFFIC_BASELINE_MIN_WINDOW_SEC
 from app.constants.system_metrics import SYSTEM_METRIC_WINDOWS_SEC
 from app.fields.catalog import (
     SYSTEM,
+    ORIGIN_TRAFFIC_COMPARE_MODES,
     SYSTEM_CPU_COMPARE_MODES,
     TRAFFIC,
     TRAFFIC_COMPARE_MODES,
@@ -33,10 +34,13 @@ _OP_ALIASES = {
     "neq": "not_equals",
 }
 _TRAFFIC_COMPARES = {m["value"] for m in TRAFFIC_COMPARE_MODES}
+_ORIGIN_TRAFFIC_COMPARES = {m["value"] for m in ORIGIN_TRAFFIC_COMPARE_MODES}
 _SYSTEM_CPU_COMPARES = {m["value"] for m in SYSTEM_CPU_COMPARE_MODES}
 _BASELINE_COMPARES = {"baseline_gt", "baseline_lt"}
 _QPS_COMPARES = {"qps_gt", "qps_lt"}
 _TRAFFIC_FIELDS = {"traffic.global", "traffic.site"}
+_ORIGIN_TRAFFIC_FIELDS = {"traffic.origin_global", "traffic.origin_site"}
+_ALL_TRAFFIC_FIELDS = _TRAFFIC_FIELDS | _ORIGIN_TRAFFIC_FIELDS
 _SYSTEM_CPU_FIELDS = {"system.cpu"}
 _TRAFFIC_COMPARE_OPS = {
     "gt": "abs_gt",
@@ -61,7 +65,7 @@ def _normalize_traffic_leaf(node: dict[str, Any]) -> dict[str, Any]:
     field = node.get("field")
     if not isinstance(field, str):
         return node
-    if field in _TRAFFIC_FIELDS:
+    if field in _ALL_TRAFFIC_FIELDS:
         return node
 
     base: str | None = None
@@ -72,6 +76,12 @@ def _normalize_traffic_leaf(node: dict[str, Any]) -> dict[str, Any]:
     elif field.startswith("traffic.site."):
         base = "traffic.site"
         metric = field[len("traffic.site.") :]
+    elif field.startswith("traffic.origin_global."):
+        base = "traffic.origin_global"
+        metric = field[len("traffic.origin_global.") :]
+    elif field.startswith("traffic.origin_site."):
+        base = "traffic.origin_site"
+        metric = field[len("traffic.origin_site.") :]
     if base is None:
         return node
 
@@ -123,14 +133,18 @@ def _validate_traffic_value(value: Any, field: str) -> None:
         raise ValueError(f"不支持的时间窗口 {window_sec}，可选: {allowed}")
 
     compare = value.get("compare")
-    if compare not in _TRAFFIC_COMPARES:
+    allowed_compares = _ORIGIN_TRAFFIC_COMPARES if field in _ORIGIN_TRAFFIC_FIELDS else _TRAFFIC_COMPARES
+    if compare not in allowed_compares:
         raise ValueError("请求量必须选择比较方式 compare")
 
-    if compare in _BASELINE_COMPARES and window_sec < TRAFFIC_BASELINE_MIN_WINDOW_SEC:
-        raise ValueError(
-            f"基线比较不支持 {window_sec} 秒窗口，请使用 5 分钟或 30 分钟，"
-            "或改用绝对值 / QPS 比较"
-        )
+    if compare in _BASELINE_COMPARES:
+        if field in _ORIGIN_TRAFFIC_FIELDS:
+            raise ValueError("回源请求量不支持基线比较，请使用绝对值或 QPS")
+        if window_sec < TRAFFIC_BASELINE_MIN_WINDOW_SEC:
+            raise ValueError(
+                f"基线比较不支持 {window_sec} 秒窗口，请使用 5 分钟或 30 分钟，"
+                "或改用绝对值 / QPS 比较"
+            )
 
     if compare in ("abs_gt", "abs_lt", *_QPS_COMPARES):
         threshold = value.get("threshold")
@@ -207,7 +221,7 @@ def _validate_leaf(node: dict[str, Any]) -> None:
     if meta["value_type"] == TRAFFIC:
         if op != "compare":
             raise ValueError(f"字段 {field} 仅支持 compare 操作符")
-        if field not in _TRAFFIC_FIELDS:
+        if field not in _ALL_TRAFFIC_FIELDS:
             raise ValueError(f"未知请求量字段: {field}")
         _validate_traffic_value(node.get("value"), field)
         return

@@ -44,4 +44,23 @@ const policiesRef = ref<InstanceType<typeof DefensePoliciesTab> | null>(null);
   margin-bottom: 0;
 }
 
+@media (max-width: 767px) {
+  .ai-guard-tabs :deep(.ant-tabs-nav-wrap) {
+    overflow: visible;
+  }
+
+  .ai-guard-tabs :deep(.ant-tabs-nav-list) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ai-guard-tabs :deep(.ant-tabs-nav-list::-webkit-scrollbar) {
+    display: none;
+  }
+
+  .ai-guard-tabs :deep(.ant-tabs-tab) {
+    flex-shrink: 0;
+  }
+}
 </style>

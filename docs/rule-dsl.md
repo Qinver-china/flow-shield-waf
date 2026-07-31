@@ -186,6 +186,8 @@
 | --- | --- | --- |
 | traffic.global | 全站请求量（窗口比较） | traffic |
 | traffic.site | 当前站点请求量（窗口比较） | traffic |
+| traffic.origin_global | 全站回源请求量（窗口比较） | traffic |
+| traffic.origin_site | 当前站点回源请求量（窗口比较） | traffic |
 | system.cpu | 系统 CPU（窗口均值比较） | system |
 
 `system.cpu` 示例（后台每 5 秒采样，写入 Redis `waf:system:metrics`，提供 1/5/30 分钟窗口均值）：

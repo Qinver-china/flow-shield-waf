@@ -1,12 +1,15 @@
 <template>
   <div>
     <a-table
+      v-if="!isMobile"
       :columns="columns"
       :data-source="rows"
       :loading="loading"
       :pagination="resolvedPagination"
       row-key="id"
       bordered
+      class="incidents-table"
+      :scroll="{ x: 960 }"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -17,7 +20,11 @@
           {{ formatDateTime(record.created_at) }}
         </template>
         <template v-else-if="column.key === 'summary'">
-          {{ record.analysis_report?.summary || "—" }}
+          <a-typography-text
+            class="incident-summary"
+            :ellipsis="{ tooltip: true }"
+            :content="record.analysis_report?.summary || '—'"
+          />
         </template>
         <template v-else-if="column.key === 'actions'">
           <a v-if="record.status === 'suggested'" @click="apply(record.id)">应用规则</a>
@@ -36,6 +43,47 @@
         </template>
       </template>
     </a-table>
+
+    <fs-mobile-table-cards
+      v-else
+      :columns="columns"
+      :data-source="rows"
+      :loading="loading"
+      :pagination="resolvedPagination"
+      row-key="id"
+      :exclude-keys="['actions', 'status', 'created_at']"
+      @change="onTableChange"
+    >
+      <template #head="{ record }">
+        <div class="incident-head">
+          <a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag>
+          <span class="incident-time">{{ formatDateTime(record.created_at) }}</span>
+        </div>
+      </template>
+      <template #cell="{ column, record }">
+        <template v-if="column.key === 'summary'">
+          {{ record.analysis_report?.summary || "—" }}
+        </template>
+        <template v-else-if="column.dataIndex === 'applied_rule_id'">
+          {{ record.applied_rule_id || "—" }}
+        </template>
+        <template v-else-if="column.key === 'actions'">
+          <a v-if="record.status === 'suggested'" @click="apply(record.id)">应用规则</a>
+          <a-divider v-if="record.status === 'suggested'" type="vertical" />
+          <a v-if="record.applied_rule_id" @click="rollback(record.id)">回滚</a>
+          <a-divider v-if="record.applied_rule_id" type="vertical" />
+          <a @click="showDetail(record)">详情</a>
+          <a-divider v-if="record.status !== 'dismissed'" type="vertical" />
+          <a-popconfirm
+            v-if="record.status !== 'dismissed'"
+            title="确认忽略？"
+            @confirm="dismiss(record.id)"
+          >
+            <a>忽略</a>
+          </a-popconfirm>
+        </template>
+      </template>
+    </fs-mobile-table-cards>
 
     <fs-detail-drawer
       v-model:open="drawerOpen"
@@ -71,6 +119,7 @@ import { api } from "@/api";
 import FsDetailDrawer from "@/components/FsDetailDrawer.vue";
 import FsDetailKv from "@/components/FsDetailKv.vue";
 import FsDetailSection from "@/components/FsDetailSection.vue";
+import FsMobileTableCards from "@/components/FsMobileTableCards.vue";
 import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { formatDateTime } from "@/utils/datetime";
 import RuleDraftPreview from "../components/RuleDraftPreview.vue";
@@ -82,7 +131,7 @@ const pageSize = ref(20);
 const drawerOpen = ref(false);
 const detail = ref<any>(null);
 
-const { withPaginationSize } = useResponsivePagination();
+const { isMobile, withPaginationSize } = useResponsivePagination();
 
 const pagination = reactive({
   current: 1,
@@ -95,10 +144,10 @@ const resolvedPagination = computed(() => withPaginationSize(pagination));
 
 const columns = [
   { title: "状态", key: "status", width: 100 },
-  { title: "分析摘要", key: "summary" },
+  { title: "分析摘要", key: "summary", width: 360, ellipsis: true },
   { title: "应用规则", dataIndex: "applied_rule_id", width: 100 },
   { title: "时间", dataIndex: "created_at", width: 180 },
-  { title: "操作", key: "actions", width: 220 },
+  { title: "操作", key: "actions", width: 160, fixed: "right" as const },
 ];
 
 const summaryItems = computed(() => {
@@ -204,6 +253,28 @@ onMounted(load);
 </script>
 
 <style scoped>
+.incidents-table :deep(.ant-table) {
+  table-layout: fixed;
+}
+
+.incident-summary {
+  display: block;
+  max-width: 100%;
+  color: inherit;
+}
+
+.incident-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.incident-time {
+  font-size: 12px;
+  color: var(--fs-text-muted);
+}
+
 .indicator-list {
   margin: 0;
   padding-left: 20px;

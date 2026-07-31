@@ -1187,6 +1187,62 @@
       ]
     },
     {
+      "key": "traffic.origin_global",
+      "label": "全站回源请求量",
+      "category": "时间与流量",
+      "value_type": "traffic",
+      "requires_arg": false,
+      "operators": [
+        "compare"
+      ],
+      "compare_modes": [
+        {
+          "value": "abs_gt",
+          "label": "回源请求量高于"
+        },
+        {
+          "value": "abs_lt",
+          "label": "回源请求量低于"
+        },
+        {
+          "value": "qps_gt",
+          "label": "回源 QPS 高于"
+        },
+        {
+          "value": "qps_lt",
+          "label": "回源 QPS 低于"
+        }
+      ]
+    },
+    {
+      "key": "traffic.origin_site",
+      "label": "当前站点回源请求量",
+      "category": "时间与流量",
+      "value_type": "traffic",
+      "requires_arg": false,
+      "operators": [
+        "compare"
+      ],
+      "compare_modes": [
+        {
+          "value": "abs_gt",
+          "label": "回源请求量高于"
+        },
+        {
+          "value": "abs_lt",
+          "label": "回源请求量低于"
+        },
+        {
+          "value": "qps_gt",
+          "label": "回源 QPS 高于"
+        },
+        {
+          "value": "qps_lt",
+          "label": "回源 QPS 低于"
+        }
+      ]
+    },
+    {
       "key": "system.cpu",
       "label": "系统 CPU",
       "category": "时间与流量",

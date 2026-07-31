@@ -20,6 +20,7 @@ from app.core.redis import get_redis
 from app.models.traffic_live_backup import (
     BACKUP_INTERVAL_SEC,
     BACKUP_WINDOW_SECS,
+    REDIS_MIN_O_PREFIX,
     REDIS_MIN_S_PREFIX,
     REDIS_SNAPSHOT_KEY,
     TrafficLiveBackup,
@@ -112,12 +113,23 @@ async def flush_backup_once() -> None:
             sid = k[len(REDIS_MIN_S_PREFIX) :]
             if sid:
                 site_ids.add(sid)
+        async for key in redis.scan_iter(match=f"{REDIS_MIN_O_PREFIX}*", count=100):
+            k = key.decode() if isinstance(key, bytes) else str(key)
+            sid = k[len(REDIS_MIN_O_PREFIX) :]
+            if sid:
+                site_ids.add(sid)
 
     sites_out: dict[str, dict] = {}
     for site_key in site_ids:
         min_s = _compact_minutes(await redis.hgetall(f"{REDIS_MIN_S_PREFIX}{site_key}"))
+        min_o = _compact_minutes(await redis.hgetall(f"{REDIS_MIN_O_PREFIX}{site_key}"))
+        site_payload: dict = {}
         if min_s:
-            sites_out[str(site_key)] = {"m": min_s}
+            site_payload["m"] = min_s
+        if min_o:
+            site_payload["om"] = min_o
+        if site_payload:
+            sites_out[str(site_key)] = site_payload
 
     if not sites_out:
         return
@@ -150,6 +162,8 @@ async def restore_redis_if_empty() -> bool:
     # Any site minute key or snapshot means Redis already has live state.
     async for _ in redis.scan_iter(match=f"{REDIS_MIN_S_PREFIX}*", count=1):
         return False
+    async for _ in redis.scan_iter(match=f"{REDIS_MIN_O_PREFIX}*", count=1):
+        return False
     if await redis.exists(REDIS_SNAPSHOT_KEY):
         return False
 
@@ -170,17 +184,30 @@ async def restore_redis_if_empty() -> bool:
 
     sites_out: dict[str, dict] = {}
     site_window_lists: list[list[dict]] = []
+    site_origin_window_lists: list[list[dict]] = []
     # New format: s only. Old format may still have g (ignored for storage).
     for site_key, site in (data.get("s") or {}).items():
         min_s = {str(k): int(v) for k, v in (site.get("m") or {}).items()}
-        if not min_s:
+        min_o = {str(k): int(v) for k, v in (site.get("om") or {}).items()}
+        if not min_s and not min_o:
             continue
-        min_key = f"{REDIS_MIN_S_PREFIX}{site_key}"
-        for minute, count in min_s.items():
-            pipe.hset(min_key, str(minute), int(count))
-        windows = _windows_from_minutes(min_s, now_ts)
-        sites_out[str(site_key)] = {"windows": windows}
-        site_window_lists.append(windows)
+        site_entry: dict = {}
+        if min_s:
+            min_key = f"{REDIS_MIN_S_PREFIX}{site_key}"
+            for minute, count in min_s.items():
+                pipe.hset(min_key, str(minute), int(count))
+            windows = _windows_from_minutes(min_s, now_ts)
+            site_entry["windows"] = windows
+            site_window_lists.append(windows)
+        if min_o:
+            min_o_key = f"{REDIS_MIN_O_PREFIX}{site_key}"
+            for minute, count in min_o.items():
+                pipe.hset(min_o_key, str(minute), int(count))
+            origin_windows = _windows_from_minutes(min_o, now_ts)
+            site_entry["origin_windows"] = origin_windows
+            site_origin_window_lists.append(origin_windows)
+        if site_entry:
+            sites_out[str(site_key)] = site_entry
 
     if not sites_out and (data.get("g") or {}).get("m"):
         # Legacy backup with only global minutes: cannot attribute to sites — skip.
@@ -191,6 +218,7 @@ async def restore_redis_if_empty() -> bool:
         "updated_at": now_ts,
         "global": {
             "windows": _sum_windows(site_window_lists),
+            "origin_windows": _sum_windows(site_origin_window_lists),
             "burst_active": False,
         },
         "sites": sites_out,
