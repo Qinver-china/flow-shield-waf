@@ -133,7 +133,7 @@
                 <div class="traffic-live-card__qps">{{ formatQps(w.qps) }} QPS</div>
                 <div class="traffic-live-card__origin">
                   <span>回源请求 <b>{{ formatTrafficCount(w.origin_requests) }}</b></span>
-                  <span>回源 QPS <b>{{ formatQps(w.origin_qps) }}</b></span>
+                  <span>回源QPS <b>{{ formatQps(w.origin_qps) }}</b></span>
                 </div>
                 <a-tooltip
                   v-if="liveTrafficHasBaselineWindow(w)"
