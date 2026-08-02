@@ -20,6 +20,7 @@ from app.schemas.dashboard import (
     DashboardSummaryOut,
     RuleSyncHealthOut,
 )
+from app.schemas.log import LogQuery
 from app.services.logging.query_clickhouse import stats_overview
 from app.services.rule_sync import VERSION_KEY
 
@@ -44,8 +45,16 @@ def _delta_pct(current: int, previous: int) -> float | None:
     return round(((current - previous) / previous) * 100, 2)
 
 
+def _log_query(site_id: int | None) -> LogQuery | None:
+    if site_id is None:
+        return None
+    return LogQuery(site_id=site_id)
+
+
 @router.get("/overview")
 async def overview(
+    site_id: int | None = Query(None),
+    trend_granularity: str | None = Query(None, alias="trend_granularity"),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -62,7 +71,11 @@ async def overview(
     certificates = (
         await db.execute(select(func.count(Certificate.id)))
     ).scalar_one()
-    log_stats = await stats_overview(hours=24)
+    log_stats = await stats_overview(
+        hours=24,
+        q=_log_query(site_id),
+        trend_granularity=trend_granularity,
+    )
     return ok({
         "counts": {
             "sites": sites,
@@ -167,15 +180,23 @@ async def system_metrics(_user: User = Depends(get_current_user)):
 
 
 @router.get("/summary")
-async def summary(_user: User = Depends(get_current_user)):
+async def summary(
+    site_id: int | None = Query(None),
+    _user: User = Depends(get_current_user),
+):
     now = datetime.utcnow()
     current_end = now
     current_start = now - timedelta(hours=24)
     previous_end = current_start
     previous_start = now - timedelta(hours=48)
+    log_q = _log_query(site_id)
 
-    current = await stats_overview(hours=24, start=current_start, end=current_end)
-    previous = await stats_overview(hours=24, start=previous_start, end=previous_end)
+    current = await stats_overview(
+        hours=24, start=current_start, end=current_end, q=log_q
+    )
+    previous = await stats_overview(
+        hours=24, start=previous_start, end=previous_end, q=log_q
+    )
 
     return ok(
         DashboardSummaryOut(
@@ -204,6 +225,7 @@ async def summary(_user: User = Depends(get_current_user)):
 @router.get("/feed")
 async def feed(
     limit: int = Query(20, ge=1, le=50),
+    site_id: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -241,17 +263,23 @@ async def feed(
         }
 
         def _query_logs():
+            site_clause = ""
+            params: dict = {
+                "start": since,
+                "lim": min(limit, 20),
+                "actions": list(_FEED_ACTIONS),
+            }
+            if site_id is not None:
+                site_clause = " AND site_id = {site_id:UInt32}"
+                params["site_id"] = int(site_id)
             return client.query(
                 "SELECT ts, client_ip, domain, rule_name, action FROM waf_logs "
                 "WHERE blocked = 1 "
                 "AND action IN {actions:Array(String)} "
-                "AND ts >= {start:DateTime} "
+                "AND ts >= {start:DateTime}"
+                f"{site_clause} "
                 "ORDER BY ts DESC LIMIT {lim:UInt32}",
-                parameters={
-                    "start": since,
-                    "lim": min(limit, 20),
-                    "actions": list(_FEED_ACTIONS),
-                },
+                parameters=params,
             ).result_rows
 
         log_rows = await asyncio.wait_for(asyncio.to_thread(_query_logs), timeout=10)

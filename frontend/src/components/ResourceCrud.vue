@@ -127,14 +127,16 @@
           <div class="mobile-card-actions">
             <a-button size="small" @click="openView(row)">查看</a-button>
             <a-button size="small" type="primary" ghost @click="openEdit(row)">编辑</a-button>
-            <a-dropdown>
+            <a-dropdown v-if="mobileMoreActions(row).length" class="mobile-card-more">
               <a-button size="small">更多</a-button>
               <template #overlay>
                 <a-menu :selectable="false">
-                  <a-menu-item v-if="duplicatable" @click="openDuplicate(row)">复制</a-menu-item>
-                  <a-menu-item v-if="allowDelete(row)" danger>
-                    <a-popconfirm title="确认删除?" @confirm="remove(row.id)">删除</a-popconfirm>
-                  </a-menu-item>
+                  <template v-for="(action, index) in mobileMoreActions(row)" :key="action.key">
+                    <a-menu-divider v-if="action.divided && index > 0" />
+                    <a-menu-item :danger="action.danger" @click="() => runAction(action)">
+                      {{ action.label }}
+                    </a-menu-item>
+                  </template>
                 </a-menu>
               </template>
             </a-dropdown>
@@ -281,7 +283,7 @@ function allowDelete(row: Record<string, any>) {
 const { isMobile, paginationSize } = useResponsivePagination();
 const route = useRoute();
 const router = useRouter();
-const { buildActions } = useResourceQuickActions();
+const { buildActions, runAction } = useResourceQuickActions();
 
 const rows = ref<any[]>([]);
 const loading = ref(false);
@@ -576,6 +578,10 @@ function nameActions(row: Record<string, any>) {
   );
 }
 
+function mobileMoreActions(row: Record<string, any>) {
+  return nameActions(row).filter((action) => action.key !== "edit");
+}
+
 function switchToEdit() {
   drawerMode.value = "edit";
 }
@@ -793,10 +799,15 @@ watch(
 
 .mobile-card-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--fs-border);
+}
+
+.mobile-card-more {
+  margin-left: auto;
 }
 
 .mobile-pagination {

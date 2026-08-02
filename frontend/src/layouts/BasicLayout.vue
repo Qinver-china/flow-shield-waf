@@ -56,7 +56,7 @@
       v-if="isMobile"
       v-model:open="drawerOpen"
       placement="left"
-      :width="280"
+      :width="200"
       :closable="false"
       class="nav-drawer"
       :body-style="{ padding: 0, background: 'transparent' }"
@@ -346,6 +346,12 @@ onMounted(() => {
   line-height: 56px;
   background: transparent;
   border-bottom: none;
+}
+
+@media (max-width: 767px) {
+  .app-header {
+    padding:0 4px;
+  }
 }
 
 .header-left,

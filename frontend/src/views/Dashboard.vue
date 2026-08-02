@@ -18,12 +18,7 @@
                   {{ item.label }} {{ item.status === "ok" ? "正常" : "异常" }}
                 </span>
               </div>
-              <a-tag
-                v-if="feed.pending_ai_incidents > 0"
-                color="orange"
-                class="health-ai-link"
-                @click="goAiGuard"
-              >
+              <a-tag v-if="feed.pending_ai_incidents > 0" color="orange" class="health-ai-link" @click="goAiGuard">
                 {{ feed.pending_ai_incidents }} 条 AI 分析待处理
               </a-tag>
             </div>
@@ -39,33 +34,21 @@
     <h3 class="fs-section-title"><appstore-outlined /> 防护配置</h3>
     <a-row :gutter="[12, 12]">
       <a-col v-for="item in resourceCards" :key="item.key" :xs="12" :sm="8" :md="6" :xl="4">
-        <stat-card
-          clickable
-          :label="item.label"
-          :value="item.value"
-          :sub="item.sub"
-          :color="item.color"
-          :icon="item.icon"
-          @click="onResourceCardClick(item.key)"
-        />
+        <stat-card clickable :label="item.label" :value="item.value" :sub="item.sub" :color="item.color"
+          :icon="item.icon" @click="onResourceCardClick(item.key)" />
       </a-col>
     </a-row>
 
-    <h3 class="fs-section-title"><safety-outlined /> 近 24 小时安全态势</h3>
+    <div class="dashboard-scope-bar">
+      <h3 class="fs-section-title"><safety-outlined /> 近 24 小时安全态势</h3>
+      <div class="dashboard-scope-filters">
+        <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
+      </div>
+    </div>
     <a-row :gutter="[12, 12]">
       <a-col v-for="item in securityCards" :key="item.key" :xs="12" :sm="8" :md="8" :xl="4">
-        <stat-card
-          large
-          clickable
-          :label="item.label"
-          :value="item.value"
-          :sub="item.sub"
-          :color="item.color"
-          :value-color="item.valueColor"
-          :icon="item.icon"
-          :delta="item.delta"
-          @click="onSecurityCardClick(item.key)"
-        />
+        <stat-card large clickable :label="item.label" :value="item.value" :sub="item.sub" :color="item.color"
+          :value-color="item.valueColor" :icon="item.icon" :delta="item.delta" @click="onSecurityCardClick(item.key)" />
       </a-col>
     </a-row>
     <a-row :gutter="[12, 12]">
@@ -74,18 +57,12 @@
           <template #title>
             <div class="traffic-live-title">
               <span class="panel-title"><thunderbolt-outlined /> 实时请求量</span>
-              <span
-                class="traffic-live-badge"
-                :class="liveRefreshEnabled ? 'is-live' : 'is-paused'"
-              >
+              <span class="traffic-live-badge" :class="liveRefreshEnabled ? 'is-live' : 'is-paused'">
                 <span class="traffic-live-badge__dot" />
                 {{ liveRefreshEnabled ? "实时更新" : "已暂停刷新" }}
               </span>
               <a-tag v-if="traffic.burst_active" color="orange">自动取证中</a-tag>
             </div>
-          </template>
-          <template #extra>
-            <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
           </template>
 
           <a-empty v-if="!liveTrafficWindows.length" description="暂无数据" />
@@ -100,11 +77,8 @@
                     回源 <b>{{ formatTrafficCount(liveTrafficDay.origin_requests) }}</b>
                     · {{ formatQps(liveTrafficDay.origin_qps) }} QPS
                   </span>
-                  <span
-                    v-if="liveTrafficDay.deviation_ratio != null && !liveTrafficDay.baseline_warmup"
-                    class="traffic-live-hero__delta"
-                    :class="liveTrafficCardClass(liveTrafficDay)"
-                  >
+                  <span v-if="liveTrafficDay.deviation_ratio != null && !liveTrafficDay.baseline_warmup"
+                    class="traffic-live-hero__delta" :class="liveTrafficCardClass(liveTrafficDay)">
                     {{ formatIntelDeviation(liveTrafficDay.deviation_ratio) }}
                   </span>
                 </div>
@@ -120,12 +94,8 @@
             </div>
 
             <div class="traffic-live-grid">
-              <div
-                v-for="w in liveTrafficWindowCards"
-                :key="w.window_sec"
-                class="traffic-live-card"
-                :class="liveTrafficCardClass(w)"
-              >
+              <div v-for="w in liveTrafficWindowCards" :key="w.window_sec" class="traffic-live-card"
+                :class="liveTrafficCardClass(w)">
                 <div class="traffic-live-card__head">
                   <span class="traffic-live-card__label">{{ w.label }}</span>
                 </div>
@@ -135,21 +105,14 @@
                   <span>回源请求 <b>{{ formatTrafficCount(w.origin_requests) }}</b></span>
                   <span>回源QPS <b>{{ formatQps(w.origin_qps) }}</b></span>
                 </div>
-                <a-tooltip
-                  v-if="liveTrafficHasBaselineWindow(w)"
-                  :title="liveTrafficBaselineTip(w)"
-                  overlay-class-name="baseline-status-tooltip"
-                  :mouse-enter-delay="0.25"
-                >
+                <a-tooltip v-if="liveTrafficHasBaselineWindow(w)" :title="liveTrafficBaselineTip(w)"
+                  overlay-class-name="baseline-status-tooltip" :mouse-enter-delay="0.25">
                   <div class="traffic-live-card__status">
                     <component :is="liveTrafficStatusIcon(w)" class="traffic-live-card__status-icon" />
                     <span class="traffic-live-card__baseline-text">
                       <template v-if="w.baseline_avg != null">
                         <span>{{ formatTrafficCount(w.baseline_avg) }}</span>
-                        <span
-                          v-if="w.deviation_ratio != null"
-                          class="traffic-live-card__ratio"
-                        >
+                        <span v-if="w.deviation_ratio != null" class="traffic-live-card__ratio">
                           {{ formatIntelDeviation(w.deviation_ratio) }}
                         </span>
                       </template>
@@ -157,20 +120,12 @@
                     </span>
                   </div>
                 </a-tooltip>
-                <div
-                  v-else
-                  class="traffic-live-card__status is-baseline-ghost"
-                >
+                <div v-else class="traffic-live-card__status is-baseline-ghost">
                   <component :is="liveTrafficStatusIcon(w)" class="traffic-live-card__status-icon" />
                   <span class="traffic-live-card__baseline-text">暂无基线</span>
                 </div>
-                <a-progress
-                  :percent="liveTrafficBarPercent(w)"
-                  size="small"
-                  :stroke-color="liveTrafficBarColor(w)"
-                  :show-info="false"
-                  class="traffic-live-card__bar"
-                />
+                <a-progress :percent="liveTrafficBarPercent(w)" size="small" :stroke-color="liveTrafficBarColor(w)"
+                  :show-info="false" class="traffic-live-card__bar" />
               </div>
             </div>
           </template>
@@ -196,17 +151,10 @@
               </div>
             </div>
             <div class="load-side">
-              <div
-                v-for="(item, idx) in loadMetricCards"
-                :key="item.key"
-                class="load-side-card"
-                :class="[item.kind === 'host' ? 'is-host' : 'is-container', `is-${cpuTone(item.pct)}`]"
-              >
+              <div v-for="(item, idx) in loadMetricCards" :key="item.key" class="load-side-card"
+                :class="[item.kind === 'host' ? 'is-host' : 'is-container', `is-${cpuTone(item.pct)}`]">
                 <div class="load-side-card__label">{{ item.label }}</div>
-                <div
-                  class="load-side-ring"
-                  :ref="(el) => setLoadMiniEl(idx, el)"
-                />
+                <div class="load-side-ring" :ref="(el) => setLoadMiniEl(idx, el)" />
                 <div class="load-side-card__value">
                   {{ item.value }}<span v-if="item.pct != null" class="load-side-card__unit">%</span>
                 </div>
@@ -221,17 +169,11 @@
       <a-col :span="24">
         <a-card class="panel-card traffic-timeline-panel" :bordered="false">
           <template #title>
-            <span class="panel-title"><line-chart-outlined /> 近 24 小时请求趋势</span>
+            <span class="panel-title"><line-chart-outlined />24H请求趋势</span>
           </template>
           <template #extra>
-            <div class="traffic-timeline-extra">
-              <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
-              <a-select
-                v-model:value="trafficTimelineBucket"
-                class="traffic-timeline-bucket"
-                :options="trafficTimelineBucketOptions"
-              />
-            </div>
+            <a-select v-model:value="trafficTimelineBucket" class="traffic-timeline-bucket"
+              :options="trafficTimelineBucketOptions" />
           </template>
           <div ref="trafficTimelineEl" class="chart-box chart-box-lg" />
         </a-card>
@@ -243,8 +185,12 @@
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title panel-title-link" @click.stop="goLogs()">
-              <line-chart-outlined /> 命中趋势
+              <line-chart-outlined /> 24H命中趋势
             </span>
+          </template>
+          <template #extra>
+            <a-select v-model:value="trafficTimelineBucket" class="traffic-timeline-bucket"
+              :options="trafficTimelineBucketOptions" />
           </template>
           <div ref="trendEl" class="chart-box chart-box-lg" />
         </a-card>
@@ -289,16 +235,9 @@
           <template #title>
             <span class="panel-title"><alert-outlined /> Top 命中规则</span>
           </template>
-          <a-table class="feed-list-body"
-            :columns="ruleCols"
-            :data-source="stats.top_rules"
-            :pagination="false"
-            :row-key="(record: { id?: number; name: string }) => String(record.id ?? record.name)"
-            size="small"
-            bordered
-            :scroll="{ x: 180 }"
-            :custom-row="ruleTableRow"
-          />
+          <a-table class="feed-list-body" :columns="ruleCols" :data-source="stats.top_rules" :pagination="false"
+            :row-key="(record: { id?: number; name: string }) => String(record.id ?? record.name)" size="small" bordered
+            :scroll="{ x: 180 }" :custom-row="ruleTableRow" />
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="6">
@@ -306,16 +245,8 @@
           <template #title>
             <span class="panel-title"><aim-outlined /> Top 攻击 IP</span>
           </template>
-          <a-table class="feed-list-body"
-            :columns="ipCols"
-            :data-source="stats.top_ips"
-            :pagination="false"
-            row-key="ip"
-            size="small"
-            bordered
-            :scroll="{ x: 180 }"
-            :custom-row="ipTableRow"
-          />
+          <a-table class="feed-list-body" :columns="ipCols" :data-source="stats.top_ips" :pagination="false"
+            row-key="ip" size="small" bordered :scroll="{ x: 180 }" :custom-row="ipTableRow" />
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="12">
@@ -327,13 +258,8 @@
             <a-spin :spinning="feedLoading">
               <a-empty v-if="!feed.items.length && !feedLoading" description="暂无动态" />
               <ul v-else class="feed-timeline">
-                <li
-                  v-for="item in feed.items"
-                  :key="item.id"
-                  class="feed-timeline-item"
-                  :class="`feed-timeline-item--${feedTone(item)}`"
-                  @click="onFeedClick(item)"
-                >
+                <li v-for="item in feed.items" :key="item.id" class="feed-timeline-item"
+                  :class="`feed-timeline-item--${feedTone(item)}`" @click="onFeedClick(item)">
                   <span class="feed-timeline-dot" aria-hidden="true" />
                   <div class="feed-timeline-main">
                     <div class="feed-timeline-top">
@@ -509,7 +435,7 @@ const traffic = reactive<{
   site_count: 0,
 });
 
-const trafficTimelineBucket = ref(600);
+const trafficTimelineBucket = ref(1800);
 const trafficTimelineBucketOptions = [
   { value: 60, label: "1 分钟" },
   { value: 300, label: "5 分钟" },
@@ -517,6 +443,27 @@ const trafficTimelineBucketOptions = [
   { value: 1800, label: "30 分钟" },
   { value: 3600, label: "1 小时" },
 ];
+
+const TREND_GRANULARITY_BY_BUCKET: Record<number, string> = {
+  60: "1m",
+  300: "5m",
+  600: "10m",
+  1800: "30m",
+  3600: "1h",
+};
+
+function dashboardSiteParams(): Record<string, number> {
+  if (trafficSiteId.value == null) return {};
+  return { site_id: trafficSiteId.value };
+}
+
+function dashboardTrendGranularity(): string {
+  return TREND_GRANULARITY_BY_BUCKET[trafficTimelineBucket.value] || "10m";
+}
+
+function dashboardQueryParams(extra: Record<string, string | number> = {}) {
+  return { ...dashboardSiteParams(), ...extra };
+}
 const trafficTimeline = reactive<{ points: Array<{ ts: number; requests: number; origin_requests: number }> }>({
   points: [],
 });
@@ -749,7 +696,7 @@ const liveTrafficOverall = computed(() => {
     desc: "当前请求量在基线范围内波动，未检测到异常。",
     icon: SafetyCertificateOutlined,
   };
-});const feedLoading = ref(false);
+}); const feedLoading = ref(false);
 const trendEl = ref<HTMLElement>();
 const modeEl = ref<HTMLElement>();
 const loadCpuEl = ref<HTMLElement>();
@@ -1017,28 +964,31 @@ function onResourceCardClick(key: string) {
 function onSecurityCardClick(key: string) {
   switch (key) {
     case "total":
-      goToLogs({ tab: "detail" });
+      goLogs({ tab: "detail" });
       break;
     case "blocked":
-      goToLogs({ tab: "detail", blocked: true });
+      goLogs({ tab: "detail", blocked: true });
       break;
     case "passed":
-      goToLogs({ tab: "detail", blocked: false });
+      goLogs({ tab: "detail", blocked: false });
       break;
     case "unique_ips":
-      goToLogs({ tab: "stats", dimension: "client_ip" });
+      goLogs({ tab: "stats", dimension: "client_ip" });
       break;
     case "rules":
-      goToLogs({ tab: "stats", dimension: "rule_id" });
+      goLogs({ tab: "stats", dimension: "rule_id" });
       break;
     case "methods":
-      goToLogs({ tab: "stats", dimension: "method" });
+      goLogs({ tab: "stats", dimension: "method" });
       break;
   }
 }
 
 function goLogs(filters: Parameters<typeof goToLogs>[0] = { tab: "detail" }) {
-  goToLogs(filters);
+  goToLogs({
+    ...filters,
+    ...dashboardSiteParams(),
+  });
 }
 
 function goAiGuard() {
@@ -1047,14 +997,14 @@ function goAiGuard() {
 
 function onRuleClick(record: { id?: number; name: string }) {
   if (record.id) {
-    goToLogs({ tab: "detail", rule_id: record.id });
+    goLogs({ tab: "detail", rule_id: record.id });
     return;
   }
-  goToLogs({ tab: "stats", dimension: "rule_id" });
+  goLogs({ tab: "stats", dimension: "rule_id" });
 }
 
 function onIpClick(record: { ip: string }) {
-  goToLogs({ tab: "detail", client_ip: record.ip });
+  goLogs({ tab: "detail", client_ip: record.ip });
 }
 
 function ruleTableRow(record: { id?: number; name: string }) {
@@ -1078,7 +1028,7 @@ function onFeedClick(item: { type: string; title?: string }) {
   }
   if (FEED_PROTECTION_TYPES.has(item.type)) {
     const ip = (item.title || "").trim();
-    goToLogs({
+    goLogs({
       tab: "detail",
       blocked: true,
       mode: item.type,
@@ -1564,28 +1514,24 @@ watch(isDark, async () => {
 });
 
 async function loadTrafficTimeline(silent = false) {
-  const params: Record<string, number> = {
+  const resp = await api.get("/api/v1/traffic/timeline", dashboardQueryParams({
     hours: 24,
     bucket_sec: trafficTimelineBucket.value,
-  };
-  if (trafficSiteId.value != null) params.site_id = trafficSiteId.value;
-  const resp = await api.get("/api/v1/traffic/timeline", params);
+  }));
   trafficTimeline.points = resp.data.points || [];
   await nextTick();
   updateTrafficTimelineChart(silent);
 }
 
 async function loadTraffic() {
-  const params = trafficSiteId.value != null ? { site_id: trafficSiteId.value } : {};
-  const resp = await api.get("/api/v1/traffic/stats", params);
+  const resp = await api.get("/api/v1/traffic/stats", dashboardSiteParams());
   traffic.burst_active = resp.data.burst_active || false;
   traffic.windows = resp.data.windows || resp.data.global?.windows || [];
   traffic.site_count = Number(resp.data.site_count || (resp.data.sites || []).length || 0);
 }
 
 async function loadIntel() {
-  const params = trafficSiteId.value != null ? { site_id: trafficSiteId.value } : {};
-  const resp = await api.get("/api/v1/traffic/intel/status", params);
+  const resp = await api.get("/api/v1/traffic/intel/status", dashboardSiteParams());
   Object.assign(intel, resp.data);
 }
 
@@ -1606,7 +1552,7 @@ watch(trafficSiteId, () => {
 });
 
 watch(trafficTimelineBucket, () => {
-  void loadTrafficTimeline(true);
+  void Promise.allSettled([loadTrafficTimeline(true), loadOverview(true)]);
 });
 
 async function syncDashboardWindow() {
@@ -1666,7 +1612,9 @@ watch(() => appSettings.timezone, async () => {
 });
 
 async function loadOverview(silent = false) {
-  const resp = await api.get("/api/v1/dashboard/overview");
+  const resp = await api.get("/api/v1/dashboard/overview", dashboardQueryParams({
+    trend_granularity: dashboardTrendGranularity(),
+  }));
   Object.assign(counts, resp.data.counts);
   Object.assign(stats, resp.data.last_24h);
   await nextTick();
@@ -1674,7 +1622,7 @@ async function loadOverview(silent = false) {
 }
 
 async function loadSummary() {
-  const resp = await api.get("/api/v1/dashboard/summary");
+  const resp = await api.get("/api/v1/dashboard/summary", dashboardSiteParams());
   Object.assign(summary, resp.data);
 }
 
@@ -1686,7 +1634,7 @@ async function loadHealth() {
 async function loadFeed(silent = false) {
   if (!silent) feedLoading.value = true;
   try {
-    const resp = await api.get("/api/v1/dashboard/feed", { limit: 15 });
+    const resp = await api.get("/api/v1/dashboard/feed", dashboardQueryParams({ limit: 15 }));
     feed.items = resp.data.items || [];
     feed.pending_ai_incidents = resp.data.pending_ai_incidents || 0;
   } finally {
@@ -1869,16 +1817,19 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.traffic-site-filter {
-  width: 100px !important;
+.dashboard-scope-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.traffic-timeline-extra {
+.dashboard-scope-filters {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .traffic-timeline-bucket {
@@ -1936,9 +1887,17 @@ onUnmounted(() => {
 }
 
 @keyframes traffic-live-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fs-color-accent) 40%, transparent); }
-  70% { box-shadow: 0 0 0 6px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--fs-color-accent) 40%, transparent);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 .traffic-live-hero {
@@ -1948,7 +1907,7 @@ onUnmounted(() => {
 }
 
 .traffic-live-hero__metric {
-  flex:1;
+  flex: 1;
   min-width: 0;
 }
 
@@ -1981,14 +1940,22 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.traffic-live-hero__delta.is-ok { color: var(--fs-color-primary); }
-.traffic-live-hero__delta.is-warn { color: var(--fs-color-warning); }
-.traffic-live-hero__delta.is-danger { color: var(--fs-color-danger); }
+.traffic-live-hero__delta.is-ok {
+  color: var(--fs-color-primary);
+}
+
+.traffic-live-hero__delta.is-warn {
+  color: var(--fs-color-warning);
+}
+
+.traffic-live-hero__delta.is-danger {
+  color: var(--fs-color-danger);
+}
 
 .traffic-live-hero__divider {
   width: 1px;
   align-self: stretch;
-  background: color-mix(in srgb, var(--fs-border) 40% ,transparent);
+  background: color-mix(in srgb, var(--fs-border) 40%, transparent);
   flex: none;
 }
 
@@ -2009,10 +1976,21 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
-.traffic-live-hero__status.is-ok .traffic-live-hero__status-title { color: var(--fs-color-accent); }
-.traffic-live-hero__status.is-warn .traffic-live-hero__status-title { color: var(--fs-color-warning); }
-.traffic-live-hero__status.is-danger .traffic-live-hero__status-title { color: var(--fs-color-danger); }
-.traffic-live-hero__status.is-neutral .traffic-live-hero__status-title { color: var(--fs-text-secondary); }
+.traffic-live-hero__status.is-ok .traffic-live-hero__status-title {
+  color: var(--fs-color-accent);
+}
+
+.traffic-live-hero__status.is-warn .traffic-live-hero__status-title {
+  color: var(--fs-color-warning);
+}
+
+.traffic-live-hero__status.is-danger .traffic-live-hero__status-title {
+  color: var(--fs-color-danger);
+}
+
+.traffic-live-hero__status.is-neutral .traffic-live-hero__status-title {
+  color: var(--fs-text-secondary);
+}
 
 .traffic-live-hero__status-desc {
   font-size: 12px;
@@ -2143,10 +2121,21 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
-.traffic-live-card.is-ok .traffic-live-card__status { color: #15803d; }
-.traffic-live-card.is-warn .traffic-live-card__status { color: #b45309; }
-.traffic-live-card.is-danger .traffic-live-card__status { color: #b91c1c; }
-.traffic-live-card.is-neutral .traffic-live-card__status { color: var(--fs-text-muted); }
+.traffic-live-card.is-ok .traffic-live-card__status {
+  color: #15803d;
+}
+
+.traffic-live-card.is-warn .traffic-live-card__status {
+  color: #b45309;
+}
+
+.traffic-live-card.is-danger .traffic-live-card__status {
+  color: #b91c1c;
+}
+
+.traffic-live-card.is-neutral .traffic-live-card__status {
+  color: var(--fs-text-muted);
+}
 
 .traffic-live-card__ratio {
   font-weight: 600;
@@ -2174,7 +2163,16 @@ onUnmounted(() => {
   color: var(--fs-text-muted);
 }
 
+.traffic-site-filter {
+    width: 180px !important;
+  }
+
+
 @media (max-width: 767px) {
+  .traffic-site-filter {
+    width: 120px !important;
+  }
+
   .traffic-live-hero {
     gap: 16px;
   }
@@ -2183,8 +2181,8 @@ onUnmounted(() => {
     font-size: 28px;
   }
 
-  .traffic-live-grid{
-    grid-template-columns: repeat(3,minmax(0,1fr));
+  .traffic-live-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -2285,10 +2283,21 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.load-main-foot.is-ok { color: #15803d; }
-.load-main-foot.is-warn { color: #b45309; }
-.load-main-foot.is-danger { color: #b91c1c; }
-.load-main-foot.is-neutral { color: var(--fs-text-muted); }
+.load-main-foot.is-ok {
+  color: #15803d;
+}
+
+.load-main-foot.is-warn {
+  color: #b45309;
+}
+
+.load-main-foot.is-danger {
+  color: #b91c1c;
+}
+
+.load-main-foot.is-neutral {
+  color: var(--fs-text-muted);
+}
 
 .load-side {
   display: grid;
@@ -2359,9 +2368,17 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.load-side-card.is-warn .load-side-card__value { color: #b45309; }
-.load-side-card.is-danger .load-side-card__value { color: #b91c1c; }
-.load-side-card.is-neutral .load-side-card__value { color: var(--fs-text-muted); }
+.load-side-card.is-warn .load-side-card__value {
+  color: #b45309;
+}
+
+.load-side-card.is-danger .load-side-card__value {
+  color: #b91c1c;
+}
+
+.load-side-card.is-neutral .load-side-card__value {
+  color: var(--fs-text-muted);
+}
 
 .feed-card :deep(.ant-card-body) {
   padding-top: 8px;
@@ -2498,6 +2515,7 @@ onUnmounted(() => {
   line-height: 1.5;
   word-break: break-word;
 }
+
 @media (max-width: 1200px) {
 
   .load-body {
@@ -2509,9 +2527,9 @@ onUnmounted(() => {
 
 @media (max-width: 992px) {
 
-.load-body {
-  flex-direction: row;
-}
+  .load-body {
+    flex-direction: row;
+  }
 }
 
 @media (max-width: 767px) {
@@ -2525,6 +2543,15 @@ onUnmounted(() => {
     padding: 0 0 4px;
   }
 
+  .dashboard-scope-bar {
+    align-items: flex-start;
+  }
+
+  .dashboard-scope-filters {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .dashboard-page .panel-card :deep(.ant-card-head) {
     padding-left: 16px;
     padding-right: 16px;
@@ -2532,10 +2559,6 @@ onUnmounted(() => {
 
   .dashboard-page .panel-card :deep(.ant-card-body) {
     padding: 16px;
-  }
-
-  .traffic-timeline-extra {
-    gap: 6px;
   }
 
   .hero-title {
