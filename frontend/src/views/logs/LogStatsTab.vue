@@ -646,7 +646,7 @@ onUnmounted(() => {
 .chart-block-title {
   font-size: 13px;
   font-weight: 600;
-  color: #475569;
+  color: var(--fs-text-secondary);
   margin-bottom: 0;
 }
 
@@ -658,9 +658,9 @@ onUnmounted(() => {
   padding: 2px 8px;
   font-size: 12px;
   line-height: 1.4;
-  color: #64748b;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  color: var(--fs-text-muted);
+  background: var(--fs-bg-muted);
+  border: 1px solid var(--fs-border);
   border-radius: 6px;
   cursor: pointer;
   transition:
@@ -670,13 +670,13 @@ onUnmounted(() => {
 }
 
 .granularity-trigger:hover {
-  color: #0284c7;
-  border-color: #bae6fd;
-  background: #f0f9ff;
+  color: var(--fs-color-primary);
+  border-color: color-mix(in srgb, var(--fs-color-primary) 35%, var(--fs-border));
+  background: color-mix(in srgb, var(--fs-color-primary) 8%, var(--fs-bg-muted));
 }
 
 .granularity-trigger:focus-visible {
-  outline: 2px solid #38bdf8;
+  outline: 2px solid var(--fs-color-info);
   outline-offset: 1px;
 }
 
