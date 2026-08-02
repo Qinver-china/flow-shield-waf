@@ -876,6 +876,7 @@ async def stats_overview(
         top_rules = client.query(
             f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
             f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
+            f"AND {_col('mode')} != 'observe' "
             f"GROUP BY rule_id, source ORDER BY c DESC LIMIT 10",
             parameters=params,
         ).result_rows

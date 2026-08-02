@@ -315,7 +315,7 @@ import { echartsThemeName, withTransparentChartBg } from "@/composables/useEchar
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
 import dayjs from "dayjs";
-import { formatClockTime, formatDateTime, formatDateTimeShort, getAppTimezone } from "@/utils/datetime";
+import { formatClockTime, formatDateTime, formatDateTimeShort, getAppTimezone, parseUtc } from "@/utils/datetime";
 import { lineAreaGradient } from "@/utils/lineAreaGradient";
 import { baselineTone } from "@/utils/baselineTone";
 import { trafficWindowLabels, buildTrendModeSeries, modeChartColor, trendModeValue } from "@/views/logs/constants";
@@ -1047,9 +1047,9 @@ const TREND_CHART_GROUP = "dashboard-trend-link";
 
 function trendPointTimeMs(time: string): number {
   void timezoneTick.value;
-  const parsed = dayjs(time);
-  if (!parsed.isValid()) return 0;
-  return parsed.tz(getAppTimezone()).valueOf();
+  if (!time) return 0;
+  const parsed = parseUtc(time);
+  return parsed.isValid() ? parsed.valueOf() : 0;
 }
 
 const TREND_WINDOW_HOURS = 24;
@@ -1095,14 +1095,13 @@ function filledHitTrendRows(): any[] {
   const { start, end } = trendWindowBoundsSec();
   const byBucket = new Map<number, any>();
   for (const row of stats.trend || []) {
-    const ms = trendPointTimeMs(row.time);
-    if (!ms) continue;
-    const aligned = Math.floor(ms / 1000 / bucketSec) * bucketSec;
+    if (!row.time) continue;
+    const aligned = Math.floor(parseUtc(row.time).unix() / bucketSec) * bucketSec;
     byBucket.set(aligned, row);
   }
   return iterTrendBucketStartsSec(bucketSec, end, start).map((bucketTs) => (
     byBucket.get(bucketTs) ?? {
-      time: dayjs.unix(bucketTs).tz(getAppTimezone()).format("YYYY-MM-DD HH:mm:ss"),
+      time: new Date(bucketTs * 1000).toISOString().slice(0, 19).replace("T", " "),
       count: 0,
       total: 0,
       by_mode: {},
