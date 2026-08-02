@@ -181,7 +181,7 @@
     </a-row>
 
     <a-row :gutter="[12, 12]">
-      <a-col :xs="24" :xl="12">
+      <a-col :span="24">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title panel-title-link" @click.stop="goLogs()">
@@ -195,7 +195,10 @@
           <div ref="trendEl" class="chart-box chart-box-lg" />
         </a-card>
       </a-col>
-      <a-col :xs="24" :md="12" :xl="6">
+    </a-row>
+
+    <a-row :gutter="[12, 12]">
+      <a-col :xs="24" :md="8">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><pie-chart-outlined /> 防护方式分布</span>
@@ -203,28 +206,20 @@
           <div ref="modeEl" class="chart-box chart-box-lg" />
         </a-card>
       </a-col>
-      <a-col :xs="24" :md="12" :xl="6">
+      <a-col :xs="24" :md="8">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><bar-chart-outlined /> 防护来源</span>
           </template>
-          <div ref="sourceEl" class="chart-box" />
+          <div ref="sourceEl" class="chart-box chart-box-lg" />
         </a-card>
       </a-col>
-      <a-col :xs="24" :md="12" :xl="12">
+      <a-col :xs="24" :md="8">
         <a-card class="panel-card" :bordered="false">
           <template #title>
             <span class="panel-title"><global-outlined /> 拦截来源国家 Top</span>
           </template>
-          <div ref="countryEl" class="chart-box" />
-        </a-card>
-      </a-col>
-      <a-col :xs="24" :md="24" :xl="12">
-        <a-card class="panel-card" :bordered="false">
-          <template #title>
-            <span class="panel-title"><file-text-outlined /> 日志类型</span>
-          </template>
-          <div ref="logTypeEl" class="chart-box" />
+          <div ref="countryEl" class="chart-box chart-box-lg" />
         </a-card>
       </a-col>
     </a-row>
@@ -710,7 +705,6 @@ function setLoadMiniEl(idx: number, el: unknown) {
 }
 const sourceEl = ref<HTMLElement>();
 const countryEl = ref<HTMLElement>();
-const logTypeEl = ref<HTMLElement>();
 
 const charts: ECharts[] = [];
 const LIVE_REFRESH_DELAY_MS = 8000;
@@ -1047,8 +1041,7 @@ type ChartKey =
   | "loadMini2"
   | "loadMini3"
   | "source"
-  | "country"
-  | "logType";
+  | "country";
 
 const chartStore: Partial<Record<ChartKey, ECharts>> = {};
 
@@ -1473,30 +1466,6 @@ function updateCharts(silent = false) {
       const item = countryBars[params.dataIndex]?.raw;
       const country = item?.country || item?.key;
       if (country) goToLogs({ tab: "detail", geo_country: country });
-    },
-    silent,
-  );
-
-  upsertChart(
-    "logType",
-    logTypeEl.value,
-    {
-      color: ["#0ea5e9", "#14b8a6", "#f59e0b"],
-      tooltip: { trigger: "item" },
-      legend: { bottom: 0 },
-      series: [{
-        type: "pie",
-        radius: ["0%", "68%"],
-        roseType: "radius",
-        itemStyle: { borderRadius: 4 },
-        label: { formatter: "{b}\n{c}" },
-        data: stats.log_type_split.map((item: any) => ({ name: item.label || item.log_type, value: item.count })),
-      }],
-    },
-    (params) => {
-      const item = stats.log_type_split[params.dataIndex];
-      const logType = item?.log_type || item?.key;
-      if (logType) goToLogs({ tab: "detail", log_type: logType });
     },
     silent,
   );
