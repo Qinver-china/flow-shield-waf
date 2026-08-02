@@ -7,7 +7,7 @@
     :options="selectOptions"
     :loading="loading"
     :disabled="disabled"
-    show-search
+    :show-search="showSearch"
     option-filter-prop="label"
     style="width: 100%"
   />
@@ -23,11 +23,13 @@ const props = withDefaults(
     value?: number | null;
     readonly?: boolean;
     disabled?: boolean;
+    showSearch?: boolean;
   }>(),
   {
     value: undefined,
     readonly: false,
     disabled: false,
+    showSearch: true,
   },
 );
 

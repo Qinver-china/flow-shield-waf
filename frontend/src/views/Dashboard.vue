@@ -42,7 +42,7 @@
     <div class="dashboard-scope-bar">
       <h3 class="fs-section-title"><safety-outlined /> 近 24 小时安全态势</h3>
       <div class="dashboard-scope-filters">
-        <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
+        <site-single-select v-model:value="trafficSiteId" :show-search="false" class="traffic-site-filter" />
       </div>
     </div>
     <a-row :gutter="[12, 12]">
