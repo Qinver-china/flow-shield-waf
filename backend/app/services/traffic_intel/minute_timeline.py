@@ -42,6 +42,35 @@ def _sum_bucket(minutes: dict[int, int], bucket_start: int, bucket_sec: int) -> 
     return total
 
 
+def iter_timeline_bucket_starts(
+    *,
+    bucket_sec: int,
+    end_ts: int,
+    start_ts: int | None = None,
+    hours: int | None = None,
+) -> list[int]:
+    """Return ascending UTC bucket start timestamps (seconds) for a trailing window."""
+    if bucket_sec not in TRAFFIC_TIMELINE_BUCKETS_SEC:
+        raise ValueError(f"unsupported bucket_sec: {bucket_sec}")
+
+    end_minute = end_ts - (end_ts % 60)
+    if start_ts is not None:
+        start_minute = start_ts - (start_ts % 60)
+    else:
+        if hours is None:
+            raise ValueError("hours or start_ts is required")
+        minute_span = max(1, int(hours) * 60)
+        start_minute = end_minute - (minute_span - 1) * 60
+
+    first_bucket = (start_minute // bucket_sec) * bucket_sec
+    bucket_starts: list[int] = []
+    bucket_start = first_bucket
+    while bucket_start <= end_minute:
+        bucket_starts.append(bucket_start)
+        bucket_start += bucket_sec
+    return bucket_starts
+
+
 def build_timeline_points(
     requests: dict[int, int],
     origins: dict[int, int],
@@ -51,25 +80,19 @@ def build_timeline_points(
     now_ts: int | None = None,
 ) -> list[dict]:
     """Return ascending timeline buckets for the trailing ``hours`` window."""
-    if bucket_sec not in TRAFFIC_TIMELINE_BUCKETS_SEC:
-        raise ValueError(f"unsupported bucket_sec: {bucket_sec}")
-
     now_ts = int(now_ts or datetime.now(timezone.utc).timestamp())
-    end_minute = now_ts - (now_ts % 60)
-    minute_span = max(1, int(hours) * 60)
-    start_minute = end_minute - (minute_span - 1) * 60
-
-    first_bucket = (start_minute // bucket_sec) * bucket_sec
-    points: list[dict] = []
-    bucket_start = first_bucket
-    while bucket_start <= end_minute:
-        points.append({
+    return [
+        {
             "ts": bucket_start,
             "requests": _sum_bucket(requests, bucket_start, bucket_sec),
             "origin_requests": _sum_bucket(origins, bucket_start, bucket_sec),
-        })
-        bucket_start += bucket_sec
-    return points
+        }
+        for bucket_start in iter_timeline_bucket_starts(
+            bucket_sec=bucket_sec,
+            end_ts=now_ts,
+            hours=hours,
+        )
+    ]
 
 
 async def _site_ids_for_scope(site_id: int | None) -> list[str]:

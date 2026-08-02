@@ -4,10 +4,11 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
+from app.constants.traffic_timeline import TREND_GRANULARITY_BUCKET_SEC
 from app.core.clickhouse import get_clickhouse
 from app.core.db import SessionLocal
 from app.models import BotProfile, IpList, RateLimit, Rule
@@ -20,6 +21,7 @@ from app.services.logging.labels import (
     set_bot_category_labels,
 )
 from app.services.bot_catalog import category_label_map
+from app.services.traffic_intel.minute_timeline import iter_timeline_bucket_starts
 
 # Preferred chart series order for known protection modes (unknown/new modes append after).
 _TREND_MODE_ORDER = (
@@ -66,6 +68,60 @@ def _assemble_trend_by_mode(rows: list) -> tuple[list[dict], list[dict]]:
         for mode in _order_trend_modes(mode_totals)
     ]
     return list(by_time.values()), trend_modes
+
+
+def _parse_trend_bucket_time(time_str: str) -> int:
+    raw = str(time_str).strip()
+    if raw.endswith("Z"):
+        raw = f"{raw[:-1]}+00:00"
+    try:
+        dt = datetime.fromisoformat(raw.replace(" ", "T"))
+    except ValueError:
+        dt = datetime.strptime(raw[:19], "%Y-%m-%d %H:%M:%S")
+    if dt.tzinfo is None:
+        return int(dt.replace(tzinfo=timezone.utc).timestamp())
+    return int(dt.timestamp())
+
+
+def _format_trend_bucket_time(unix_sec: int) -> str:
+    return datetime.utcfromtimestamp(unix_sec).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _fill_trend_gaps(
+    trend: list[dict],
+    *,
+    start_ts: datetime,
+    end_ts: datetime,
+    granularity: str,
+) -> list[dict]:
+    """Insert zero-count buckets so trend series spans the full query window."""
+    bucket_sec = TREND_GRANULARITY_BUCKET_SEC.get(granularity)
+    if not bucket_sec:
+        return trend
+
+    by_unix: dict[int, dict] = {}
+    for point in trend:
+        try:
+            aligned = (_parse_trend_bucket_time(point["time"]) // bucket_sec) * bucket_sec
+            by_unix[aligned] = point
+        except (KeyError, ValueError, TypeError):
+            continue
+
+    bucket_starts = iter_timeline_bucket_starts(
+        bucket_sec=bucket_sec,
+        end_ts=int(end_ts.timestamp()),
+        start_ts=int(start_ts.timestamp()),
+    )
+    return [
+        by_unix.get(bucket_start)
+        or {
+            "time": _format_trend_bucket_time(bucket_start),
+            "count": 0,
+            "total": 0,
+            "by_mode": {},
+        }
+        for bucket_start in bucket_starts
+    ]
 
 
 TREND_GRANULARITIES = {
@@ -811,6 +867,12 @@ async def stats_overview(
             parameters=params,
         ).result_rows
         trend, trend_modes = _assemble_trend_by_mode(trend_mode_rows)
+        trend = _fill_trend_gaps(
+            trend,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            granularity=effective_granularity,
+        )
         top_rules = client.query(
             f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
             f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "

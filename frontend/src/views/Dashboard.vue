@@ -1043,6 +1043,86 @@ type ChartKey =
   | "source"
   | "country";
 
+const TREND_CHART_GROUP = "dashboard-trend-link";
+
+function trendPointTimeMs(time: string): number {
+  void timezoneTick.value;
+  const parsed = dayjs(time);
+  if (!parsed.isValid()) return 0;
+  return parsed.tz(getAppTimezone()).valueOf();
+}
+
+const TREND_WINDOW_HOURS = 24;
+
+function trendWindowBoundsSec(): { start: number; end: number } {
+  void liveClockTick.value;
+  const endSec = Math.floor(dashboardWindowEndAt.value / 1000);
+  const endMinute = endSec - (endSec % 60);
+  const startMinute = endMinute - (TREND_WINDOW_HOURS * 60 - 1) * 60;
+  return { start: startMinute, end: endMinute };
+}
+
+function iterTrendBucketStartsSec(bucketSec: number, endSec: number, startSec: number): number[] {
+  const endMinute = endSec - (endSec % 60);
+  const startMinute = startSec - (startSec % 60);
+  const firstBucket = Math.floor(startMinute / bucketSec) * bucketSec;
+  const buckets: number[] = [];
+  for (let bucket = firstBucket; bucket <= endMinute; bucket += bucketSec) {
+    buckets.push(bucket);
+  }
+  return buckets;
+}
+
+function trendTimeAxisBounds(): { min: number; max: number } {
+  const { start, end } = trendWindowBoundsSec();
+  return { min: start * 1000, max: end * 1000 };
+}
+
+function filledTrafficTimelinePoints(): Array<{ ts: number; requests: number; origin_requests: number }> {
+  const bucketSec = trafficTimelineBucket.value;
+  const { start, end } = trendWindowBoundsSec();
+  const byTs = new Map<number, { ts: number; requests: number; origin_requests: number }>();
+  for (const point of trafficTimeline.points || []) {
+    byTs.set(point.ts, point);
+  }
+  return iterTrendBucketStartsSec(bucketSec, end, start).map((ts) => (
+    byTs.get(ts) ?? { ts, requests: 0, origin_requests: 0 }
+  ));
+}
+
+function filledHitTrendRows(): any[] {
+  const bucketSec = trafficTimelineBucket.value;
+  const { start, end } = trendWindowBoundsSec();
+  const byBucket = new Map<number, any>();
+  for (const row of stats.trend || []) {
+    const ms = trendPointTimeMs(row.time);
+    if (!ms) continue;
+    const aligned = Math.floor(ms / 1000 / bucketSec) * bucketSec;
+    byBucket.set(aligned, row);
+  }
+  return iterTrendBucketStartsSec(bucketSec, end, start).map((bucketTs) => (
+    byBucket.get(bucketTs) ?? {
+      time: dayjs.unix(bucketTs).tz(getAppTimezone()).format("YYYY-MM-DD HH:mm:ss"),
+      count: 0,
+      total: 0,
+      by_mode: {},
+    }
+  ));
+}
+
+function syncTrendChartLinkage() {
+  const trafficChart = chartStore.trafficTimeline;
+  const hitChart = chartStore.trend;
+  if (!trafficChart || !hitChart || trafficChart.isDisposed() || hitChart.isDisposed()) return;
+  trafficChart.group = TREND_CHART_GROUP;
+  hitChart.group = TREND_CHART_GROUP;
+  echarts.connect(TREND_CHART_GROUP);
+}
+
+function disconnectTrendChartLinkage() {
+  echarts.disconnect(TREND_CHART_GROUP);
+}
+
 const chartStore: Partial<Record<ChartKey, ECharts>> = {};
 
 function chartMotion(silent: boolean): Pick<echarts.EChartsOption, "animation" | "animationDuration" | "animationDurationUpdate"> {
@@ -1087,6 +1167,7 @@ function upsertChart(
 }
 
 function destroyCharts() {
+  disconnectTrendChartLinkage();
   Object.values(chartStore).forEach((chart) => chart?.dispose());
   (Object.keys(chartStore) as ChartKey[]).forEach((key) => {
     delete chartStore[key];
@@ -1296,7 +1377,9 @@ function updateLoadChart(silent = false) {
 }
 
 function updateTrafficTimelineChart(silent = false) {
-  const points = trafficTimeline.points || [];
+  const bucketSec = trafficTimelineBucket.value;
+  const axisBounds = trendTimeAxisBounds();
+  const points = filledTrafficTimelinePoints();
   const dataRequests = points.map((p) => [p.ts * 1000, p.requests]);
   const dataOrigins = points.map((p) => [p.ts * 1000, p.origin_requests]);
   upsertChart(
@@ -1309,7 +1392,6 @@ function updateTrafficTimelineChart(silent = false) {
         formatter(params: any) {
           const rows = Array.isArray(params) ? params : [params];
           if (!rows.length) return "";
-          const bucketSec = trafficTimelineBucket.value;
           const tsMs = Number(rows[0].value[0]);
           const time = formatTrafficTimelineTooltipTime(tsMs, bucketSec);
           const lines = rows.map((row: any) => {
@@ -1320,9 +1402,10 @@ function updateTrafficTimelineChart(silent = false) {
           return `${time}<br/>${lines.join("<br/>")}`;
         },
       },
+      axisPointer: { type: "line", snap: true },
       legend: { data: ["请求量", "回源请求量"], bottom: 0 },
       grid: { left: 12, right: 12, top: 24, bottom: 40, containLabel: true },
-      xAxis: { type: "time", boundaryGap: false },
+      xAxis: { type: "time", boundaryGap: false, min: axisBounds.min, max: axisBounds.max },
       yAxis: { type: "value", minInterval: 1 },
       series: [
         {
@@ -1348,20 +1431,37 @@ function updateTrafficTimelineChart(silent = false) {
     undefined,
     silent,
   );
+  syncTrendChartLinkage();
 }
 
 function updateCharts(silent = false) {
-  const times = stats.trend.map((t: any) => formatTrendTime(t.time));
-  const seriesDefs = buildTrendModeSeries(stats.trend, stats.trend_modes);
+  const hitTrendRows = filledHitTrendRows();
+  const seriesDefs = buildTrendModeSeries(hitTrendRows, stats.trend_modes);
+  const bucketSec = trafficTimelineBucket.value;
+  const axisBounds = trendTimeAxisBounds();
   upsertChart(
     "trend",
     trendEl.value,
     {
       color: seriesDefs.map((s) => s.color),
-      tooltip: { trigger: "axis" },
+      tooltip: {
+        trigger: "axis",
+        formatter(params: any) {
+          const rows = Array.isArray(params) ? params : [params];
+          if (!rows.length) return "";
+          const tsMs = Number(rows[0].value[0]);
+          const time = formatTrafficTimelineTooltipTime(tsMs, bucketSec);
+          const lines = rows.map((row: any) => {
+            const count = Number(row.value[1] || 0);
+            return `${row.marker}${row.seriesName}: ${formatTrafficCount(count)}`;
+          });
+          return `${time}<br/>${lines.join("<br/>")}`;
+        },
+      },
+      axisPointer: { type: "line", snap: true },
       legend: { data: seriesDefs.map((s) => s.name), bottom: 0 },
       grid: { left: 12, right: 12, top: 24, bottom: 40, containLabel: true },
-      xAxis: { type: "category", boundaryGap: false, data: times },
+      xAxis: { type: "time", boundaryGap: false, min: axisBounds.min, max: axisBounds.max },
       yAxis: { type: "value", minInterval: 1 },
       series: seriesDefs.map((s) => ({
         name: s.name,
@@ -1371,12 +1471,13 @@ function updateCharts(silent = false) {
         symbol: "none",
         itemStyle: { color: s.color },
         areaStyle: lineAreaGradient(s.color),
-        data: stats.trend.map((t: any) => trendModeValue(t, s.key)),
+        data: hitTrendRows.map((t: any) => [trendPointTimeMs(t.time), trendModeValue(t, s.key)]),
       })),
     },
     () => goToLogs({ tab: "detail" }),
     silent,
   );
+  syncTrendChartLinkage();
 
   upsertChart(
     "mode",

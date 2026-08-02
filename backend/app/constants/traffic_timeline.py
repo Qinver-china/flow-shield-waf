@@ -14,3 +14,12 @@ TRAFFIC_TIMELINE_BUCKET_LABELS: dict[int, str] = {
     1800: "30 分钟",
     3600: "1 小时",
 }
+
+# Dashboard / log stats trend granularity -> bucket seconds (UTC epoch-aligned).
+TREND_GRANULARITY_BUCKET_SEC: dict[str, int] = {
+    "1m": 60,
+    "5m": 300,
+    "10m": 600,
+    "30m": 1800,
+    "1h": 3600,
+}
