@@ -11,12 +11,6 @@ class AlertSeverity(StrEnum):
     CRITICAL = "critical"
 
 
-class AlertStatus(StrEnum):
-    OPEN = "open"
-    ACKNOWLEDGED = "acknowledged"
-    RESOLVED = "resolved"
-
-
 @dataclass(frozen=True)
 class TrafficIntelConfig:
     """Runtime configuration for the intel pipeline."""

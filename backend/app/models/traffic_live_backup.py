@@ -8,9 +8,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
+from app.constants.traffic_timeline import TRAFFIC_MINUTE_RETENTION_MINUTES
+
 # Windows persisted to DB backup (exclude live-only 10s).
 BACKUP_WINDOW_SECS = (30, 60, 300, 1800, 3600, 86400)
 BACKUP_INTERVAL_SEC = 30
+MINUTE_RETENTION_MINUTES = TRAFFIC_MINUTE_RETENTION_MINUTES
 REDIS_SNAPSHOT_KEY = "waf:traffic:snapshot"
 REDIS_MIN_S_PREFIX = "waf:traffic:min:s:"
 REDIS_MIN_O_PREFIX = "waf:traffic:min:o:"

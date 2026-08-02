@@ -17,7 +17,7 @@ def test_detector_flags_50_percent_spike():
         updated_at=datetime.utcnow(),
     )
     config = TrafficIntelConfig(spike_ratio=0.5)
-    result = detector._compare(1600, baseline, config, datetime.utcnow())
+    result = detector.compare(1600, baseline, config, datetime.utcnow())
     assert result is not None
     assert result.deviation_ratio == 1.6
 
@@ -34,5 +34,5 @@ def test_detector_ignores_normal_traffic():
         updated_at=datetime.utcnow(),
     )
     config = TrafficIntelConfig(spike_ratio=0.5)
-    result = detector._compare(7000, baseline, config, datetime.utcnow())
+    result = detector.compare(7000, baseline, config, datetime.utcnow())
     assert result is None

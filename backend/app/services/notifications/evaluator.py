@@ -26,7 +26,6 @@ from app.services.notifications.email_templates import build_alert_email
 from app.services.traffic_intel.constants import REDIS_SNAPSHOT_KEY
 from app.services.traffic_intel.detector import AnomalyDetector
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
-from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.types import TrafficIntelConfig
 from app.services.traffic_intel.windows import is_baseline_stable
@@ -45,9 +44,8 @@ class EvalHit:
 
 class AlertPolicyEvaluator:
     def __init__(self) -> None:
-        self._ch = ClickHouseTrafficStore()
         self._baselines = BaselineStore()
-        self._detector = AnomalyDetector(ch_store=self._ch, baseline_store=self._baselines)
+        self._detector = AnomalyDetector()
 
     async def run(self, db: AsyncSession) -> int:
         policies = (
@@ -159,9 +157,7 @@ class AlertPolicyEvaluator:
         current = await self._window_requests(window_sec, site_id=site_id, scope=scope)
         if direction == "gt":
             cfg = TrafficIntelConfig(spike_ratio=percent / 100)
-            anomaly = self._detector._compare(  # noqa: SLF001
-                current, baseline, cfg, datetime.utcnow()
-            )
+            anomaly = self._detector.compare(current, baseline, cfg, datetime.utcnow())
             if anomaly is None:
                 return None
             return EvalHit(message=f"【{policy.name}】{anomaly.message}", matched_site_id=site_id)
@@ -206,9 +202,7 @@ class AlertPolicyEvaluator:
         )
         if direction == "gt":
             cfg = TrafficIntelConfig(spike_ratio=percent / 100)
-            anomaly = self._detector._compare(  # noqa: SLF001
-                current, baseline, cfg, datetime.utcnow()
-            )
+            anomaly = self._detector.compare(current, baseline, cfg, datetime.utcnow())
             if anomaly is None:
                 return None
             return EvalHit(

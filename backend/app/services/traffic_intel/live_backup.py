@@ -3,7 +3,8 @@
 Panel and alert evaluation always read Redis. SQLite is only for disaster recovery
 when Redis has no traffic keys (e.g. volume wiped).
 
-Backup payload is per-site sparse minute rings only. Snapshot ``global`` is rebuilt
+Backup payload is per-site sparse minute rings only (requests ``m`` + origin ``om``).
+Retention matches engine minute rings (25h). Snapshot ``global`` is rebuilt
 as the sum of site windows on restore (never stored as a separate series).
 """
 from __future__ import annotations

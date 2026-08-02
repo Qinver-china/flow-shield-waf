@@ -218,6 +218,27 @@
     </a-row>
 
     <a-row :gutter="[12, 12]">
+      <a-col :span="24">
+        <a-card class="panel-card traffic-timeline-panel" :bordered="false">
+          <template #title>
+            <span class="panel-title"><line-chart-outlined /> 近 24 小时请求趋势</span>
+          </template>
+          <template #extra>
+            <div class="traffic-timeline-extra">
+              <site-single-select v-model:value="trafficSiteId" class="traffic-site-filter" />
+              <a-select
+                v-model:value="trafficTimelineBucket"
+                class="traffic-timeline-bucket"
+                :options="trafficTimelineBucketOptions"
+              />
+            </div>
+          </template>
+          <div ref="trafficTimelineEl" class="chart-box chart-box-lg" />
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <a-row :gutter="[12, 12]">
       <a-col :xs="24" :xl="12">
         <a-card class="panel-card" :bordered="false">
           <template #title>
@@ -372,7 +393,8 @@ import { useDashboardLiveRefresh } from "@/composables/useDashboardLiveRefresh";
 import { echartsThemeName, withTransparentChartBg } from "@/composables/useEchartsTheme";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
-import { formatClockTime, formatDateTime, formatDateTimeShort } from "@/utils/datetime";
+import dayjs from "dayjs";
+import { formatClockTime, formatDateTime, formatDateTimeShort, getAppTimezone } from "@/utils/datetime";
 import { lineAreaGradient } from "@/utils/lineAreaGradient";
 import { baselineTone } from "@/utils/baselineTone";
 import { trafficWindowLabels, buildTrendModeSeries, modeChartColor, trendModeValue } from "@/views/logs/constants";
@@ -486,6 +508,19 @@ const traffic = reactive<{
   windows: [],
   site_count: 0,
 });
+
+const trafficTimelineBucket = ref(600);
+const trafficTimelineBucketOptions = [
+  { value: 60, label: "1 分钟" },
+  { value: 300, label: "5 分钟" },
+  { value: 600, label: "10 分钟" },
+  { value: 1800, label: "30 分钟" },
+  { value: 3600, label: "1 小时" },
+];
+const trafficTimeline = reactive<{ points: Array<{ ts: number; requests: number; origin_requests: number }> }>({
+  points: [],
+});
+const trafficTimelineEl = ref<HTMLElement>();
 
 const systemMetrics = reactive({
   window_sec: 60,
@@ -808,6 +843,20 @@ function formatTrafficCount(value: number | null | undefined) {
   return Number.isFinite(n) ? n.toLocaleString("zh-CN") : "0";
 }
 
+function formatTrafficTimelineTooltipTime(tsMs: number, bucketSec: number): string {
+  void timezoneTick.value;
+  const start = dayjs(tsMs).tz(getAppTimezone());
+  const fmt = "YYYY-MM-DD HH:mm";
+  if (bucketSec <= 60) {
+    return start.format(fmt);
+  }
+  const end = start.add(bucketSec, "second");
+  if (start.format("YYYY-MM-DD") === end.format("YYYY-MM-DD")) {
+    return `${start.format(fmt)} ~ ${end.format("HH:mm")}`;
+  }
+  return `${start.format(fmt)} ~ ${end.format(fmt)}`;
+}
+
 function formatIntelDeviation(ratio: number) {
   const delta = ratio * 100 - 100;
   const sign = delta > 0 ? "+" : "";
@@ -1040,6 +1089,7 @@ function onFeedClick(item: { type: string; title?: string }) {
 
 type ChartKey =
   | "trend"
+  | "trafficTimeline"
   | "mode"
   | "loadCpu"
   | "loadMini0"
@@ -1302,6 +1352,61 @@ function updateLoadChart(silent = false) {
   });
 }
 
+function updateTrafficTimelineChart(silent = false) {
+  const points = trafficTimeline.points || [];
+  const dataRequests = points.map((p) => [p.ts * 1000, p.requests]);
+  const dataOrigins = points.map((p) => [p.ts * 1000, p.origin_requests]);
+  upsertChart(
+    "trafficTimeline",
+    trafficTimelineEl.value,
+    {
+      color: ["#2563eb", "#14b8a6"],
+      tooltip: {
+        trigger: "axis",
+        formatter(params: any) {
+          const rows = Array.isArray(params) ? params : [params];
+          if (!rows.length) return "";
+          const bucketSec = trafficTimelineBucket.value;
+          const tsMs = Number(rows[0].value[0]);
+          const time = formatTrafficTimelineTooltipTime(tsMs, bucketSec);
+          const lines = rows.map((row: any) => {
+            const count = Number(row.value[1] || 0);
+            const qps = count / bucketSec;
+            return `${row.marker}${row.seriesName}: ${formatTrafficCount(count)} · ${formatQps(qps)} QPS`;
+          });
+          return `${time}<br/>${lines.join("<br/>")}`;
+        },
+      },
+      legend: { data: ["请求量", "回源请求量"], bottom: 0 },
+      grid: { left: 12, right: 12, top: 24, bottom: 40, containLabel: true },
+      xAxis: { type: "time", boundaryGap: false },
+      yAxis: { type: "value", minInterval: 1 },
+      series: [
+        {
+          name: "请求量",
+          type: "line",
+          smooth: true,
+          showSymbol: false,
+          itemStyle: { color: "#2563eb" },
+          areaStyle: lineAreaGradient("#2563eb"),
+          data: dataRequests,
+        },
+        {
+          name: "回源请求量",
+          type: "line",
+          smooth: true,
+          showSymbol: false,
+          itemStyle: { color: "#14b8a6" },
+          areaStyle: lineAreaGradient("#14b8a6"),
+          data: dataOrigins,
+        },
+      ],
+    },
+    undefined,
+    silent,
+  );
+}
+
 function updateCharts(silent = false) {
   const times = stats.trend.map((t: any) => formatTrendTime(t.time));
   const seriesDefs = buildTrendModeSeries(stats.trend, stats.trend_modes);
@@ -1455,7 +1560,20 @@ watch(isDark, async () => {
   destroyCharts();
   await nextTick();
   updateCharts(false);
+  updateTrafficTimelineChart(false);
 });
+
+async function loadTrafficTimeline(silent = false) {
+  const params: Record<string, number> = {
+    hours: 24,
+    bucket_sec: trafficTimelineBucket.value,
+  };
+  if (trafficSiteId.value != null) params.site_id = trafficSiteId.value;
+  const resp = await api.get("/api/v1/traffic/timeline", params);
+  trafficTimeline.points = resp.data.points || [];
+  await nextTick();
+  updateTrafficTimelineChart(silent);
+}
 
 async function loadTraffic() {
   const params = trafficSiteId.value != null ? { site_id: trafficSiteId.value } : {};
@@ -1487,6 +1605,10 @@ watch(trafficSiteId, () => {
   onTrafficSiteChange();
 });
 
+watch(trafficTimelineBucket, () => {
+  void loadTrafficTimeline(true);
+});
+
 async function syncDashboardWindow() {
   dashboardWindowEndAt.value = Date.now();
   liveClockTick.value += 1;
@@ -1501,6 +1623,7 @@ async function refreshAll(silent = false) {
     loadHealth(),
     loadFeed(silent),
     loadTraffic(),
+    loadTrafficTimeline(silent),
     loadIntel(),
     loadSystemMetrics(silent),
   ]);
@@ -1539,6 +1662,7 @@ watch(() => appSettings.timezone, async () => {
   timezoneTick.value += 1;
   await syncDashboardWindow();
   if (stats.trend.length) updateCharts(true);
+  if (trafficTimeline.points.length) updateTrafficTimelineChart(true);
 });
 
 async function loadOverview(silent = false) {
@@ -1746,7 +1870,19 @@ onUnmounted(() => {
 }
 
 .traffic-site-filter {
-  width: 150px !important;
+  width: 100px !important;
+}
+
+.traffic-timeline-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.traffic-timeline-bucket {
+  width: 86px;
 }
 
 .traffic-live-panel :deep(.ant-card-head) {
@@ -2236,7 +2372,6 @@ onUnmounted(() => {
   max-height: 430px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
 }
 
 .feed-timeline {
@@ -2336,12 +2471,13 @@ onUnmounted(() => {
 
 .feed-timeline-title {
   flex: 1;
-  min-width: 0;
   color: var(--fs-text-primary);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.45;
   word-break: break-word;
+  flex-shrink: 0;
+  display: inline-flex;
 }
 
 .feed-timeline-time {
@@ -2382,17 +2518,24 @@ onUnmounted(() => {
   .feed-timeline-top {
     flex-wrap: wrap;
   }
-
-  .feed-timeline-time {
-    width: 100%;
-    margin-left: 0;
-    padding-left: 0;
-  }
 }
 
 @media (max-width: 767px) {
   .page-hero {
     padding: 0 0 4px;
+  }
+
+  .dashboard-page .panel-card :deep(.ant-card-head) {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .dashboard-page .panel-card :deep(.ant-card-body) {
+    padding: 16px;
+  }
+
+  .traffic-timeline-extra {
+    gap: 6px;
   }
 
   .hero-title {

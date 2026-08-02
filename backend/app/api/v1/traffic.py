@@ -1,15 +1,18 @@
 import json
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.constants.logging_settings import DEFAULT_AUTO_THRESHOLDS
+from app.constants.traffic_timeline import TRAFFIC_TIMELINE_BUCKETS_SEC, TRAFFIC_TIMELINE_HOURS
 from app.core.db import get_db
 from app.core.redis import get_redis
 from app.models import User
 from app.schemas.common import ok
+from app.schemas.traffic_intel import TrafficTimelineOut, TrafficTimelinePoint
 from app.services import waf_settings
+from app.services.traffic_intel.minute_timeline import timeline_series
 
 router = APIRouter()
 
@@ -222,3 +225,37 @@ async def traffic_stats(
         "windows": _default_windows(thresholds),
         "burst_active": False,
     })
+
+
+@router.get("/timeline")
+async def traffic_timeline(
+    site_id: int | None = Query(None),
+    hours: int = Query(TRAFFIC_TIMELINE_HOURS, ge=TRAFFIC_TIMELINE_HOURS, le=TRAFFIC_TIMELINE_HOURS),
+    bucket_sec: int = Query(60),
+    _user: User = Depends(get_current_user),
+):
+    if bucket_sec not in TRAFFIC_TIMELINE_BUCKETS_SEC:
+        raise HTTPException(
+            status_code=400,
+            detail=f"bucket_sec must be one of {list(TRAFFIC_TIMELINE_BUCKETS_SEC)}",
+        )
+    try:
+        data = await timeline_series(site_id=site_id, hours=hours, bucket_sec=bucket_sec)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ok(
+        TrafficTimelineOut(
+            hours=data["hours"],
+            bucket_sec=data["bucket_sec"],
+            bucket_label=data["bucket_label"],
+            site_id=data["site_id"],
+            points=[
+                TrafficTimelinePoint(
+                    ts=p["ts"],
+                    requests=p["requests"],
+                    origin_requests=p["origin_requests"],
+                )
+                for p in data["points"]
+            ],
+        ).model_dump()
+    )

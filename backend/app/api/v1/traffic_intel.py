@@ -5,16 +5,20 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.constants.traffic_timeline import (
+    TRAFFIC_TIMELINE_BUCKETS_SEC,
+    TRAFFIC_TIMELINE_HOURS,
+)
 from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC, TRAFFIC_LIVE_WINDOWS_SEC
 from app.core.db import get_db
 from app.core.redis import get_redis
 from app.models import User
 from app.schemas.common import ok
 from app.schemas.traffic_intel import (
-    AlertOut,
     BaselineOut,
     IntelStatusOut,
-    MinuteSeriesPoint,
+    TrafficTimelineOut,
+    TrafficTimelinePoint,
     WindowComparison,
 )
 from app.services.traffic_intel.constants import (
@@ -22,9 +26,8 @@ from app.services.traffic_intel.constants import (
     DEFAULT_SPIKE_RATIO,
     REDIS_SNAPSHOT_KEY,
 )
-from app.services.traffic_intel.store.alerts_clickhouse import AlertStore
+from app.services.traffic_intel.minute_timeline import timeline_series
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
-from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.types import TrafficIntelConfig
 from app.services.traffic_intel.windows import is_baseline_stable, label
@@ -82,44 +85,6 @@ async def list_baselines(
             updated_at=r.updated_at,
         )
         for r in rows
-    ])
-
-
-@router.get("/alerts")
-async def list_alerts(
-    limit: int = Query(50, ge=1, le=200),
-    site_id: int | None = None,
-    db: AsyncSession = Depends(get_db),
-    _user: User = Depends(get_current_user),
-):
-    rows = await AlertStore().list_recent(limit=limit, site_id=site_id)
-    return ok([
-        AlertOut(
-            id=r.id,
-            site_id=r.site_id,
-            window_sec=r.window_sec,
-            current_requests=r.current_requests,
-            baseline_avg=r.baseline_avg,
-            deviation_ratio=r.deviation_ratio,
-            severity=r.severity,
-            status=r.status,
-            message=r.message,
-            detected_at=r.detected_at,
-        )
-        for r in rows
-    ])
-
-
-@router.get("/series")
-async def minute_series(
-    hours: int = Query(24, ge=1, le=168),
-    site_id: int | None = None,
-    _user: User = Depends(get_current_user),
-):
-    store = ClickHouseTrafficStore()
-    points = store.recent_minute_series(site_id=site_id, hours=hours)
-    return ok([
-        MinuteSeriesPoint(minute=p["minute"], requests=p["requests"]) for p in points
     ])
 
 

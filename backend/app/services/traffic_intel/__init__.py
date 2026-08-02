@@ -7,7 +7,6 @@ Layers
    no weekday) per site from window snapshots; dashboard/rule "global" sums sites.
    Warm-start widens to same hour / hour-only when history is sparse.
 3. **条件比较 (detector helpers)** — used by alert / AI Guard ``traffic.baseline_*`` policies.
-   Built-in auto spike alerting is disabled.
 
 Extend
 ------
@@ -18,6 +17,7 @@ from app.services.traffic_intel.baseline import BaselineCalculator, SameSlotHour
 from app.services.traffic_intel.constants import ANALYSIS_WINDOWS_SEC, REALTIME_WINDOWS_SEC
 from app.services.traffic_intel.detector import AnomalyDetector
 from app.services.traffic_intel.ingest import SnapshotIngestor, parse_snapshot
+from app.services.traffic_intel.minute_timeline import timeline_series
 from app.services.traffic_intel.pipeline import TrafficIntelPipeline, run_pipeline_loop
 from app.services.traffic_intel.types import (
     AlertSeverity,
@@ -44,4 +44,5 @@ __all__ = [
     "WindowSample",
     "parse_snapshot",
     "run_pipeline_loop",
+    "timeline_series",
 ]

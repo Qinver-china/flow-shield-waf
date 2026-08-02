@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 总览新增「近 24 小时请求趋势」折线图：同图展示请求量与回源请求量，支持 1/5/10/30/60 分钟颗粒度与站点筛选
+- 新增 `GET /api/v1/traffic/timeline`：从 Redis 分钟环读取近 24 小时时间序列
+
+### 变更
+
+- Redis / SQLite 流量分钟环保留由 24 小时延长至 25 小时（为 24 小时图表预留冗余）
+- 移除未使用的 ClickHouse 遗留能力：内置流量突增告警（`traffic_alerts`）、`/traffic/intel/alerts` 与 `/traffic/intel/series` 接口
+
 ## [0.3.9] - 2026-07-31
 
 ### 新增

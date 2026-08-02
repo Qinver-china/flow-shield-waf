@@ -8,9 +8,7 @@ from app.services.analytics.constants import (
     ALERT_LOG_TTL_DAYS,
     CH_ALERT_LOGS_TABLE,
     CH_INCIDENTS_TABLE,
-    CH_TRAFFIC_ALERTS_TABLE,
     INCIDENT_TTL_DAYS,
-    TRAFFIC_ALERT_TTL_DAYS,
 )
 
 log = logging.getLogger("waf.analytics.schema")
@@ -59,30 +57,8 @@ def ensure_analytics_schema() -> None:
         TTL toDateTime(created_at) + INTERVAL {ALERT_LOG_TTL_DAYS} DAY
         """
     )
-    client.command(
-        f"""
-        CREATE TABLE IF NOT EXISTS {CH_TRAFFIC_ALERTS_TABLE} (
-          id UInt64,
-          site_id Nullable(UInt32),
-          window_sec UInt32,
-          current_requests UInt32,
-          baseline_avg Float64,
-          deviation_ratio Float64,
-          severity LowCardinality(String),
-          status LowCardinality(String),
-          message String,
-          detected_at DateTime64(3),
-          created_at DateTime64(3)
-        )
-        ENGINE = MergeTree
-        ORDER BY (detected_at, id)
-        TTL toDateTime(detected_at) + INTERVAL {TRAFFIC_ALERT_TTL_DAYS} DAY
-        SETTINGS allow_nullable_key = 1
-        """
-    )
     log.info(
-        "clickhouse analytics tables ensured: %s, %s, %s",
+        "clickhouse analytics tables ensured: %s, %s",
         CH_INCIDENTS_TABLE,
         CH_ALERT_LOGS_TABLE,
-        CH_TRAFFIC_ALERTS_TABLE,
     )

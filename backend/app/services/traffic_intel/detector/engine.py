@@ -1,72 +1,21 @@
-"""Anomaly detection: compare current traffic against learned baseline."""
+"""Anomaly detection helpers for alert / AI Guard baseline conditions."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.services.traffic_intel.store.baseline_mysql import BaselineStore
-from app.services.traffic_intel.store.clickhouse import ClickHouseTrafficStore
 from app.services.traffic_intel.types import (
     AlertSeverity,
     AnomalyResult,
     Baseline,
     TrafficIntelConfig,
 )
-from app.services.traffic_intel.windows import label, stable_min_samples
+from app.services.traffic_intel.windows import label
 
 
 class AnomalyDetector:
-    """Flag traffic spikes when current > baseline * (1 + spike_ratio)."""
+    """Compare live traffic against a learned baseline."""
 
-    def __init__(
-        self,
-        ch_store: ClickHouseTrafficStore | None = None,
-        baseline_store: BaselineStore | None = None,
-    ):
-        self._ch = ch_store or ClickHouseTrafficStore()
-        self._baselines = baseline_store or BaselineStore()
-
-    async def evaluate_scope(
-        self,
-        db: AsyncSession,
-        config: TrafficIntelConfig,
-        *,
-        site_id: int | None = None,
-        as_of: datetime | None = None,
-        timezone_name: str | None = None,
-    ) -> list[AnomalyResult]:
-        if not config.enabled:
-            return []
-
-        as_of = as_of or datetime.utcnow()
-        anomalies: list[AnomalyResult] = []
-        for window_sec in config.analysis_windows_sec:
-            baseline = await self._baselines.get(
-                db,
-                site_id=site_id,
-                window_sec=window_sec,
-                as_of=as_of,
-                timezone_name=timezone_name,
-            )
-            if baseline is None or baseline.avg_requests <= 0:
-                continue
-            if baseline.sample_count < stable_min_samples(window_sec):
-                continue
-
-            current = await asyncio.to_thread(
-                self._ch.current_window_requests,
-                window_sec,
-                site_id=site_id,
-                as_of=as_of,
-            )
-            result = self._compare(current, baseline, config, as_of)
-            if result is not None:
-                anomalies.append(result)
-        return anomalies
-
-    def _compare(
+    def compare(
         self,
         current: int,
         baseline: Baseline,

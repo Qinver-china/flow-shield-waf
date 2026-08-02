@@ -136,21 +136,3 @@ CREATE TABLE IF NOT EXISTS waf.alert_notification_logs (
 ENGINE = MergeTree
 ORDER BY (created_at, id)
 TTL toDateTime(created_at) + INTERVAL 90 DAY;
-
-CREATE TABLE IF NOT EXISTS waf.traffic_alerts (
-  id UInt64,
-  site_id Nullable(UInt32),
-  window_sec UInt32,
-  current_requests UInt32,
-  baseline_avg Float64,
-  deviation_ratio Float64,
-  severity LowCardinality(String),
-  status LowCardinality(String),
-  message String,
-  detected_at DateTime64(3),
-  created_at DateTime64(3)
-)
-ENGINE = MergeTree
-ORDER BY (detected_at, id)
-TTL toDateTime(detected_at) + INTERVAL 90 DAY
-SETTINGS allow_nullable_key = 1;

@@ -1,6 +1,5 @@
 <template>
   <div class="log-detail-tab">
-    <a-card size="small" title="日志列表" class="list-card">
       <a-table
         :columns="columns"
         :data-source="rows"
@@ -102,7 +101,6 @@
           <template v-else>{{ text }}</template>
         </template>
       </a-table>
-    </a-card>
 
     <log-detail-drawer v-model:open="detailOpen" :log-id="detailId" />
   </div>
@@ -126,12 +124,12 @@ const props = defineProps<{
 const { withPaginationSize } = useResponsivePagination();
 
 const columns = [
-  { title: "时间", key: "ts", dataIndex: "ts", width: 168 },
+  { title: "时间", key: "ts", dataIndex: "ts", width: 178 },
   { title: "域名", key: "domain", dataIndex: "domain", width: 140, ellipsis: true },
   { title: "IP", key: "client_ip", dataIndex: "client_ip", width: 130 },
   { title: "方法", key: "method", dataIndex: "method", width: 72 },
   { title: "请求 URI", key: "request_uri", dataIndex: "request_uri", ellipsis: true },
-  { title: "命中规则", key: "rule_name", dataIndex: "rule_name", width: 140, ellipsis: true },
+  { title: "命中规则", key: "rule_name", dataIndex: "rule_name", width: 170, ellipsis: true },
   { title: "防护方式", key: "mode", dataIndex: "mode", width: 100 },
   { title: "来源", key: "source", dataIndex: "source", width: 110 },
   { title: "结果", key: "blocked", dataIndex: "blocked", width: 80 },

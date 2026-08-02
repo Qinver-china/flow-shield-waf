@@ -15,21 +15,6 @@ class BaselineOut(BaseModel):
     updated_at: datetime | None = None
 
 
-class AlertOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    site_id: int | None
-    window_sec: int
-    current_requests: int
-    baseline_avg: float
-    deviation_ratio: float
-    severity: str
-    status: str
-    message: str
-    detected_at: datetime
-
-
 class WindowComparison(BaseModel):
     window_sec: int
     label: str
@@ -49,6 +34,15 @@ class IntelStatusOut(BaseModel):
     windows: list[WindowComparison] = Field(default_factory=list)
 
 
-class MinuteSeriesPoint(BaseModel):
-    minute: datetime
+class TrafficTimelinePoint(BaseModel):
+    ts: int
     requests: int
+    origin_requests: int
+
+
+class TrafficTimelineOut(BaseModel):
+    hours: int
+    bucket_sec: int
+    bucket_label: str
+    site_id: int | None = None
+    points: list[TrafficTimelinePoint] = Field(default_factory=list)

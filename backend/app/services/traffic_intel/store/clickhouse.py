@@ -116,37 +116,6 @@ class ClickHouseTrafficStore:
             column_names=["ts", "site_id", "window_sec", "requests", "qps"],
         )
 
-    def current_window_requests(
-        self,
-        window_sec: int,
-        *,
-        site_id: int | None = None,
-        as_of: datetime | None = None,
-    ) -> int:
-        """Sum minute rollups over the trailing analysis window."""
-        as_of = (as_of or datetime.utcnow()).replace(second=0, microsecond=0)
-        start = as_of - timedelta(seconds=window_sec)
-        site_clause = (
-            "site_id IS NULL"
-            if site_id is None
-            else "site_id = {site_id:UInt32}"
-        )
-        params: dict = {"start": start, "end": as_of}
-        if site_id is not None:
-            params["site_id"] = site_id
-        client = get_clickhouse()
-        row = client.query(
-            f"""
-            SELECT coalesce(sum(requests), 0) AS total
-            FROM {CH_MINUTE_TABLE}
-            WHERE {site_clause}
-              AND minute > {{start:DateTime}}
-              AND minute <= {{end:DateTime}}
-            """,
-            parameters=params,
-        ).result_rows
-        return int(row[0][0]) if row else 0
-
     def same_slot_window_averages(
         self,
         window_sec: int,
@@ -251,31 +220,3 @@ class ClickHouseTrafficStore:
         if not rows or rows[0][1] == 0:
             return 0.0, 0
         return float(rows[0][0]), int(rows[0][1])
-
-    def recent_minute_series(
-        self,
-        *,
-        site_id: int | None = None,
-        hours: int = 24,
-    ) -> list[dict]:
-        site_clause = (
-            "site_id IS NULL"
-            if site_id is None
-            else "site_id = {site_id:UInt32}"
-        )
-        params: dict = {"hours": hours}
-        if site_id is not None:
-            params["site_id"] = site_id
-        client = get_clickhouse()
-        rows = client.query(
-            f"""
-            SELECT minute, sum(requests) AS requests
-            FROM {CH_MINUTE_TABLE}
-            WHERE {site_clause}
-              AND minute >= now() - INTERVAL {{hours:UInt16}} HOUR
-            GROUP BY minute
-            ORDER BY minute
-            """,
-            parameters=params,
-        ).result_rows
-        return [{"minute": r[0], "requests": int(r[1])} for r in rows]
