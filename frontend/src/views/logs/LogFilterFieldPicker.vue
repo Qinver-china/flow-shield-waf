@@ -4,6 +4,7 @@
     trigger="click"
     placement="bottomLeft"
     overlay-class-name="log-filter-field-picker-popover"
+    :get-popup-container="getPopupContainer"
   >
     <button type="button" class="field-picker-trigger" :title="selectedLabel">
       <span class="field-picker-trigger-label">{{ selectedLabel }}</span>
@@ -40,6 +41,7 @@ import { findLogFilterField, logDetailFilterGroups, type LogFilterFieldDef } fro
 const props = defineProps<{
   modelValue: string;
   groups?: { label: string; fields: LogFilterFieldDef[] }[];
+  getPopupContainer?: (triggerNode: HTMLElement) => HTMLElement;
 }>();
 
 const emit = defineEmits<{
@@ -73,9 +75,9 @@ function selectField(key: string) {
   padding: 4px 11px;
   font-size: 14px;
   line-height: 1.5;
-  color: rgba(0, 0, 0, 0.88);
-  background: #fff;
-  border: 1px solid #d9d9d9;
+  color: var(--fs-text);
+  background: var(--fs-bg-surface);
+  border: 1px solid var(--fs-border);
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -97,7 +99,7 @@ function selectField(key: string) {
 .field-picker-trigger-icon {
   flex-shrink: 0;
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--fs-border);
 }
 
 .field-picker-panel {
@@ -136,7 +138,7 @@ function selectField(key: string) {
   border: 1px solid #6a6c6e30;
   border-radius: 6px;
   background: #c2c2c20d;
-  color: #5d6e85;
+  color: var(--fs-text-secondary);
   cursor: pointer;
   text-align: center;
   transition:

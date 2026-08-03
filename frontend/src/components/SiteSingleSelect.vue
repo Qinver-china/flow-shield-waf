@@ -8,6 +8,7 @@
     :loading="loading"
     :disabled="disabled"
     :show-search="showSearch"
+    :get-popup-container="getPopupContainer"
     option-filter-prop="label"
     style="width: 100%"
   />
@@ -24,6 +25,7 @@ const props = withDefaults(
     readonly?: boolean;
     disabled?: boolean;
     showSearch?: boolean;
+    getPopupContainer?: (triggerNode: HTMLElement) => HTMLElement;
   }>(),
   {
     value: undefined,

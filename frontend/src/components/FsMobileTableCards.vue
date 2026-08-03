@@ -207,9 +207,9 @@ function showTotal(total: number) {
 
 .mobile-field {
   display: grid;
-  grid-template-columns: minmax(72px, 34%) 1fr;
+  grid-template-columns: 80px 1fr;
   gap: 10px;
-  align-items: start;
+  align-items: baseline;
   font-size: 13px;
 }
 

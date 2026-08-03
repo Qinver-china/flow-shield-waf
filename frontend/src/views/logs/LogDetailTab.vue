@@ -128,7 +128,7 @@ const columns = [
   { title: "域名", key: "domain", dataIndex: "domain", width: 140, ellipsis: true },
   { title: "IP", key: "client_ip", dataIndex: "client_ip", width: 130 },
   { title: "方法", key: "method", dataIndex: "method", width: 72 },
-  { title: "请求 URI", key: "request_uri", dataIndex: "request_uri", ellipsis: true },
+  { title: "请求 URI", key: "request_uri", dataIndex: "request_uri", width: 460, ellipsis: true },
   { title: "命中规则", key: "rule_name", dataIndex: "rule_name", width: 170, ellipsis: true },
   { title: "防护方式", key: "mode", dataIndex: "mode", width: 100 },
   { title: "来源", key: "source", dataIndex: "source", width: 110 },

@@ -36,10 +36,22 @@ function createLogFilterState(defaultPreset: TimePreset) {
 
   const detailFilters = computed(() => conditionsToLogDetailFilters(appliedConditions.value));
 
-  function openEditor(seed?: LogFilterCondition[]) {
-    draftConditions.value = seed?.length
-      ? seed.map((item) => ({ ...item, value: Array.isArray(item.value) ? [...item.value] : item.value }))
+  function cloneConditions(conditions: LogFilterCondition[]) {
+    return conditions.map((item) => ({
+      ...item,
+      value: Array.isArray(item.value) ? [...item.value] : item.value,
+    }));
+  }
+
+  function closeEditorAndSyncDraft() {
+    draftConditions.value = appliedConditions.value.length
+      ? cloneConditions(appliedConditions.value)
       : [createFilterCondition()];
+    editorOpen.value = false;
+  }
+
+  function openEditor(seed?: LogFilterCondition[]) {
+    draftConditions.value = seed?.length ? cloneConditions(seed) : [createFilterCondition()];
     editorOpen.value = true;
   }
 
@@ -66,6 +78,7 @@ function createLogFilterState(defaultPreset: TimePreset) {
 
   function clearAppliedFilters() {
     appliedConditions.value = [];
+    closeEditorAndSyncDraft();
     refreshToken.value += 1;
   }
 
@@ -193,6 +206,7 @@ function createLogFilterState(defaultPreset: TimePreset) {
     const next = [...appliedConditions.value];
     next.splice(index, 1);
     appliedConditions.value = next;
+    closeEditorAndSyncDraft();
     refreshToken.value += 1;
   }
 

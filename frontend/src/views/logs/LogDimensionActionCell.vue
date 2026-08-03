@@ -15,12 +15,15 @@
           :title="label"
         >{{ label }}</a-tag>
         <template #overlay>
-          <a-menu class="log-dimension-menu" :selectable="false">
-            <template v-for="(action, index) in actions" :key="action.key">
-              <a-menu-divider v-if="action.divided && index > 0" />
-              <a-menu-item @click="action.onClick">{{ action.label }}</a-menu-item>
-            </template>
-          </a-menu>
+          <div class="log-dimension-dropdown">
+            <div v-if="label" class="log-dimension-dropdown-label">{{ label }}</div>
+            <a-menu class="log-dimension-menu" :selectable="false">
+              <template v-for="(action, index) in actions" :key="action.key">
+                <a-menu-divider v-if="action.divided && index > 0" />
+                <a-menu-item @click="action.onClick">{{ action.label }}</a-menu-item>
+              </template>
+            </a-menu>
+          </div>
         </template>
       </a-dropdown>
       <log-resource-view-drawer v-model:open="resourceOpen" :target="resourceTarget" />
@@ -124,7 +127,31 @@ const actions = computed(() => {
   color: inherit;
 }
 
-.log-dimension-menu {
+.log-dimension-dropdown {
   min-width: 180px;
+  max-width: min(320px, 90vw);
+  background: var(--fs-bg-elevated);
+  border-radius: 8px;
+  box-shadow:
+    0 6px 16px 0 rgba(0, 0, 0, 0.08),
+    0 3px 6px -4px rgba(0, 0, 0, 0.12),
+    0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.log-dimension-dropdown-label {
+  padding: 8px 12px 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fs-text-muted);
+  word-break: break-word;
+  border-bottom: 1px solid var(--fs-border);
+}
+
+.log-dimension-menu {
+  min-width: 100%;
+  border: none;
+  box-shadow: none;
+  background-color: transparent;
 }
 </style>

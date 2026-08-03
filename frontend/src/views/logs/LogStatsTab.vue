@@ -1,7 +1,18 @@
 <template>
   <div class="log-stats-tab">
     <div class="stats-body">
-      <a-card size="small" class="dimension-panel" title="统计维度">
+      <log-stats-dimension-picker
+        v-if="isMobileLayout"
+        :model-value="dimension"
+        trigger-variant="card"
+        @change="selectDimension"
+      />
+      <a-card
+        v-else
+        size="small"
+        class="dimension-panel"
+        title="统计维度"
+      >
         <div class="dimension-scroll">
           <section
             v-for="group in statsDimensionGroups"
@@ -43,7 +54,7 @@
           </a-col>
         </a-row>
 
-        <a-card size="small" class="result-panel" :loading="groupLoading">
+        <a-card size="small" class="result-panel">
         <template #title>
           <span>{{ currentDimension?.label || "统计结果" }}</span>
           <span v-if="currentDimension?.desc" class="panel-desc">{{ currentDimension.desc }}</span>
@@ -70,17 +81,23 @@
               </template>
             </a-dropdown>
           </div>
-          <a-empty
-            v-if="!overview.trend.length"
-            class="chart-empty"
-            description="当前时间范围内暂无命中日志"
-          />
-          <div v-show="overview.trend.length" ref="trendChartEl" class="stats-chart" />
+          <div class="chart-content">
+            <div v-if="chartLoading" class="stats-chart chart-loading">
+              <a-spin />
+            </div>
+            <a-empty
+              v-else-if="!overview.trend.length"
+              class="chart-empty"
+              description="当前时间范围内暂无命中日志"
+            />
+            <div v-else ref="trendChartEl" class="stats-chart" />
+          </div>
         </div>
 
         <a-table
           :columns="tableColumns"
           :data-source="groupItems"
+          :loading="groupLoading"
           :pagination="tablePagination"
           size="small"
           row-key="key"
@@ -116,7 +133,7 @@ import { DownOutlined } from "@ant-design/icons-vue";
 import * as echarts from "echarts";
 import type { ECharts } from "echarts";
 import { storeToRefs } from "pinia";
-import { echartsThemeName, withTransparentChartBg } from "@/composables/useEchartsTheme";
+import { echartsThemeName, prepareChartOption } from "@/composables/useEchartsTheme";
 import { useThemeStore } from "@/stores/theme";
 import { api } from "@/api";
 import { useResponsivePagination } from "@/composables/useResponsivePagination";
@@ -134,6 +151,8 @@ import {
   type TrendGranularity,
 } from "./constants";
 import LogDimensionActionCell from "./LogDimensionActionCell.vue";
+import LogStatsDimensionPicker from "./LogStatsDimensionPicker.vue";
+import { useBreakpoint } from "@/composables/useBreakpoint";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import type { LogFilterState } from "./useLogFilterState";
 
@@ -154,8 +173,11 @@ const emit = defineEmits<{ "drill-down": [LogDrillDownFilter] }>();
 
 const { formatSiteId } = useSiteOptions();
 const { paginationSize } = useResponsivePagination();
+const { width } = useBreakpoint();
 const route = useRoute();
 const { isDark } = storeToRefs(useThemeStore());
+
+const isMobileLayout = computed(() => width.value <= 900);
 
 function queryValue(query: LocationQuery, key: string) {
   const value = query[key];
@@ -179,6 +201,7 @@ const overview = reactive({
   trend_modes: [] as Array<{ mode: string; label?: string }>,
 });
 const groupLoading = ref(false);
+const chartLoading = ref(false);
 const groupItems = ref<any[]>([]);
 const groupTotal = ref(0);
 const groupItemTotal = ref(0);
@@ -280,11 +303,11 @@ function onGranularitySelect({ key }: { key: string }) {
 }
 
 async function fetchOverviewOnly() {
-  groupLoading.value = true;
+  chartLoading.value = true;
   try {
     await fetchOverview();
   } finally {
-    groupLoading.value = false;
+    chartLoading.value = false;
     await renderCharts();
     setupChartObservers();
   }
@@ -314,7 +337,7 @@ function renderTrendChart() {
     areaStyle: lineAreaGradient(s.color),
     data: overview.trend.map((item) => trendModeValue(item, s.key)),
   }));
-  trendChart.setOption(withTransparentChartBg({
+  trendChart.setOption(prepareChartOption({
     color: seriesDefs.map((s) => s.color),
     tooltip: {
       trigger: "axis",
@@ -343,7 +366,7 @@ function renderTrendChart() {
       splitLine: { show: false },
     },
     series,
-  }));
+  }, isDark.value));
   trendChart.resize();
 }
 
@@ -396,6 +419,7 @@ async function fetchGroup() {
 async function fetchAll() {
   const seq = ++statsFetchSeq;
   groupPage.value = 1;
+  chartLoading.value = true;
   groupLoading.value = true;
   try {
     await Promise.all([fetchOverview(), loadGroup()]);
@@ -403,6 +427,7 @@ async function fetchAll() {
   } finally {
     if (seq === statsFetchSeq) {
       groupLoading.value = false;
+      chartLoading.value = false;
       await renderCharts();
       setupChartObservers();
     }
@@ -588,7 +613,7 @@ onUnmounted(() => {
   border: 1px solid #6a6c6e30;
   border-radius: 6px;
   background: #c2c2c20d;
-  color: #5d6e85;
+  color: var(--fs-text-secondary);
   cursor: pointer;
   text-align: center;
   transition:
@@ -631,6 +656,16 @@ onUnmounted(() => {
   height: 220px;
 }
 
+.chart-content {
+  min-height: 220px;
+}
+
+.chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .chart-block + .chart-block {
   margin-top: 4px;
 }
@@ -655,11 +690,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   margin: 0;
-  padding: 2px 8px;
+  padding: 3px 6px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--fs-text-muted);
-  background: var(--fs-bg-muted);
+  background: var(--fs-bg);
   border: 1px solid var(--fs-border);
   border-radius: 6px;
   cursor: pointer;

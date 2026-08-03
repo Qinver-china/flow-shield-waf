@@ -103,7 +103,6 @@
               v-if="hasEnabledColumn"
               :checked="row.enabled"
               :loading="togglingId === row.id"
-              size="small"
               @change="(checked: boolean) => toggleEnabled(row, checked)"
             />
           </div>

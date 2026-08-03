@@ -311,7 +311,7 @@ import DashboardLiveRefreshToggle from "@/components/DashboardLiveRefreshToggle.
 import { useLogNavigation } from "@/composables/useLogNavigation";
 import { useSiteOptions } from "@/composables/useSiteOptions";
 import { useDashboardLiveRefresh } from "@/composables/useDashboardLiveRefresh";
-import { echartsThemeName, withTransparentChartBg } from "@/composables/useEchartsTheme";
+import { echartsThemeName, prepareChartOption } from "@/composables/useEchartsTheme";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { useThemeStore } from "@/stores/theme";
 import dayjs from "dayjs";
@@ -1141,13 +1141,13 @@ function upsertChart(
 ) {
   if (!el) return;
   const motion = chartMotion(silent);
-  const fullOption: echarts.EChartsOption = withTransparentChartBg({
+  const fullOption: echarts.EChartsOption = prepareChartOption({
     ...option,
     ...motion,
     series: Array.isArray(option.series)
       ? option.series.map((s) => ({ ...s, ...motion }))
       : option.series,
-  });
+  }, isDark.value);
 
   let chart = chartStore[key];
   if (!chart || chart.isDisposed()) {
@@ -1902,7 +1902,7 @@ onUnmounted(() => {
 }
 
 .traffic-timeline-bucket {
-  width: 86px;
+  width: 90px;
 }
 
 .traffic-live-panel :deep(.ant-card-head) {
@@ -2610,15 +2610,6 @@ onUnmounted(() => {
 @media (max-width: 767px) {
   .page-hero {
     padding: 0 0 4px;
-  }
-
-  .dashboard-scope-bar {
-    align-items: flex-start;
-  }
-
-  .dashboard-scope-filters {
-    width: 100%;
-    justify-content: flex-end;
   }
 
   .dashboard-page .panel-card :deep(.ant-card-head) {

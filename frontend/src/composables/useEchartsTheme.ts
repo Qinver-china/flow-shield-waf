@@ -1,17 +1,49 @@
 import * as echarts from "echarts";
 import { storeToRefs } from "pinia";
 import { watch } from "vue";
-import type { ECharts } from "echarts";
+import type { ECharts, EChartsOption, TooltipComponentOption } from "echarts";
 import { useThemeStore } from "@/stores/theme";
 
+const FS_LIGHT_THEME = "fs-light";
 /** Built-in dark theme uses #100C2A fill; we keep the palette but drop the canvas fill. */
 const FS_DARK_THEME = "fs-dark";
 
 let themesRegistered = false;
 
+const CHART_TOOLTIP_LIGHT: TooltipComponentOption = {
+  backgroundColor: "#ffffff",
+  borderColor: "#e2e8f0",
+  borderWidth: 1,
+  textStyle: { color: "#0f172a", fontSize: 12 },
+  axisPointer: {
+    lineStyle: { color: "#94a3b8" },
+    crossStyle: { color: "#94a3b8" },
+  },
+};
+
+const CHART_TOOLTIP_DARK: TooltipComponentOption = {
+  backgroundColor: "#1e293b",
+  borderColor: "#334155",
+  borderWidth: 1,
+  textStyle: { color: "#f8fafc", fontSize: 12 },
+  axisPointer: {
+    lineStyle: { color: "#64748b" },
+    crossStyle: { color: "#64748b" },
+  },
+};
+
+export function chartTooltipDefaults(isDark: boolean): TooltipComponentOption {
+  return isDark ? CHART_TOOLTIP_DARK : CHART_TOOLTIP_LIGHT;
+}
+
 function ensureEchartsThemes() {
   if (themesRegistered) return;
   themesRegistered = true;
+
+  echarts.registerTheme(FS_LIGHT_THEME, {
+    backgroundColor: "transparent",
+    tooltip: CHART_TOOLTIP_LIGHT,
+  });
 
   const contrastColor = "#B9B8CE";
   const axisCommon = () => ({
@@ -75,13 +107,32 @@ function ensureEchartsThemes() {
     legend: {
       textStyle: { color: contrastColor },
     },
+    tooltip: CHART_TOOLTIP_DARK,
+  });
+}
+
+export function mergeChartTooltip(option: EChartsOption, isDark: boolean): EChartsOption {
+  if (option.tooltip === false) return option;
+
+  const defaults = chartTooltipDefaults(isDark);
+  const userTooltip =
+    option.tooltip === true || option.tooltip == null ? {} : option.tooltip;
+
+  return {
+    ...option,
     tooltip: {
+      ...defaults,
+      ...userTooltip,
+      textStyle: {
+        ...defaults.textStyle,
+        ...(userTooltip.textStyle ?? {}),
+      },
       axisPointer: {
-        lineStyle: { color: "#817f91" },
-        crossStyle: { color: "#817f91" },
+        ...defaults.axisPointer,
+        ...(userTooltip.axisPointer ?? {}),
       },
     },
-  });
+  };
 }
 
 export function useEchartsTheme(charts: () => ECharts[]) {
@@ -96,10 +147,7 @@ export function useEchartsTheme(charts: () => ECharts[]) {
       chart.dispose();
       const next = echarts.init(dom, echartsThemeName(isDark.value));
       if (option) {
-        next.setOption(
-          { ...option, backgroundColor: "transparent" } as echarts.EChartsOption,
-          true,
-        );
+        next.setOption(prepareChartOption(option as EChartsOption, isDark.value), true);
       }
     });
   });
@@ -107,12 +155,15 @@ export function useEchartsTheme(charts: () => ECharts[]) {
 
 export function echartsThemeName(isDark: boolean) {
   ensureEchartsThemes();
-  return isDark ? FS_DARK_THEME : undefined;
+  return isDark ? FS_DARK_THEME : FS_LIGHT_THEME;
+}
+
+/** Merge tooltip colors + clear canvas fill so charts sit on the page surface. */
+export function prepareChartOption(option: EChartsOption, isDark: boolean): EChartsOption {
+  return withTransparentChartBg(mergeChartTooltip(option, isDark));
 }
 
 /** Always clear canvas fill so charts sit on the page surface. */
-export function withTransparentChartBg(
-  option: echarts.EChartsOption,
-): echarts.EChartsOption {
+export function withTransparentChartBg(option: EChartsOption): EChartsOption {
   return { ...option, backgroundColor: "transparent" };
 }

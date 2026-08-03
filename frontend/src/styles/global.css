@@ -55,6 +55,12 @@ code,
   color: var(--fs-text-muted);
 }
 
+/* Dropdown menus: align elevated surface with design tokens (day/night) */
+.ant-dropdown .ant-dropdown-menu,
+.ant-dropdown-menu-submenu .ant-dropdown-menu {
+  background-color: var(--fs-bg-elevated) !important;
+}
+
 /* Header / sidebar icon buttons (transparent chrome) */
 .fs-header-icon-btn.ant-btn {
   display: inline-flex;
