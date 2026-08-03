@@ -14,6 +14,7 @@ const CHART_TOOLTIP_LIGHT: TooltipComponentOption = {
   backgroundColor: "#ffffff",
   borderColor: "#e2e8f0",
   borderWidth: 1,
+  borderRadius: 6,
   textStyle: { color: "#0f172a", fontSize: 12 },
   axisPointer: {
     lineStyle: { color: "#94a3b8" },
@@ -23,8 +24,9 @@ const CHART_TOOLTIP_LIGHT: TooltipComponentOption = {
 
 const CHART_TOOLTIP_DARK: TooltipComponentOption = {
   backgroundColor: "#1e293b",
-  borderColor: "#334155",
+  borderColor: "#2c3745",
   borderWidth: 1,
+  borderRadius: 6,
   textStyle: { color: "#f8fafc", fontSize: 12 },
   axisPointer: {
     lineStyle: { color: "#64748b" },
