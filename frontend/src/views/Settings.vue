@@ -929,9 +929,8 @@ onUnmounted(() => {
 
 .threshold-item {
   padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
 }
 
 .threshold-label {

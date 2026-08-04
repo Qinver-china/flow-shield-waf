@@ -47,16 +47,27 @@ local function current_dims()
     return normalize_dims(cfg.clearance_fingerprint_dims)
 end
 
+-- ngx.req.get_headers() returns a table when a header has multiple values.
+local function header_str(v)
+    if v == nil then
+        return ""
+    end
+    if type(v) == "table" then
+        return table.concat(v, ",")
+    end
+    return tostring(v)
+end
+
 local function dim_value(dim, headers)
     if dim == "ip" then
-        return client_ip()
+        return client_ip() or ""
     end
     if dim == "ua" then
-        return headers["User-Agent"] or ""
+        return header_str(headers["User-Agent"])
     end
     local header = HEADER_DIMS[dim]
     if header then
-        return headers[header] or ""
+        return header_str(headers[header])
     end
     return ""
 end
@@ -70,6 +81,16 @@ local function fingerprint_signature(dims)
     return ngx.md5(table.concat(parts, "\0"))
 end
 
+local function key_field_str(v)
+    if v == nil then
+        return "-"
+    end
+    if type(v) == "table" then
+        return table.concat(v, ",")
+    end
+    return tostring(v)
+end
+
 -- Build a stable signature from rule key fields (rate limit keys) or global dims.
 function _M.dim_signature(spec, ext)
     local keys = spec and spec.keys
@@ -78,7 +99,7 @@ function _M.dim_signature(spec, ext)
         for _, k in ipairs(keys) do
             local field = k.field or k
             local arg = k.arg
-            parts[#parts + 1] = tostring(field) .. "=" .. tostring(ext:get(field, arg) or "-")
+            parts[#parts + 1] = tostring(field) .. "=" .. key_field_str(ext:get(field, arg))
         end
         return ngx.md5(table.concat(parts, "\0"))
     end

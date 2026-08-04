@@ -188,8 +188,6 @@
 
 .fs-detail-section + .fs-detail-section {
   margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--fs-border);
 }
 
 .fs-detail-section__title {
@@ -314,7 +312,7 @@
 .fs-detail-kv__row {
   display: grid;
   line-height: 1.4;
-  grid-template-columns: 100px 1fr;
+  grid-template-columns: 120px 1fr;
   gap: 12px;
   padding: 4px 8px;
   font-size: 12px;
