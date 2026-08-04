@@ -235,7 +235,13 @@ import type { BatchConfig } from "@/types/batch";
 
 const { formatSiteId } = useSiteOptions();
 const { withPaginationSize } = useResponsivePagination();
-const logsPagination = computed(() => withPaginationSize({ pageSize: 10 }));
+const logsPagination = computed(() =>
+  withPaginationSize({
+    pageSize: 20,
+    total: logs.value.length,
+    showTotal: (t: number) => `共 ${t} 条`,
+  }),
+);
 
 const columns = [
   { title: "名称", dataIndex: "name", key: "name" },

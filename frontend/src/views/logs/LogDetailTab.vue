@@ -157,7 +157,6 @@ const pagination = ref({
   pageSize: 20,
   total: 0,
   showTotal: (t: number) => `共 ${t} 条`,
-  showSizeChanger: true,
 });
 
 const resolvedPagination = computed(() => withPaginationSize(pagination.value));

@@ -47,10 +47,11 @@
       <div v-if="showPagination" class="mobile-pagination">
         <a-pagination
           :current="pagination?.current || 1"
-          :page-size="pagination?.pageSize || 10"
+          :page-size="pagination?.pageSize || DEFAULT_PAGE_SIZE"
           :total="pagination?.total || 0"
           :size="pagination?.size || 'small'"
           :show-size-changer="pagination?.showSizeChanger"
+          :page-size-options="pagination?.pageSizeOptions || DEFAULT_PAGE_SIZE_OPTIONS"
           :show-total="showTotal"
           @change="onPageChange"
           @show-size-change="onPageSizeChange"
@@ -62,6 +63,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZE_OPTIONS } from "@/composables/useResponsivePagination";
 
 const props = withDefaults(
   defineProps<{
@@ -113,7 +115,7 @@ const bodyColumns = computed(() =>
 const showPagination = computed(() => {
   if (!props.pagination) return false;
   const total = Number(props.pagination.total || 0);
-  const pageSize = Number(props.pagination.pageSize || 10);
+  const pageSize = Number(props.pagination.pageSize || DEFAULT_PAGE_SIZE);
   return total > pageSize;
 });
 

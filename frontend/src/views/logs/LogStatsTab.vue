@@ -172,7 +172,7 @@ const props = defineProps<{
 const emit = defineEmits<{ "drill-down": [LogDrillDownFilter] }>();
 
 const { formatSiteId } = useSiteOptions();
-const { paginationSize } = useResponsivePagination();
+const { withPaginationSize } = useResponsivePagination();
 const { width } = useBreakpoint();
 const route = useRoute();
 const { isDark } = storeToRefs(useThemeStore());
@@ -231,15 +231,14 @@ const tableColumns = computed(() => [
   { title: "占比", key: "percent", width: 80 },
 ]);
 
-const tablePagination = computed(() => ({
-  current: groupPage.value,
-  pageSize: groupPageSize.value,
-  total: groupItemTotal.value,
-  size: paginationSize.value,
-  showTotal: (total: number) => `共 ${total} 项`,
-  showSizeChanger: true,
-  pageSizeOptions: ["20", "50", "100"],
-}));
+const tablePagination = computed(() =>
+  withPaginationSize({
+    current: groupPage.value,
+    pageSize: groupPageSize.value,
+    total: groupItemTotal.value,
+    showTotal: (total: number) => `共 ${total} 项`,
+  }),
+);
 
 function percentOf(count: number) {
   if (!groupTotal.value) return "-";

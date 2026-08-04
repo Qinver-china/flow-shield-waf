@@ -148,6 +148,8 @@
             :page-size="pageSize"
             :size="paginationSize"
             :show-total="(t: number) => `共 ${t} 条`"
+            :show-size-changer="total > DEFAULT_PAGE_SIZE"
+            :page-size-options="DEFAULT_PAGE_SIZE_OPTIONS"
             @change="onMobilePageChange"
           />
         </div>
@@ -279,7 +281,8 @@ function allowDelete(row: Record<string, any>) {
   return props.canDelete ? props.canDelete(row) : true;
 }
 
-const { isMobile, paginationSize } = useResponsivePagination();
+const { isMobile, paginationSize, withPaginationSize, DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZE_OPTIONS } =
+  useResponsivePagination();
 const route = useRoute();
 const router = useRouter();
 const { buildActions, runAction } = useResourceQuickActions();
@@ -357,13 +360,14 @@ const tableColumns = computed(() => {
   return cols;
 });
 
-const pagination = computed(() => ({
-  current: page.value,
-  pageSize: pageSize.value,
-  total: total.value,
-  size: paginationSize.value,
-  showTotal: (t: number) => `共 ${t} 条`,
-}));
+const pagination = computed(() =>
+  withPaginationSize({
+    current: page.value,
+    pageSize: pageSize.value,
+    total: total.value,
+    showTotal: (t: number) => `共 ${t} 条`,
+  }),
+);
 
 function buildQueryParams() {
   const params: Record<string, unknown> = {
@@ -458,8 +462,9 @@ function onTableChange(pg: any, _filters: any, sorter: any) {
   fetchList();
 }
 
-function onMobilePageChange(p: number) {
+function onMobilePageChange(p: number, size?: number) {
   page.value = p;
+  if (size) pageSize.value = size;
   fetchList();
 }
 
