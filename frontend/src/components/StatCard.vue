@@ -73,7 +73,6 @@ const deltaPrefix = computed(() => {
   border-radius: var(--fs-radius-md);
   background: var(--fs-bg-surface);
   border: 1px solid var(--fs-border);
-  box-shadow: var(--fs-shadow-sm);
   border-top: 3px solid var(--accent);
   transition: 0.2s;
 }

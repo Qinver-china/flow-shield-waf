@@ -125,6 +125,7 @@ function onExecute() {
   max-width: 960px;
   width: 100%;
   box-shadow: var(--fs-shadow-lg);
+  background: var(--fs-bg-modal);
 }
 
 .table-batch-bar-count {

@@ -243,7 +243,7 @@ onMounted(() => {
 <style scoped>
 .app-layout {
   min-height: 100vh;
-  background: var(--fs-bg-page);
+  background: transparent !important;
 }
 
 .app-sider {
@@ -390,7 +390,6 @@ onMounted(() => {
   margin: 0;
   padding: 16px;
   min-height: calc(100vh - 56px);
-  background: var(--fs-bg-page);
 }
 
 .drawer-head {

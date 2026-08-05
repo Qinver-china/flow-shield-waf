@@ -371,7 +371,6 @@ function trafficBaselineClass(w: SiteTrafficWindow) {
   border-radius: var(--fs-radius-md);
   background: var(--fs-bg-surface);
   border: 1px solid var(--fs-border);
-  box-shadow: var(--fs-shadow-sm);
   transition:
     box-shadow var(--fs-transition),
     transform var(--fs-transition),

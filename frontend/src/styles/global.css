@@ -38,7 +38,7 @@ code,
 .fs-card {
   background: var(--fs-bg-surface);
   border-radius: var(--fs-radius-md);
-  box-shadow: var(--fs-shadow-sm);
+  border: 1px solid var(--fs-border);
 }
 
 .fs-section-title {
@@ -55,11 +55,23 @@ code,
   color: var(--fs-text-muted);
 }
 
+.ant-checkbox .ant-checkbox-inner{
+  background: var(--fs-bg-elevated);
+}
+
+.ant-btn-primary,
+.ant-btn-default,
+.ant-btn-dashed,
+.ant-btn-text{
+  box-shadow:none;
+}
+
 /* Dropdown menus: align elevated surface with design tokens (day/night) */
 .ant-dropdown .ant-dropdown-menu,
 .ant-dropdown-menu-submenu .ant-dropdown-menu {
   background-color: var(--fs-bg-elevated) !important;
 }
+
 
 /* Header / sidebar icon buttons (transparent chrome) */
 .fs-header-icon-btn.ant-btn {
@@ -114,15 +126,31 @@ code,
 
 .ant-table-wrapper .ant-table-thead > tr > th:hover,
 .ant-table-wrapper .ant-table-thead > tr > th.ant-table-column-has-sorters:hover,
-.ant-table-wrapper .ant-table-thead > tr > th.ant-table-column-sort,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-column-sort{
+  color: var(--fs-text-primary) !important;
+  background: var(--fs-bg-elevated) !important;
+}
+
+.ant-table-wrapper .ant-table-tbody >tr.ant-table-row:hover>td, .ant-table-wrapper .ant-table-tbody >tr >td.ant-table-cell-row-hover{
+  background: var(--fs-bg-surface);
+}
+
+.ant-table-wrapper .ant-table-cell-fix-left, .ant-table-wrapper .ant-table-cell-fix-right{
+  background: var(--fs-bg-approach) !important;
+}
+
 .ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-left:hover,
 .ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-right:hover {
-  color: var(--fs-text-primary) !important;
-  background-color: var(--fs-border) !important;
+  background: color-mix(in srgb, var(--fs-color-primary) 10%, var(--fs-bg-approach)) !important;
 }
 
 .ant-table-wrapper .ant-table-thead > tr > th .ant-table-column-sorter {
   color: var(--fs-text-muted) !important;
+}
+
+.ant-table-wrapper .ant-table-thead>tr>th.ant-table-cell-fix-right,
+.ant-table-wrapper .ant-table-thead>tr>th.ant-table-cell-fix-left{
+  background: var(--fs-bg-approach) !important;
 }
 
 .ant-table-wrapper .ant-table-thead > tr > th:hover .ant-table-column-sorter,
@@ -172,10 +200,6 @@ code,
   display: none !important;
 }
 
-.ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td {
-  background-color: color-mix(in srgb, var(--fs-color-primary) 6%, var(--fs-bg-surface)) !important;
-}
-
 .ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected > td,
 .ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected:hover > td {
   background-color: color-mix(in srgb, var(--fs-color-primary) 12%, var(--fs-bg-surface)) !important;
@@ -206,6 +230,18 @@ code,
 /* Card 标题底部分割线：相对主题边框减淡一半（日/夜均走 --fs-border） */
 .ant-card .ant-card-head {
   border-bottom-color: color-mix(in srgb, var(--fs-border) 50%, transparent);
+}
+
+.ant-input-affix-wrapper .ant-input{
+  background: transparent !important;
+}
+
+.ant-drawer .ant-drawer-mask{
+  backdrop-filter: blur(2px);
+}
+
+.ant-table-wrapper td.ant-table-column-sort{
+  background: var(--fs-bg-surface) !important;
 }
 
 /* Table pagination: PC keeps default bordered size; mobile is borderless mini */

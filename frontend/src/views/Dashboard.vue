@@ -1875,8 +1875,9 @@ onUnmounted(() => {
 
 .panel-card {
   border-radius: var(--fs-radius-md);
-  box-shadow: var(--fs-shadow-sm);
+  box-shadow: none;
   height: 100%;
+  border: 1px solid var(--fs-border);
 }
 
 .panel-title {

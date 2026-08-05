@@ -7,19 +7,31 @@
   --fs-color-warning: #f59e0b;
   --fs-color-info: #0ea5e9;
 
+  --fs-bg-body:radial-gradient(at 70% 0%, rgba(200, 94, 166, .08) 0px, transparent 50%), radial-gradient(at 90% 90%, rgba(6, 162, 242, .22) 0px, transparent 50%), radial-gradient(at 0% 40%, rgba(20, 184, 166, .18) 0px, transparent 50%);
+
+  --fs-bg-modal: #ffffff;
+  --fs-bg-surface: #f9f9f94e;
+  --fs-bg-muted: #f7fbfe7d;
+  --fs-bg-approach: #f0f1f5;
+
   --fs-bg-page: #f1f5f9;
-  --fs-bg-surface: #ffffff;
   --fs-bg-elevated: #ffffff;
-  --fs-bg-muted: #f8fafc;
+  --fs-bg-header: var(--fs-bg-muted);
+  --fs-bg-hover: var(--fs-bg-page);
+  --fs-bg-selected: color-mix(in srgb, var(--fs-color-primary) 10%, var(--fs-bg-surface));
+  --fs-bg-selected-hover: color-mix(in srgb, var(--fs-color-primary) 18%, var(--fs-bg-surface));
   --fs-bg-sidebar: #081a3d;
   --fs-bg-sidebar-hover: rgba(255, 255, 255, 0.08);
+  --fs-sidebar-text: rgba(255, 255, 255, 0.72);
+  --fs-sidebar-text-active: #ffffff;
+  --fs-sidebar-text-muted: rgba(255, 255, 255, 0.45);
 
   --fs-text-primary: #0f172a;
   --fs-text-secondary: #475569;
   --fs-text-muted: #94a3b8;
   --fs-text-inverse: #f8fafc;
 
-  --fs-border: #e2e8f0;
+  --fs-border: #a4b1b73b;
   --fs-border-strong: #cbd5e1;
 
   --fs-radius-sm: 8px;
@@ -43,18 +55,27 @@
 }
 
 [data-theme="dark"] {
-  --fs-color-primary: #3b82f6;
-  --fs-color-primary-hover: #60a5fa;
+  --fs-color-primary: #5193ff;
+  --fs-color-primary-hover: #6daefe;
   --fs-color-accent: #22c55e;
   --fs-color-accent-muted: rgba(34, 197, 94, 0.15);
   --fs-color-danger: #f87171;
   --fs-color-warning: #fbbf24;
   --fs-color-info: #38bdf8;
 
+  --fs-bg-body:radial-gradient(at 70% 0%, rgba(200, 94, 166, .12) 0px, transparent 50%), radial-gradient(at 90% 90%, rgba(6, 162, 242, .22) 0px, transparent 50%), radial-gradient(at 0% 40%, rgba(20, 184, 166, .18) 0px, transparent 50%);
+  
+  --fs-bg-modal: #101b2e;
+  --fs-bg-surface: #1f2c4952;
+  --fs-bg-muted: #1c213496;
+  --fs-bg-approach: #161d34;
+
   --fs-bg-page: #020617;
-  --fs-bg-surface: #0f172a;
   --fs-bg-elevated: #1e293b;
-  --fs-bg-muted: #1a1e2f;
+  --fs-bg-header: var(--fs-bg-elevated);
+  --fs-bg-hover: var(--fs-bg-muted);
+  --fs-bg-selected: color-mix(in srgb, var(--fs-color-primary) 35%, var(--fs-bg-surface));
+  --fs-bg-selected-hover: color-mix(in srgb, var(--fs-color-primary) 55%, var(--fs-bg-surface));
   --fs-bg-sidebar: #020617;
   --fs-bg-sidebar-hover: rgba(255, 255, 255, 0.06);
 
@@ -63,7 +84,7 @@
   --fs-text-muted: #64748b;
   --fs-text-inverse: #0f172a;
 
-  --fs-border: #334155;
+  --fs-border: #33415560;
   --fs-border-strong: #475569;
 
   --fs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
