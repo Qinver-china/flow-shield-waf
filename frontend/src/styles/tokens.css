@@ -63,7 +63,7 @@
   --fs-color-warning: #fbbf24;
   --fs-color-info: #38bdf8;
 
-  --fs-bg-body:radial-gradient(at 70% 0%, rgba(200, 94, 166, .12) 0px, transparent 50%), radial-gradient(at 90% 90%, rgba(6, 162, 242, .22) 0px, transparent 50%), radial-gradient(at 0% 40%, rgba(20, 184, 166, .18) 0px, transparent 50%);
+  --fs-bg-body:radial-gradient(at 70% 0%, rgba(200, 94, 166, .1) 0px, transparent 50%), radial-gradient(at 90% 90%, rgba(6, 162, 242, .22) 0px, transparent 50%), radial-gradient(at 0% 40%, rgba(20, 184, 166, .18) 0px, transparent 50%);
   
   --fs-bg-modal: #101b2e;
   --fs-bg-surface: #1f2c4952;

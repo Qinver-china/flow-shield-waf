@@ -1,50 +1,33 @@
 <template>
   <a-layout class="app-layout">
-    <a-layout-sider
-      v-if="!isMobile"
-      v-model:collapsed="collapsed"
-      collapsible
-      :trigger="null"
-      class="app-sider"
-      :width="160"
-      :collapsed-width="72"
-    >
+    <a-layout-sider v-if="!isMobile" v-model:collapsed="collapsed" collapsible :trigger="null" class="app-sider"
+      :width="160" :collapsed-width="72">
       <div class="logo" :class="{ collapsed }">
         <app-logo variant="sidebar" :collapsed="collapsed" :show-text="!collapsed" />
       </div>
       <div class="sider-menu-wrap">
-        <a-menu
-          mode="inline"
-          class="app-nav-menu"
-          :selected-keys="[selectedKey]"
-          :open-keys="openKeys"
-          @click="onMenu"
-          @open-change="onOpenChange"
-        >
-        <template v-for="group in menuGroups" :key="group.key">
-          <a-menu-item-group v-if="!collapsed" :title="group.label">
-            <a-menu-item v-for="item in group.items" :key="item.path">
-              <component :is="item.icon" />
-              <span>{{ item.label }}</span>
-            </a-menu-item>
-          </a-menu-item-group>
-          <template v-else>
-            <a-menu-item v-for="item in group.items" :key="item.path">
-              <component :is="item.icon" />
-              <span>{{ item.label }}</span>
-            </a-menu-item>
+        <a-menu mode="inline" class="app-nav-menu" :selected-keys="[selectedKey]" :open-keys="openKeys" @click="onMenu"
+          @open-change="onOpenChange">
+          <template v-for="group in menuGroups" :key="group.key">
+            <a-menu-item-group v-if="!collapsed" :title="group.label">
+              <a-menu-item v-for="item in group.items" :key="item.path">
+                <component :is="item.icon" />
+                <span>{{ item.label }}</span>
+              </a-menu-item>
+            </a-menu-item-group>
+            <template v-else>
+              <a-menu-item v-for="item in group.items" :key="item.path">
+                <component :is="item.icon" />
+                <span>{{ item.label }}</span>
+              </a-menu-item>
+            </template>
           </template>
-        </template>
-      </a-menu>
+        </a-menu>
       </div>
       <div class="sider-footer">
         <a-tooltip :title="collapsed ? '展开菜单' : '收起菜单'">
-          <a-button
-            type="text"
-            class="fs-header-icon-btn sider-collapse-btn"
-            :aria-label="collapsed ? '展开菜单' : '收起菜单'"
-            @click="collapsed = !collapsed"
-          >
+          <a-button type="text" class="fs-header-icon-btn sider-collapse-btn" :aria-label="collapsed ? '展开菜单' : '收起菜单'"
+            @click="collapsed = !collapsed">
             <menu-unfold-outlined v-if="collapsed" />
             <menu-fold-outlined v-else />
           </a-button>
@@ -52,15 +35,8 @@
       </div>
     </a-layout-sider>
 
-    <a-drawer
-      v-if="isMobile"
-      v-model:open="drawerOpen"
-      placement="left"
-      :width="200"
-      :closable="false"
-      class="nav-drawer"
-      :body-style="{ padding: 0, background: 'transparent' }"
-    >
+    <a-drawer v-if="isMobile" v-model:open="drawerOpen" placement="left" :width="200" :closable="false"
+      class="nav-drawer" :body-style="{ padding: 0, background: 'transparent' }">
       <div class="drawer-head">
         <div class="logo">
           <app-logo variant="sidebar" :show-text="true" />
@@ -69,12 +45,7 @@
           <close-outlined />
         </a-button>
       </div>
-      <a-menu
-        mode="inline"
-        class="app-nav-menu"
-        :selected-keys="[selectedKey]"
-        @click="onMenu"
-      >
+      <a-menu mode="inline" class="app-nav-menu" :selected-keys="[selectedKey]" @click="onMenu">
         <template v-for="group in menuGroups" :key="group.key">
           <a-menu-item-group :title="group.label">
             <a-menu-item v-for="item in group.items" :key="item.path">
@@ -89,32 +60,27 @@
     <a-layout class="app-main">
       <a-layout-header class="app-header">
         <div class="header-left">
-          <a-button
-            v-if="isMobile"
-            type="text"
-            class="menu-trigger"
-            @click="drawerOpen = true"
-          >
+          <a-button v-if="isMobile" type="text" class="menu-trigger" @click="drawerOpen = true">
             <menu-outlined />
           </a-button>
           <span class="header-title">{{ pageTitle }}</span>
         </div>
         <div class="header-right">
           <theme-toggle />
-            <a-dropdown placement="bottomRight" :trigger="['click']">
-              <a-button type="text" class="fs-header-icon-btn" aria-label="用户菜单">
-                <user-outlined />
-              </a-button>
-              <template #overlay>
-                <a-menu :selectable="false">
-                  <a-menu-item disabled>
-                    <span class="user-menu-name">{{ auth.username }}</span>
-                  </a-menu-item>
-                  <a-menu-divider />
-                  <a-menu-item @click="logout">退出登录</a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
+          <a-dropdown placement="bottomRight" :trigger="['click']">
+            <a-button type="text" class="fs-header-icon-btn" aria-label="用户菜单">
+              <user-outlined />
+            </a-button>
+            <template #overlay>
+              <a-menu :selectable="false">
+                <a-menu-item disabled>
+                  <span class="user-menu-name">{{ auth.username }}</span>
+                </a-menu-item>
+                <a-menu-divider />
+                <a-menu-item @click="logout">退出登录</a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
         </div>
       </a-layout-header>
       <a-layout-content class="app-content">
@@ -202,8 +168,8 @@ const menuGroups = [
     key: "observe",
     label: "观测",
     items: [
-    { path: "/bots", label: "Bot 库管理", icon: RobotOutlined },
-    { path: "/ip-groups", label: "IP 组管理", icon: GlobalOutlined },
+      { path: "/bots", label: "Bot 库管理", icon: RobotOutlined },
+      { path: "/ip-groups", label: "IP 组管理", icon: GlobalOutlined },
       { path: "/logs", label: "防护日志", icon: FileSearchOutlined },
       { path: "/alerts", label: "预警通知", icon: BellOutlined },
     ],
@@ -350,7 +316,11 @@ onMounted(() => {
 
 @media (max-width: 767px) {
   .app-header {
-    padding:0 4px;
+    padding: 0 4px;
+  }
+
+  .logo {
+    margin: 0;
   }
 }
 
