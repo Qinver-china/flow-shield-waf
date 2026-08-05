@@ -2,7 +2,7 @@
   --fs-color-primary: #3474ff;
   --fs-color-primary-hover: #1656df;
   --fs-color-accent: #22c55e;
-  --fs-color-accent-muted: #dcfce7;
+  --fs-color-accent-muted: rgba(42, 227, 110, 0.15);
   --fs-color-danger: #ef4444;
   --fs-color-warning: #f59e0b;
   --fs-color-info: #0ea5e9;
