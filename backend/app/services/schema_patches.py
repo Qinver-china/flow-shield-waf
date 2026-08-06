@@ -32,6 +32,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_waf_setting_panel_public_url(conn)
     await _ensure_ai_guard_floating_chat_enabled(conn)
     await _ensure_ai_guard_policy_custom_prompt(conn)
+    await _ensure_rule_remark(conn)
 
 
 async def _ensure_resource_block_page_columns(conn) -> None:
@@ -204,3 +205,10 @@ async def _ensure_ai_guard_policy_custom_prompt(conn) -> None:
         return
     await conn.execute(text("ALTER TABLE ai_guard_policy ADD COLUMN custom_prompt TEXT NULL"))
     log.info("schema patch applied: ai_guard_policy.custom_prompt")
+
+
+async def _ensure_rule_remark(conn) -> None:
+    if await _column_exists(conn, "rule", "remark"):
+        return
+    await conn.execute(text("ALTER TABLE rule ADD COLUMN remark VARCHAR(255) NULL"))
+    log.info("schema patch applied: rule.remark")

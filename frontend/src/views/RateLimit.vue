@@ -37,6 +37,9 @@
         <a-form-item label="策略名称" required>
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
+        <a-form-item label="备注">
+          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+        </a-form-item>
         <a-row :gutter="16" style="margin-bottom: 12px;">
           <a-col :xs="24" :sm="16" :md="18">
             <a-form-item label="生效站点（不选=全局）">
@@ -200,7 +203,7 @@ const batchConfig: BatchConfig = {
 const defaultSort: ResourceDefaultSort = { field: "priority", order: "asc" };
 
 const listFilters: ResourceFilterField[] = [
-  { key: "q", label: "搜索", type: "search", placeholder: "策略名称" },
+  { key: "q", label: "搜索", type: "search", placeholder: "策略名称 / 备注" },
   { key: "mode", label: "动作", type: "select", width: "200px", options: modeFilterOptions },
   { key: "enabled", label: "状态", type: "select", width: "140px", options: enabledFilterOptions },
   siteScopeFilterField,
@@ -208,6 +211,7 @@ const listFilters: ResourceFilterField[] = [
 
 const columns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
+  { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "优先级", dataIndex: "priority", width: 90, sorter: true },
   { title: "窗口(s)", dataIndex: "window", width: 90, sorter: true },
   { title: "阈值", dataIndex: "threshold", width: 90, sorter: true },
@@ -218,6 +222,7 @@ const columns: ResourceColumn[] = [
 
 const defaultRecord = () => ({
   name: "",
+  remark: "",
   priority: 100,
   window: 60,
   threshold: 100,

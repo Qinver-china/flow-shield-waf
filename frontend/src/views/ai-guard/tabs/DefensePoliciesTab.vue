@@ -111,6 +111,7 @@ const pagination = reactive({
 
 const columns = [
   { title: "名称", dataIndex: "name", key: "name" },
+  { title: "备注", dataIndex: "remark", key: "remark", ellipsis: true },
   { title: "触发条件", key: "trigger" },
   { title: "应用模式", key: "apply_mode", width: 140 },
   { title: "启用", key: "enabled", width: 80 },

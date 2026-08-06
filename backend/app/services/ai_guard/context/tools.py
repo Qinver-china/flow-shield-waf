@@ -265,6 +265,7 @@ TOOL_DEFINITIONS: list[dict] = [
                     "site_ids": {"type": "array", "items": {"type": "integer"}},
                     "enabled": {"type": "boolean"},
                     "conditions": _CONDITION_SCHEMA,
+                    "remark": {"type": "string"},
                     **_BLOCK_PAGE_PROPERTIES,
                 },
                 "required": ["name", "mode", "conditions"],

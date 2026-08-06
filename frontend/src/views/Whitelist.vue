@@ -32,6 +32,9 @@
         <a-form-item label="名称" required>
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
+        <a-form-item label="备注">
+          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+        </a-form-item>
         <a-form-item label="生效站点（不选=全局）">
           <site-select v-model:value="record.site_ids" :readonly="readonly" class="site-select-block" />
         </a-form-item>
@@ -62,7 +65,7 @@ import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
 const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 
 const listFilters: ResourceFilterField[] = [
-  { key: "q", label: "搜索", type: "search", placeholder: "名称" },
+  { key: "q", label: "搜索", type: "search", placeholder: "名称 / 备注" },
   { key: "enabled", label: "状态", type: "select", options: enabledFilterOptions },
   siteScopeFilterField,
 ];
@@ -73,12 +76,14 @@ const batchConfig: BatchConfig = {
 
 const columns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
+  { title: "备注", dataIndex: "remark", ellipsis: true },
   siteIdsColumn(),
   { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
 ];
 
 const defaultRecord = () => ({
   name: "",
+  remark: "",
   site_ids: [],
   enabled: true,
   conditions: { logic: "and", conditions: [] },

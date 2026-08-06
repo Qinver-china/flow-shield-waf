@@ -36,6 +36,9 @@
         <a-form-item label="名称" required>
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
+        <a-form-item label="备注">
+          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+        </a-form-item>
         <a-row :gutter="16">
           <a-col :xs="24" :sm="10" :md="8">
             <a-form-item label="跳过范围">
@@ -90,7 +93,7 @@ const scopeLabel: Record<string, string> = {
 };
 
 const listFilters: ResourceFilterField[] = [
-  { key: "q", label: "搜索", type: "search", placeholder: "名称" },
+  { key: "q", label: "搜索", type: "search", placeholder: "名称 / 备注" },
   { key: "scope", label: "范围", type: "select", options: exceptionScopeFilterOptions },
   { key: "enabled", label: "状态", type: "select", options: enabledFilterOptions },
   siteScopeFilterField,
@@ -106,6 +109,7 @@ const batchConfig: BatchConfig = {
 
 const columns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
+  { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "范围", key: "scope", dataIndex: "scope", width: 120, slotCell: true, sorter: true },
   siteIdsColumn(),
   { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
@@ -113,6 +117,7 @@ const columns: ResourceColumn[] = [
 
 const defaultRecord = () => ({
   name: "",
+  remark: "",
   scope: "rules",
   site_ids: [],
   enabled: true,

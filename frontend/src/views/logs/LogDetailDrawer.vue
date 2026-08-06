@@ -12,6 +12,10 @@
         <fs-detail-kv :items="summaryItems" />
       </fs-detail-section>
 
+      <fs-detail-section title="客户端识别">
+        <fs-detail-kv :items="clientIdentityItems" />
+      </fs-detail-section>
+
       <fs-detail-section title="请求快照">
         <fs-detail-kv :items="requestItems" />
       </fs-detail-section>
@@ -65,7 +69,7 @@ import FsDetailDrawer from "@/components/FsDetailDrawer.vue";
 import FsDetailKv from "@/components/FsDetailKv.vue";
 import FsDetailSection from "@/components/FsDetailSection.vue";
 import { useSiteOptions } from "@/composables/useSiteOptions";
-import { modeColor, modeLabel, sourceLabel } from "./constants";
+import { modeColor, modeLabel, sourceLabel, botCategoryLabel, uaFamilyOptions } from "./constants";
 import { formatTs } from "./useLogTimeRange";
 import { formatGeoLocation } from "@/utils/geoLabels";
 
@@ -77,6 +81,13 @@ const emit = defineEmits<{ "update:open": [boolean] }>();
 const loading = ref(false);
 const detail = ref<any>(null);
 const fieldMeta = ref<Record<string, { label: string; category: string }>>({});
+
+const uaFamilyLabel = Object.fromEntries(uaFamilyOptions.map((o) => [o.value, o.label]));
+
+function displayValue(value: unknown): string {
+  if (value == null || value === "") return "-";
+  return String(value);
+}
 
 const evaluatedColumns = [
   { title: "分类", dataIndex: "category", width: 120 },
@@ -152,6 +163,26 @@ const summaryItems = computed(() => {
     { label: "请求 ID", value: d.request_id || "-" },
     { label: "站点", value: formatSiteId(d.site_id) },
     { label: "是否拦截", value: d.blocked ? "是" : "否" },
+  ];
+});
+
+const clientIdentityItems = computed(() => {
+  const d = detail.value;
+  if (!d) return [];
+  return [
+    {
+      label: "UA 类型",
+      value: d.ua_family ? uaFamilyLabel[d.ua_family] || d.ua_family : "-",
+    },
+    {
+      label: "Bot 分类",
+      value: d.bot_category ? botCategoryLabel[d.bot_category] || d.bot_category : "-",
+    },
+    { label: "Bot 名称", value: displayValue(d.bot_name) },
+    { label: "操作系统", value: displayValue(d.ua_os) },
+    { label: "浏览器", value: displayValue(d.ua_browser) },
+    { label: "TLS 版本", value: displayValue(d.tls_version) },
+    { label: "JA3 指纹", value: displayValue(d.tls_ja3) },
   ];
 });
 

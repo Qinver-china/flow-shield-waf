@@ -26,12 +26,14 @@ withDefaults(
     placement?: DropdownProps["placement"];
     mouseEnterDelay?: number;
     mouseLeaveDelay?: number;
+    arrow?: boolean;
   }>(),
   {
     trigger: () => ["hover"],
     placement: "bottomLeft",
     mouseEnterDelay: OVERLAY_HOVER_ENTER_DELAY,
     mouseLeaveDelay: OVERLAY_HOVER_LEAVE_DELAY,
+    arrow: false,
   },
 );
 </script>

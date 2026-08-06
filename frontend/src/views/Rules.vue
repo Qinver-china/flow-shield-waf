@@ -37,6 +37,9 @@
         <a-form-item label="规则名称" required>
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
+        <a-form-item label="备注">
+          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+        </a-form-item>
         <a-row :gutter="16">
           <a-col :span="6">
             <a-form-item label="优先级 (小=先)">
@@ -116,7 +119,7 @@ const modeColor: Record<string, string> = {
 };
 
 const filters: ResourceFilterField[] = [
-  { key: "q", label: "搜索", type: "search", placeholder: "规则名称" },
+  { key: "q", label: "搜索", type: "search", placeholder: "规则名称 / 备注" },
   { key: "mode", label: "动作", type: "select", width: "200px", options: modeFilterOptions },
   { key: "enabled", label: "状态", type: "select", width: "140px", options: enabledFilterOptions },
   siteScopeFilterField,
@@ -136,6 +139,7 @@ const batchConfig: BatchConfig = {
 
 const columns: ResourceColumn[] = [
   { title: "名称", dataIndex: "name", sorter: true },
+  { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "优先级", dataIndex: "priority", width: 90, sorter: true },
   { title: "模式", key: "mode", dataIndex: "mode", width: 110, slotCell: true, sorter: true },
   siteIdsColumn(),
@@ -144,6 +148,7 @@ const columns: ResourceColumn[] = [
 
 const defaultRecord = () => ({
   name: "",
+  remark: "",
   mode: "block",
   priority: 100,
   site_ids: [],

@@ -24,6 +24,7 @@ def _rule_resource_fields() -> dict:
             "priority (默认 100)",
             "site_ids (空=全站)",
             "enabled (默认 true)",
+            "remark",
             "custom_block_page_enabled",
             "block_page_status_code",
             "block_page_html",

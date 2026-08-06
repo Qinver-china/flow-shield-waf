@@ -9,9 +9,15 @@ export interface SiteOption {
   enabled: boolean;
 }
 
-function siteLabel(site: SiteOption): string {
+/** Select labels keep domain for disambiguation. */
+function siteSelectLabel(site: SiteOption): string {
   const domains = site.domains?.length ? site.domains.join(", ") : site.domain;
   return `${site.name} (${domains})`;
+}
+
+/** Table / plain display: site name only. */
+function siteDisplayName(site: SiteOption): string {
+  return site.name || site.domain || `#${site.id}`;
 }
 
 let cached: SiteOption[] | null = null;
@@ -26,7 +32,7 @@ export function useSiteOptions() {
   const selectOptions = computed(() =>
     sites.value.map((s) => ({
       value: s.id,
-      label: siteLabel(s),
+      label: siteSelectLabel(s),
       disabled: !s.enabled,
     })),
   );
@@ -50,25 +56,33 @@ export function useSiteOptions() {
     }
   }
 
+  function resolveSiteName(id: number): string {
+    const site = siteMap.value.get(id);
+    return site ? siteDisplayName(site) : `#${id}`;
+  }
+
   function formatSiteIds(ids?: number[] | null): string {
     if (!ids?.length) return "全局";
-    return ids
-      .map((id) => {
-        const site = siteMap.value.get(id);
-        return site ? siteLabel(site) : `#${id}`;
-      })
-      .join("、");
+    return ids.map((id) => resolveSiteName(id)).join("、");
   }
 
   function formatSiteId(id?: number | null): string {
     if (id == null) return "全站";
-    const site = siteMap.value.get(id);
-    return site ? siteLabel(site) : `#${id}`;
+    return resolveSiteName(id);
   }
 
   onMounted(load);
 
-  return { sites, loading, siteMap, selectOptions, formatSiteIds, formatSiteId, load };
+  return {
+    sites,
+    loading,
+    siteMap,
+    selectOptions,
+    resolveSiteName,
+    formatSiteIds,
+    formatSiteId,
+    load,
+  };
 }
 
 export function siteIdsColumn() {
@@ -76,7 +90,7 @@ export function siteIdsColumn() {
     title: "站点",
     key: "site_ids",
     dataIndex: "site_ids",
-    width: 180,
+    width: 200,
     slotCell: true,
   };
 }

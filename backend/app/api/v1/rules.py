@@ -53,8 +53,8 @@ async def list_rules(
 ):
     cond = select(Rule)
     count = select(func.count(Rule.id))
-    cond = apply_q_filter(cond, query.q, Rule.name)
-    count = apply_q_filter(count, query.q, Rule.name)
+    cond = apply_q_filter(cond, query.q, Rule.name, Rule.remark)
+    count = apply_q_filter(count, query.q, Rule.name, Rule.remark)
     cond = apply_enabled_filter(cond, Rule.enabled, query.enabled)
     count = apply_enabled_filter(count, Rule.enabled, query.enabled)
     cond = apply_mode_filter(cond, Rule.mode, query.mode)

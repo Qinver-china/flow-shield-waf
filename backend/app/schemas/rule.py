@@ -10,6 +10,7 @@ class RuleBase(SiteScopeMixin, BlockPageOverrideMixin):
     mode: str = "block"  # observe | block | captcha | js_challenge | slide_captcha
     enabled: bool = True
     conditions: dict | None = None
+    remark: str | None = None
 
 
 class RuleCreate(RuleBase):
@@ -23,6 +24,7 @@ class RuleUpdate(BaseModel):
     mode: str | None = None
     enabled: bool | None = None
     conditions: dict | None = None
+    remark: str | None = None
     custom_block_page_enabled: bool | None = None
     block_page_status_code: int | None = Field(default=None, ge=400, le=599)
     block_page_html: str | None = None
