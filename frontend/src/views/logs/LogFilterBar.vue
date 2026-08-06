@@ -272,6 +272,10 @@ function removeApplied(index: number) {
   display: none;
 }
 
+.log-filter-editor-popover .ant-popover-inner{
+  max-width: 700px;
+}
+
 .time-bar-meta {
   display: flex;
   align-items: center;

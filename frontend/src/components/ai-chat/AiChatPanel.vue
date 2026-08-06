@@ -1,24 +1,15 @@
 <template>
   <x-provider>
-    <div
-      class="ai-chat-panel"
-      :class="{
-        'ai-chat-panel--embedded': embedded,
-        'ai-chat-panel--compact': compact,
-        'ai-chat-panel--sider-collapsed': effectiveCollapsibleSider && !siderVisible,
-      }"
-    >
-      <div
-        v-if="effectiveCollapsibleSider && siderVisible"
-        class="ai-chat-sider-backdrop"
-        @click="siderVisible = false"
-      />
-
-      <aside
-        v-show="!effectiveCollapsibleSider || siderVisible"
-        class="ai-chat-sider"
-        :class="{ 'ai-chat-sider--overlay': effectiveCollapsibleSider }"
-      >
+    <div class="ai-chat-panel" :class="{
+      'ai-chat-panel--embedded': embedded,
+      'ai-chat-panel--compact': compact,
+      'ai-chat-panel--sider-collapsed': effectiveCollapsibleSider && !siderVisible,
+    }">
+      <transition name="fade">
+        <div v-if="effectiveCollapsibleSider && siderVisible" class="ai-chat-sider-backdrop" @click="siderVisible = false" />
+      </transition>
+      <aside class="ai-chat-sider"
+        :class="{ 'ai-chat-sider--overlay': effectiveCollapsibleSider, 'ai-chat-sider--hidden': effectiveCollapsibleSider && !siderVisible }">
         <div class="ai-chat-sider-head">
           <div class="ai-chat-logo">
             <app-logo variant="square" :show-text="false" :collapsed="false" />
@@ -27,49 +18,25 @@
               <span>AI智能助手</span>
             </div>
           </div>
-          <a-button
-            v-if="effectiveCollapsibleSider"
-            type="text"
-            size="small"
-            class="ai-chat-sider-close"
-            aria-label="收起会话列表"
-            @click="siderVisible = false"
-          >
+          <a-button v-if="effectiveCollapsibleSider" type="text" size="small" class="ai-chat-sider-close"
+            aria-label="收起会话列表" @click="siderVisible = false">
             <menu-fold-outlined />
           </a-button>
         </div>
 
-        <a-button
-          type="dashed"
-          block
-          class="ai-chat-new-btn"
-          :disabled="sending"
-          @click="onNewSession"
-        >
+        <a-button type="dashed" block class="ai-chat-new-btn" :disabled="sending" @click="onNewSession">
           <template #icon><plus-outlined /></template>
           新对话
         </a-button>
 
         <a-spin :spinning="sessionsLoading" class="ai-chat-sessions-spin">
-          <conversations
-            class="ai-chat-conversations"
-            :items="conversationItems"
-            :active-key="activeConversationKey"
-            :menu="conversationMenu"
-            groupable
-            :styles="{ item: { padding: '0 8px' } }"
-            @active-change="onConversationSelect"
-          />
+          <conversations class="ai-chat-conversations" :items="conversationItems" :active-key="activeConversationKey"
+            :menu="conversationMenu" groupable :styles="{ item: { padding: '0 8px' } }"
+            @active-change="onConversationSelect" />
         </a-spin>
 
-        <a-button
-          type="text"
-          danger
-          block
-          class="ai-chat-clear-all-btn"
-          :disabled="sending || !sessions.length"
-          @click="clearAllSessions"
-        >
+        <a-button type="text" danger block class="ai-chat-clear-all-btn" :disabled="sending || !sessions.length"
+          @click="clearAllSessions">
           清空所有对话
         </a-button>
       </aside>
@@ -90,86 +57,44 @@
         </div>
 
         <div class="ai-chat-list">
-          <div
-            v-if="messages.length"
-            :key="messageListKey"
-            class="ai-chat-bubbles"
-          >
-            <div
-              v-for="item in bubbleItems"
-              :key="item.key"
-              class="ai-chat-msg"
-              :class="`ai-chat-msg--${item.role}`"
-            >
+          <div v-if="messages.length" :key="messageListKey" class="ai-chat-bubbles">
+            <div v-for="item in bubbleItems" :key="item.key" class="ai-chat-msg" :class="`ai-chat-msg--${item.role}`">
               <div class="ai-chat-msg-stack">
                 <div class="ai-chat-msg-bubble">
                   <a-spin v-if="item.loading" size="small" />
-                  <chat-assistant-content
-                    v-else-if="item.role === 'assistant'"
-                    :content="String(item.content || '')"
-                    :steps="item.steps"
-                  />
-                  <chat-markdown-content
-                    v-else
-                    :content="String(item.content || '')"
-                  />
+                  <chat-assistant-content v-else-if="item.role === 'assistant'" :content="String(item.content || '')"
+                    :steps="item.steps" />
+                  <chat-markdown-content v-else :content="String(item.content || '')" />
                 </div>
 
-                <pending-action-card
-                  v-if="item.action_status === 'pending' && item.pending_action"
-                  class="ai-chat-pending"
-                  :action="item.pending_action"
-                  :message-id="item.messageId"
-                  @confirmed="onActionDone"
-                  @cancelled="clearPending"
-                />
-                <div
-                  v-else-if="item.action_status === 'executed'"
-                  class="ai-chat-action-result ai-chat-action-result--executed"
-                >
+                <pending-action-card v-if="item.action_status === 'pending' && item.pending_action"
+                  class="ai-chat-pending" :action="item.pending_action" :message-id="item.messageId"
+                  @confirmed="onActionDone" @cancelled="clearPending" />
+                <div v-else-if="item.action_status === 'executed'"
+                  class="ai-chat-action-result ai-chat-action-result--executed">
                   已确认执行该操作
                 </div>
-                <div
-                  v-else-if="item.action_status === 'cancelled'"
-                  class="ai-chat-action-result ai-chat-action-result--cancelled"
-                >
+                <div v-else-if="item.action_status === 'cancelled'"
+                  class="ai-chat-action-result ai-chat-action-result--cancelled">
                   已取消执行该操作
                 </div>
               </div>
             </div>
           </div>
           <div v-else class="ai-chat-welcome">
-            <welcome
-              variant="borderless"
-              :icon="welcomeIcon"
-              title="你好，我是流盾 AI 助手"
-              description="可帮你查询日志、分析攻击、生成防护规则与 CC 策略。建议先生成观察规则，确认无误后再拦截。"
-            />
+            <welcome variant="borderless" :icon="welcomeIcon" title="你好，我是流盾 AI 助手"
+              description="可帮你查询日志、分析攻击、生成防护规则与 CC 策略。建议先生成观察规则，确认无误后再拦截。" />
             <div class="ai-chat-prompt-grid">
-              <prompts
-                :items="welcomePrompts"
-                wrap
-                @item-click="onPromptClick"
-              />
+              <prompts :items="welcomePrompts" wrap @item-click="onPromptClick" />
             </div>
           </div>
         </div>
 
         <div class="ai-chat-sender-wrap">
-          <prompts
-            v-if="!messages.length"
-            class="ai-chat-sender-prompts"
-            :items="senderPrompts"
-            wrap
-            @item-click="onPromptClick"
-          />
-          <sender
-            v-model:value="input"
-            class="ai-chat-sender"
-            :loading="sending"
-            placeholder="描述你的需求，例如：生成防 XSS 观察规则"
-            @submit="send()"
-          />
+          <prompts v-if="!messages.length" class="ai-chat-sender-prompts" :items="senderPrompts" wrap
+            @item-click="onPromptClick" />
+          <sender v-model:value="input" class="ai-chat-sender" :loading="sending" placeholder="描述你的需求，例如：生成防 XSS 观察规则"
+            @submit="send()" />
         </div>
       </section>
     </div>
@@ -403,7 +328,7 @@ function onConversationSelect(key: string) {
   flex-direction: column;
   gap: 12px;
   padding: 16px 12px;
-  background: color-mix(in srgb, var(--fs-bg-muted) 70%, var(--fs-bg-surface));
+  background: linear-gradient(294deg, color-mix(in srgb, #29b8f3 10%, var(--fs-bg-modal)) 0%, var(--fs-bg-modal) 100%);
   border-right: 1px solid var(--fs-border);
 }
 
@@ -414,6 +339,11 @@ function onConversationSelect(key: string) {
   bottom: 0;
   z-index: 5;
   box-shadow: 8px 0 24px rgba(15, 23, 42, 0.12);
+  transition: transform 0.2s ease;
+}
+
+.ai-chat-panel--sider-collapsed .ai-chat-sider--overlay{
+  transform: translateX(-105%);
 }
 
 .ai-chat-sider-head {
@@ -527,10 +457,6 @@ function onConversationSelect(key: string) {
   display: flex;
   flex-direction: column;
   padding: 16px 0 12px;
-}
-
-.ai-chat-panel--sider-collapsed .ai-chat-main {
-  padding-top: 8px;
 }
 
 .ai-chat-toolbar {

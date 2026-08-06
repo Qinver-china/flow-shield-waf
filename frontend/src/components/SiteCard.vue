@@ -172,7 +172,7 @@
       <a-button type="link" size="small" @click="emit('logs')">日志</a-button>
       <a-button type="link" size="small" @click="goStats({})">统计</a-button>
       <span class="site-card__more">
-        <a-dropdown>
+        <a-dropdown :arrow="true">
           <a-button type="link" size="small">更多</a-button>
           <template #overlay>
             <a-menu :selectable="false">

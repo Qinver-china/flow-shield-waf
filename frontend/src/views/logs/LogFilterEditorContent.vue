@@ -125,8 +125,8 @@
     </a-button>
 
     <div class="filter-editor-actions">
-      <a-button type="primary" @click="emit('apply')">应用</a-button>
       <a-button @click="emit('cancel')">取消</a-button>
+      <a-button type="primary" @click="emit('apply')">应用</a-button>
     </div>
   </div>
 </template>
@@ -285,14 +285,18 @@ function boolOptions(condition: LogFilterCondition) {
   margin-top: 4px;
   padding-inline: 0;
 }
+.ant-drawer-body .add-and-btn{
+  width: 100%;
+}
 
 .filter-editor-actions {
   display: flex;
-  justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid var(--fs-border);
+}
+.filter-editor-actions >*{
+  flex: 1;
 }
 
 @media (max-width: 1023px) {

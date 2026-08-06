@@ -90,8 +90,22 @@ code,
     color: var(--fs-text-muted);
 }
 
-.ant-checkbox .ant-checkbox-inner {
+.ant-dropdown{
+    min-width: 80px !important;
+}
+
+.ant-drawer .ant-drawer-close{
+    margin-right: -6px;
+    order: 2;
+}
+
+.ant-checkbox:not(.ant-checkbox-checked) .ant-checkbox-inner {
     background: var(--fs-bg-elevated);
+}
+.ant-checkbox-indeterminate .ant-checkbox-inner:after {
+    width: 10px;
+    height: 3px;
+    border-radius: 10px;
 }
 
 .ant-btn-primary,

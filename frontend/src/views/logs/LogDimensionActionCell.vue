@@ -1,7 +1,7 @@
 <template>
   <span class="dimension-cell">
     <template v-if="actions.length">
-      <a-dropdown :trigger="['click']" placement="bottomLeft">
+      <a-dropdown :trigger="['click']" placement="bottomLeft" :arrow="true">
         <a
           v-if="variant === 'link'"
           class="dimension-link"

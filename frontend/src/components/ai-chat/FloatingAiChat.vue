@@ -214,17 +214,15 @@ function goFullPage() {
   right: 20px;
   bottom: 20px;
   z-index: 1100;
-  width: min(720px, calc(100vw - 40px));
+  width: min(600px, calc(100vw - 40px));
   height: min(720px, calc(100vh - 40px));
   display: flex;
   flex-direction: column;
   border-radius: var(--fs-radius-lg);
   overflow: hidden;
-  background: var(--fs-bg-surface);
-  border: 1px solid color-mix(in srgb, #8b5cf6 18%, var(--fs-border));
-  box-shadow:
-    0 16px 48px rgba(15, 23, 42, 0.18),
-    0 0 0 1px color-mix(in srgb, #8b5cf6 8%, transparent);
+  background: var(--fs-bg-modal);
+  border: 1px solid var(--fs-border);
+  box-shadow: 0px 0px 12px 5px #5353531c;
 }
 
 .ai-float-panel--mobile {

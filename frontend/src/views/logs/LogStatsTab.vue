@@ -63,7 +63,7 @@
         <div class="chart-block">
           <div class="chart-block-header">
             <div class="chart-block-title">命中时间趋势</div>
-            <a-dropdown :trigger="['click']" placement="bottomRight">
+            <a-dropdown :trigger="['click']" placement="bottomRight" :arrow="true">
               <button type="button" class="granularity-trigger" @click.prevent>
                 {{ trendGranularityLabel }}
                 <down-outlined />

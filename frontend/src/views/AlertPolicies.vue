@@ -3,14 +3,6 @@
     <template #actions>
       <a-button type="primary" @click="openCreate">新增预警规则</a-button>
     </template>
-
-    <a-alert
-      type="info"
-      show-icon
-      style="margin-bottom: 16px"
-      message="当满足下方条件时，系统将通过所选通知通道提醒管理员。建议优先配置「流量高于基线」与「拦截次数超过阈值」组合。"
-    />
-
     <fs-data-table
       :columns="columns"
       :data-source="rows"
@@ -67,7 +59,8 @@
       </template>
     </fs-data-table>
 
-    <a-card title="最近通知记录" class="fs-card" style="margin-top: 16px" size="small">
+    <div>
+      <h3>最近通知记录</h3>
       <a-table
         :columns="logColumns"
         :data-source="logs"
@@ -89,7 +82,7 @@
           </template>
         </template>
       </a-table>
-    </a-card>
+    </div>
 
     <fs-form-drawer
       v-model:open="modalOpen"

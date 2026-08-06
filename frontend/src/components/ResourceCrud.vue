@@ -126,7 +126,7 @@
           <div class="mobile-card-actions">
             <a-button size="small" @click="openView(row)">查看</a-button>
             <a-button size="small" type="primary" ghost @click="openEdit(row)">编辑</a-button>
-            <a-dropdown v-if="mobileMoreActions(row).length" class="mobile-card-more">
+            <a-dropdown v-if="mobileMoreActions(row).length" class="mobile-card-more" :arrow="true">
               <a-button size="small">更多</a-button>
               <template #overlay>
                 <a-menu :selectable="false">

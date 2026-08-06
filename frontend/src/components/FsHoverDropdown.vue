@@ -1,5 +1,6 @@
 <template>
   <a-dropdown
+    :arrow="arrow"
     :trigger="trigger"
     :placement="placement"
     :mouse-enter-delay="mouseEnterDelay"

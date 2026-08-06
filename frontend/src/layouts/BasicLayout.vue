@@ -67,7 +67,7 @@
         </div>
         <div class="header-right">
           <theme-toggle />
-          <a-dropdown placement="bottomRight" :trigger="['click']">
+          <a-dropdown placement="bottomRight" :trigger="['click']" :arrow="true">
             <a-button type="text" class="fs-header-icon-btn" aria-label="用户菜单">
               <user-outlined />
             </a-button>
