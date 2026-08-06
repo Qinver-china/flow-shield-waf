@@ -13,6 +13,8 @@ class DashboardHealthOut(BaseModel):
     database: str
     redis: str
     clickhouse: str
+    engine: str
+    worker: str
     rule_sync: RuleSyncHealthOut
 
 

@@ -4,6 +4,7 @@ from app.api.v1 import (
     ai_guard,
     alert_policies,
     auth,
+    backup,
     blacklist,
     bot_categories,
     bots,
@@ -27,6 +28,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(meta.router, prefix="/meta", tags=["meta"])
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
+api_router.include_router(backup.router, prefix="/backup", tags=["backup"])
 api_router.include_router(
     notification_channels.router,
     prefix="/notification-channels",

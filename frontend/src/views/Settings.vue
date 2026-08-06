@@ -1,5 +1,5 @@
 <template>
-  <page-shell title="系统设置" description="按模块管理账户、防护挑战、日志采样、通知与调试选项">
+  <page-shell title="系统设置" description="按模块管理账户、防护挑战、日志采样、通知、调试与配置备份">
     <a-tabs v-model:activeKey="activeTab" size="large" class="settings-tabs fs-tabs-animated">
       <a-tab-pane key="account" tab="账户安全" />
       <a-tab-pane key="display" tab="显示设置" />
@@ -8,6 +8,7 @@
       <a-tab-pane key="logging" tab="日志采样" />
       <a-tab-pane key="notify" tab="通知通道" />
       <a-tab-pane key="debug" tab="调试模式" />
+      <a-tab-pane key="backup" tab="导出/导入" />
     </a-tabs>
     <fs-slide-transition :transition-key="activeTab">
       <template v-if="activeTab === 'account'">
@@ -413,6 +414,123 @@
           </a-form>
         </a-card>
       </template>
+      <template v-if="activeTab === 'backup'">
+        <a-card class="settings-panel backup-panel" :bordered="false">
+          <div class="backup-mode">
+            <button
+              type="button"
+              class="backup-mode__btn"
+              :class="{ 'is-active': backupMode === 'export' }"
+              @click="backupMode = 'export'"
+            >
+              导出配置
+            </button>
+            <button
+              type="button"
+              class="backup-mode__btn"
+              :class="{ 'is-active': backupMode === 'import' }"
+              @click="backupMode = 'import'"
+            >
+              导入配置
+            </button>
+          </div>
+
+          <p class="backup-lead">
+            <template v-if="backupMode === 'export'">
+              勾选要备份的模块并下载 JSON。证书含私钥，请妥善保管。
+            </template>
+            <template v-else>
+              上传此前导出的 JSON。同名或同域名会更新；导入后自动下发规则并尝试重载引擎。
+            </template>
+          </p>
+
+          <template v-if="backupMode === 'export'">
+            <div class="backup-block">
+              <div class="backup-block__head">
+                <span class="backup-block__title">导出模块</span>
+                <a class="backup-block__link" @click="selectAllExportSections">全选</a>
+              </div>
+              <div class="backup-checks">
+                <label
+                  v-for="item in backupSectionOptions"
+                  :key="item.key"
+                  class="backup-check"
+                  :class="{ 'is-on': exportSections.includes(item.key) }"
+                >
+                  <a-checkbox
+                    :checked="exportSections.includes(item.key)"
+                    @change="(e: any) => toggleExportSection(item.key, e.target.checked)"
+                  >
+                    {{ item.label }}
+                  </a-checkbox>
+                </label>
+              </div>
+            </div>
+            <div class="backup-footer">
+              <a-button
+                type="primary"
+                :loading="exporting"
+                :disabled="!exportSections.length"
+                @click="runExport"
+              >
+                导出 JSON
+              </a-button>
+            </div>
+          </template>
+
+          <template v-else>
+            <a-upload-dragger
+              class="backup-drop"
+              :before-upload="onBackupFile"
+              :show-upload-list="false"
+              accept=".json,application/json"
+            >
+              <p class="backup-drop__icon"><inbox-outlined /></p>
+              <p class="backup-drop__title">
+                {{ importFileName || "点击或拖拽 JSON 备份文件到此处" }}
+              </p>
+              <p class="backup-drop__hint">仅支持流盾导出的 flow-shield-backup 文件</p>
+            </a-upload-dragger>
+
+            <div v-if="importPayload" class="backup-block">
+              <div class="backup-block__head">
+                <span class="backup-block__title">导入模块</span>
+                <a class="backup-block__link" @click="selectAllImportSections">全选</a>
+              </div>
+              <div class="backup-checks">
+                <label
+                  v-for="item in importSectionOptions"
+                  :key="item.key"
+                  class="backup-check"
+                  :class="{ 'is-on': importSections.includes(item.key) }"
+                >
+                  <a-checkbox
+                    :checked="importSections.includes(item.key)"
+                    @change="(e: any) => toggleImportSection(item.key, e.target.checked)"
+                  >
+                    {{ item.label }}
+                  </a-checkbox>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="importResult" class="backup-result-line">
+              {{ importResultMessage }}
+            </div>
+
+            <div class="backup-footer">
+              <a-button
+                type="primary"
+                :loading="importing"
+                :disabled="!importPayload || !importSections.length"
+                @click="runImport"
+              >
+                开始导入
+              </a-button>
+            </div>
+          </template>
+        </a-card>
+      </template>
     </fs-slide-transition>
   </page-shell>
 </template>
@@ -420,7 +538,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { message } from "ant-design-vue";
-import { api } from "@/api";
+import { InboxOutlined } from "@ant-design/icons-vue";
+import http, { api } from "@/api";
 import { useAuthStore } from "@/stores/auth";
 import { trafficWindowLabels } from "@/views/logs/constants";
 import NotificationChannelsCard from "@/components/NotificationChannelsCard.vue";
@@ -433,6 +552,168 @@ import type { TimezoneOption } from "@/stores/appSettings";
 const auth = useAuthStore();
 const appSettings = useAppSettingsStore();
 const activeTab = ref("account");
+
+interface BackupSectionOption {
+  key: string;
+  label: string;
+}
+
+const backupMode = ref<"export" | "import">("export");
+const backupSectionOptions = ref<BackupSectionOption[]>([]);
+const exportSections = ref<string[]>([]);
+const exporting = ref(false);
+const importing = ref(false);
+const importFileName = ref("");
+const importPayload = ref<any>(null);
+const importSections = ref<string[]>([]);
+const importResult = ref<any>(null);
+
+const importSectionOptions = computed(() => {
+  const available = new Set<string>(importPayload.value?.sections || []);
+  return backupSectionOptions.value.filter((item) => available.has(item.key));
+});
+
+const importResultMessage = computed(() => {
+  const result = importResult.value;
+  if (!result) return "";
+  const parts = Object.entries(result.counts || {})
+    .filter(([, n]) => Number(n) > 0)
+    .map(([k, n]) => `${k}: ${n}`);
+  const sync = result.engine_synced ? "引擎已同步" : "引擎同步未完成";
+  return parts.length ? `已处理 ${parts.join("，")}；${sync}` : sync;
+});
+
+function selectAllExportSections() {
+  exportSections.value = backupSectionOptions.value.map((item) => item.key);
+}
+
+function selectAllImportSections() {
+  importSections.value = importSectionOptions.value.map((item) => item.key);
+}
+
+function toggleExportSection(key: string, checked: boolean) {
+  if (checked) {
+    if (!exportSections.value.includes(key)) {
+      exportSections.value = [...exportSections.value, key];
+    }
+    return;
+  }
+  exportSections.value = exportSections.value.filter((item) => item !== key);
+}
+
+function toggleImportSection(key: string, checked: boolean) {
+  if (checked) {
+    if (!importSections.value.includes(key)) {
+      importSections.value = [...importSections.value, key];
+    }
+    return;
+  }
+  importSections.value = importSections.value.filter((item) => item !== key);
+}
+
+async function loadBackupSections() {
+  const resp = await api.get("/api/v1/backup/sections");
+  backupSectionOptions.value = resp.data || [];
+  if (!exportSections.value.length) {
+    selectAllExportSections();
+  }
+}
+
+function downloadJson(filename: string, payload: unknown) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function runExport() {
+  if (!exportSections.value.length) {
+    message.warning("请至少勾选一项导出内容");
+    return;
+  }
+  exporting.value = true;
+  try {
+    const resp = (await http.post(
+      "/api/v1/backup/export",
+      { sections: exportSections.value },
+      { timeout: 60000 },
+    )) as { data: any };
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    downloadJson(`flow-shield-backup-${stamp}.json`, resp.data);
+    message.success("配置已导出");
+  } finally {
+    exporting.value = false;
+  }
+}
+
+function onBackupFile(file: File) {
+  importResult.value = null;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result || ""));
+      if (!parsed || parsed.format !== "flow-shield-waf-backup") {
+        message.error("不是有效的流盾备份文件");
+        importPayload.value = null;
+        importFileName.value = "";
+        return;
+      }
+      importPayload.value = parsed;
+      importFileName.value = file.name;
+      const available = new Set<string>(parsed.sections || []);
+      importSections.value = backupSectionOptions.value
+        .map((item) => item.key)
+        .filter((key) => available.has(key));
+      message.success("备份文件已解析");
+    } catch {
+      message.error("无法解析 JSON 文件");
+      importPayload.value = null;
+      importFileName.value = "";
+    }
+  };
+  reader.readAsText(file);
+  return false;
+}
+
+async function runImport() {
+  if (!importPayload.value || !importSections.value.length) {
+    message.warning("请先选择备份文件并勾选导入项");
+    return;
+  }
+  importing.value = true;
+  importResult.value = null;
+  try {
+    const resp = (await http.post(
+      "/api/v1/backup/import",
+      {
+        sections: importSections.value,
+        payload: importPayload.value,
+      },
+      { timeout: 120000 },
+    )) as { data: any; message?: string };
+    importResult.value = resp.data;
+    if (resp.message && resp.message !== "ok") {
+      message.warning(resp.message);
+    } else {
+      message.success("导入完成");
+    }
+    if (importSections.value.includes("system_settings")) {
+      await loadDisplay();
+      await load();
+      await loadLogging();
+      await loadDebug();
+      await loadBlockPage();
+      await loadCaptchaFooter();
+    }
+  } finally {
+    importing.value = false;
+  }
+}
 
 const accountProfile = reactive({
   username: auth.username || "",
@@ -832,6 +1113,7 @@ onMounted(async () => {
   await loadDisplay();
   await loadBlockPage();
   await loadCaptchaFooter();
+  await loadBackupSections();
   if (activeTab.value === "logging") startTrafficTimer();
 });
 
@@ -990,5 +1272,166 @@ onUnmounted(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.backup-section-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.backup-file-name {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.backup-result {
+  margin: 12px 0;
+}
+
+.backup-panel :deep(.ant-card-body) {
+  max-width: 720px;
+}
+
+.backup-mode {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fs-border) 55%, transparent);
+  margin-bottom: 14px;
+}
+
+.backup-mode__btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--fs-text-secondary, #64748b);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.backup-mode__btn.is-active {
+  background: var(--fs-bg-surface);
+  color: var(--fs-text-primary, #0f172a);
+  box-shadow: var(--fs-shadow-sm);
+}
+
+.backup-lead {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fs-text-secondary, #64748b);
+}
+
+.backup-block {
+  margin-bottom: 18px;
+}
+
+.backup-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.backup-block__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fs-text-primary, #334155);
+}
+
+.backup-block__link {
+  font-size: 13px;
+}
+
+.backup-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.backup-check {
+  display: flex;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fs-border) 35%, transparent);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.backup-check.is-on {
+  background: color-mix(in srgb, var(--fs-color-primary) 10%, transparent);
+}
+
+.backup-check :deep(.ant-checkbox-wrapper) {
+  align-items: flex-start;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.backup-drop {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.backup-drop :deep(.ant-upload-drag) {
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--fs-border) 28%, transparent);
+}
+
+.backup-drop__icon {
+  margin-bottom: 8px;
+  font-size: 28px;
+  color: var(--fs-color-primary);
+}
+
+.backup-drop__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fs-text-primary, #334155);
+}
+
+.backup-drop__hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--fs-text-secondary, #64748b);
+}
+
+.backup-result-line {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fs-text-primary, #334155);
+  background: color-mix(in srgb, #16a34a 12%, transparent);
+}
+
+.backup-footer {
+  display: flex;
+  justify-content: flex-start;
+}
+
+@media (max-width: 640px) {
+  .backup-checks {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

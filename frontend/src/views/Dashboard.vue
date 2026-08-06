@@ -15,7 +15,7 @@
               <div class="health-item" v-for="item in healthItems" :key="item.key">
                 <span class="health-dot" :class="item.status" />
                 <span class="health-text">
-                  {{ item.label }} {{ item.status === "ok" ? "正常" : "异常" }}
+                  {{ item.label }} {{ healthStatusSuffix(item.status) }}
                 </span>
               </div>
               <a-tag v-if="feed.pending_ai_incidents > 0" color="orange" class="health-ai-link" @click="goAiGuard">
@@ -412,6 +412,8 @@ const health = reactive<any>({
   database: "ok",
   redis: "ok",
   clickhouse: "ok",
+  engine: "ok",
+  worker: "ok",
   rule_sync: { status: "ok", version: null },
 });
 const feed = reactive<{ items: any[]; pending_ai_incidents: number }>({
@@ -720,10 +722,19 @@ function enabledSub(item: CountPair) {
   return `${item.enabled} 项已启用`;
 }
 
+function healthStatusSuffix(status: string) {
+  if (status === "ok") return "正常";
+  if (status === "stale") return "滞后";
+  return "异常";
+}
+
 const healthItems = computed(() => [
-  { key: "database", label: "MySQL", status: health.database },
+  { key: "database", label: "SQLite", status: health.database },
   { key: "redis", label: "Redis", status: health.redis },
   { key: "clickhouse", label: "ClickHouse", status: health.clickhouse },
+  { key: "engine", label: "WAF 引擎", status: health.engine },
+  { key: "worker", label: "后台 Worker", status: health.worker },
+  { key: "rule_sync", label: "规则同步", status: health.rule_sync?.status || "error" },
 ]);
 
 const resourceCards = computed(() => [

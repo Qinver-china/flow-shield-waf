@@ -108,7 +108,7 @@ const batchConfig: BatchConfig = {
 };
 
 const columns: ResourceColumn[] = [
-  { title: "名称", dataIndex: "name", sorter: true },
+  { title: "名称", dataIndex: "name", width: 120, ellipsis: true, sorter: true },
   { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "范围", key: "scope", dataIndex: "scope", width: 120, slotCell: true, sorter: true },
   siteIdsColumn(),

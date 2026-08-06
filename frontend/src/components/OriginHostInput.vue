@@ -73,12 +73,11 @@ function onDropdownChange(open: boolean) {
 .origin-option-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
-  color: #0f172a;
 }
 
 .origin-option-desc {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--fs-text-muted);
   white-space: nowrap;
 }
 </style>

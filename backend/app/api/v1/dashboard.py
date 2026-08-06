@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -90,6 +91,44 @@ async def overview(
     })
 
 
+async def _probe_engine() -> str:
+    """OpenResty must answer /waf-health or site reload / traffic protection fail."""
+    import httpx
+
+    from app.core.config import settings
+
+    url = (settings.engine_health_url or "").strip()
+    if not url:
+        return "error"
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(url)
+        if resp.status_code == 200 and "ok" in resp.text.lower():
+            return "ok"
+    except Exception:  # noqa: BLE001
+        pass
+    return "error"
+
+
+async def _probe_worker(redis_ok: bool) -> str:
+    """Worker publishes system metrics; stale/missing snapshot means worker is down."""
+    if not redis_ok:
+        return "error"
+    try:
+        from app.services.system_metrics import read_system_metrics_snapshot
+
+        snapshot = await read_system_metrics_snapshot()
+        if not snapshot:
+            return "error"
+        updated_at = int(snapshot.get("updated_at") or 0)
+        # Sample every 5s after 60s warm-up; allow a generous gap before flagging.
+        if updated_at <= 0 or (time.time() - updated_at) > 180:
+            return "error"
+        return "ok"
+    except Exception:  # noqa: BLE001
+        return "error"
+
+
 @router.get("/health")
 async def health(
     db: AsyncSession = Depends(get_db),
@@ -123,11 +162,18 @@ async def health(
     except Exception:  # noqa: BLE001
         clickhouse_status = "error"
 
+    engine_status, worker_status = await asyncio.gather(
+        _probe_engine(),
+        _probe_worker(redis_status == "ok"),
+    )
+
     return ok(
         DashboardHealthOut(
             database=database_status,
             redis=redis_status,
             clickhouse=clickhouse_status,
+            engine=engine_status,
+            worker=worker_status,
             rule_sync=rule_sync,
         ).model_dump()
     )

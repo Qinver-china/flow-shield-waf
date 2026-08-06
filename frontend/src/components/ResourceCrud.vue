@@ -609,12 +609,13 @@ async function save() {
     const payload = props.preparePayload
       ? props.preparePayload({ ...record }, drawerMode.value)
       : record;
-    if (record.id && drawerMode.value === "edit") {
-      await api.put(`${props.apiBase}/${record.id}`, payload);
-    } else {
-      await api.post(props.apiBase, payload);
-    }
-    message.success("保存成功");
+    const resp =
+      record.id && drawerMode.value === "edit"
+        ? await api.put(`${props.apiBase}/${record.id}`, payload)
+        : await api.post(props.apiBase, payload);
+    const tip = resp?.message && resp.message !== "ok" ? resp.message : "保存成功";
+    if (resp?.message && resp.message !== "ok") message.warning(tip);
+    else message.success(tip);
     drawerOpen.value = false;
     fetchList();
   } catch (err: any) {

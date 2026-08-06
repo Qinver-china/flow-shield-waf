@@ -210,7 +210,7 @@ const listFilters: ResourceFilterField[] = [
 ];
 
 const columns: ResourceColumn[] = [
-  { title: "名称", dataIndex: "name", sorter: true },
+  { title: "名称", dataIndex: "name", width: 120, ellipsis: true, sorter: true },
   { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "优先级", dataIndex: "priority", width: 90, sorter: true },
   { title: "窗口(s)", dataIndex: "window", width: 90, sorter: true },

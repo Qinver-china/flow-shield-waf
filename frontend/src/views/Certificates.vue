@@ -52,7 +52,7 @@
       <a-form layout="vertical">
           <fs-form-section title="基本信息">
             <a-form-item label="证书名称" required>
-              <a-input v-model:value="form.name" placeholder="例如：aaa.zibll.com 主站证书" />
+              <a-input v-model:value="form.name" placeholder="" />
             </a-form-item>
             <a-form-item label="备注">
               <a-input v-model:value="form.remark" placeholder="可选" />

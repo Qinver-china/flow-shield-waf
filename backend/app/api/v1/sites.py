@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,13 +34,17 @@ from app.services.traffic_intel.timezone import get_traffic_timezone
 from app.services.traffic_intel.windows import is_baseline_stable
 
 router = APIRouter()
+log = logging.getLogger("waf.api.sites")
 
 SITE_CARD_TRAFFIC_WINDOWS_SEC = (300, 1800, 3600, 86400)
 
+_ENGINE_RELOAD_WARN = "站点已保存，但 WAF 引擎配置重载失败，请检查引擎状态后再次保存或重启容器"
 
-async def _sync(db: AsyncSession) -> None:
+
+async def _sync(db: AsyncSession) -> bool:
+    """Publish rules and regenerate nginx conf. Returns whether engine reload OK."""
     await rule_sync.publish(db)
-    await nginx_conf.regenerate(db)
+    return await nginx_conf.regenerate(db)
 
 
 def _validate_listen(*, listen_http: bool, listen_https: bool) -> None:
@@ -276,7 +281,10 @@ async def create_site(
     db.add(site)
     await db.commit()
     await db.refresh(site)
-    await _sync(db)
+    reload_ok = await _sync(db)
+    if not reload_ok:
+        log.warning("create_site id=%s: engine reload failed after commit", site.id)
+        return ok(SiteOut.from_site(site).model_dump(), message=_ENGINE_RELOAD_WARN)
     return ok(SiteOut.from_site(site).model_dump())
 
 
@@ -342,7 +350,10 @@ async def update_site(
 
     await db.commit()
     await db.refresh(site)
-    await _sync(db)
+    reload_ok = await _sync(db)
+    if not reload_ok:
+        log.warning("update_site id=%s: engine reload failed after commit", site.id)
+        return ok(SiteOut.from_site(site).model_dump(), message=_ENGINE_RELOAD_WARN)
     return ok(SiteOut.from_site(site).model_dump())
 
 
@@ -357,5 +368,8 @@ async def delete_site(
         raise HTTPException(status_code=404, detail="站点不存在")
     await db.delete(site)
     await db.commit()
-    await _sync(db)
+    reload_ok = await _sync(db)
+    if not reload_ok:
+        log.warning("delete_site id=%s: engine reload failed after commit", site_id)
+        return ok(message=_ENGINE_RELOAD_WARN)
     return ok()

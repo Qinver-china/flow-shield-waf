@@ -206,8 +206,12 @@ def render_site(site: Site) -> str:
     return main_block
 
 
-async def regenerate(db: AsyncSession) -> None:
-    """Rewrite conf.d for all enabled sites, drop stale files, trigger reload."""
+async def regenerate(db: AsyncSession) -> bool:
+    """Rewrite conf.d for all enabled sites, drop stale files, trigger reload.
+
+    Returns True if engine reload succeeded. Conf files are always written first;
+    callers that already committed DB state should treat False as a soft failure.
+    """
     conf_dir = settings.engine_conf_dir
     os.makedirs(conf_dir, exist_ok=True)
 
@@ -237,12 +241,17 @@ async def regenerate(db: AsyncSession) -> None:
             except OSError:
                 pass
 
-    await trigger_reload()
-    log.info("regenerated %d site confs", len(wanted))
+    reloaded = await trigger_reload()
+    log.info("regenerated %d site confs (reload_ok=%s)", len(wanted), reloaded)
+    return reloaded
 
 
-def _reload_engine_sync() -> None:
-    """Reload OpenResty as the backend process (root); Lua workers cannot."""
+def _reload_engine_sync() -> bool:
+    """Reload OpenResty as the backend process (root); Lua workers cannot.
+
+    Returns False when the engine is down or reload fails, instead of raising —
+    site rows may already be committed and must not be rolled back by this step.
+    """
     try:
         subprocess.run(
             ENGINE_RELOAD_CMD,
@@ -252,19 +261,20 @@ def _reload_engine_sync() -> None:
             timeout=15,
         )
         log.info("engine nginx reload OK")
+        return True
     except subprocess.CalledProcessError as exc:
         log.error(
             "engine nginx reload failed (exit %s): %s",
             exc.returncode,
             (exc.stderr or exc.stdout or "").strip(),
         )
-        raise
+        return False
     except OSError as exc:
         log.error("engine nginx reload failed: %s", exc)
-        raise
+        return False
 
 
-async def trigger_reload() -> None:
+async def trigger_reload() -> bool:
     """Bump reload version and reload OpenResty so conf.d changes take effect."""
     await get_redis().incr(RELOAD_KEY)
-    await asyncio.to_thread(_reload_engine_sync)
+    return await asyncio.to_thread(_reload_engine_sync)

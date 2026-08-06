@@ -30,7 +30,7 @@ async def _reload_sites_using(db: AsyncSession, cert_id: int) -> None:
         await db.execute(select(Site.id).where(Site.certificate_id == cert_id))
     ).scalars().all()
     if refs:
-        await nginx_conf.regenerate(db)
+        await nginx_conf.regenerate(db)  # soft-fails if engine is down
 
 
 async def _create_certificate(

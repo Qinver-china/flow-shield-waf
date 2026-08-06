@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     engine_conf_dir: str = "/data/engine/conf.d"
     engine_cert_dir: str = "/data/engine/certs"
     engine_reload_url: str = "http://engine/.waf/reload"
+    # Loopback health probe (same host as OpenResty in app/baota layouts).
+    engine_health_url: str = "http://127.0.0.1/waf-health"
     # Public panel URL for links in emails (no trailing slash).
     # Configured in system settings (waf_setting.panel_public_url).
     # Docker host gateway when origin_host is localhost (container localhost != host).
