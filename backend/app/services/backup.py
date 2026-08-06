@@ -62,9 +62,13 @@ SECTION_DEFS: dict[str, dict[str, Any]] = {
         "label": "Bot 库",
         "bags": ("bot_categories", "bots"),
     },
-    "ai_guard": {
+    "ai_config": {
+        "label": "AI 配置",
+        "bags": ("ai_guard_settings",),
+    },
+    "ai_policies": {
         "label": "AI 防护策略",
-        "bags": ("ai_guard_settings", "ai_guard_policies"),
+        "bags": ("ai_guard_policies",),
     },
     "system_settings": {
         "label": "系统设置",
@@ -73,6 +77,11 @@ SECTION_DEFS: dict[str, dict[str, Any]] = {
 }
 
 ALL_SECTIONS = tuple(SECTION_DEFS.keys())
+
+# Older backups used a single "ai_guard" section for both settings + policies.
+_LEGACY_SECTION_ALIASES: dict[str, tuple[str, ...]] = {
+    "ai_guard": ("ai_config", "ai_policies"),
+}
 
 _SITE_FIELDS = (
     "name",
@@ -176,14 +185,26 @@ def section_catalog() -> list[dict[str, str]]:
     return [{"key": key, "label": meta["label"]} for key, meta in SECTION_DEFS.items()]
 
 
+def _expand_section_aliases(sections: list[str]) -> list[str]:
+    expanded: list[str] = []
+    for key in sections:
+        aliases = _LEGACY_SECTION_ALIASES.get(key)
+        if aliases:
+            expanded.extend(aliases)
+        else:
+            expanded.append(key)
+    return expanded
+
+
 def _normalize_sections(sections: list[str] | None) -> list[str]:
     if not sections:
         return list(ALL_SECTIONS)
-    unknown = [s for s in sections if s not in SECTION_DEFS]
+    expanded = _expand_section_aliases(sections)
+    unknown = [s for s in expanded if s not in SECTION_DEFS]
     if unknown:
         raise ValueError(f"未知导出分区: {', '.join(unknown)}")
     # stable order
-    return [s for s in ALL_SECTIONS if s in set(sections)]
+    return [s for s in ALL_SECTIONS if s in set(expanded)]
 
 
 def _serialize_row(obj: Any, *, exclude: set[str] | None = None) -> dict[str, Any]:
@@ -302,7 +323,7 @@ async def build_export(db: AsyncSession, sections: list[str] | None = None) -> d
         bots = (await db.execute(select(BotProfile).order_by(BotProfile.id))).scalars().all()
         data["bots"] = [_serialize_row(r) for r in bots]
 
-    if "ai_guard" in selected:
+    if "ai_config" in selected:
         setting = (
             await db.execute(select(AiGuardSetting).where(AiGuardSetting.id == 1))
         ).scalar_one_or_none()
@@ -312,6 +333,8 @@ async def build_export(db: AsyncSession, sections: list[str] | None = None) -> d
             data["ai_guard_settings"] = item
         else:
             data["ai_guard_settings"] = None
+
+    if "ai_policies" in selected:
         policies = (
             await db.execute(select(AiGuardPolicy).order_by(AiGuardPolicy.id))
         ).scalars().all()
@@ -740,7 +763,9 @@ async def apply_import(
     if not isinstance(data, dict):
         raise ValueError("备份缺少 data 字段")
 
-    file_sections = payload.get("sections") or list(ALL_SECTIONS)
+    file_sections = _expand_section_aliases(
+        list(payload.get("sections") or list(ALL_SECTIONS))
+    )
     requested = _normalize_sections(sections or file_sections)
     # only import sections that both requested and present in file sections metadata
     selected = [s for s in requested if s in set(file_sections) or any(
@@ -853,10 +878,11 @@ async def apply_import(
         for row in (await db.execute(select(NotificationChannel))).scalars().all():
             channel_map[row.id] = row.id
 
-    if "ai_guard" in selected:
+    if "ai_config" in selected:
         summary["counts"]["ai_guard_settings"] = int(
             await _import_ai_settings(db, data.get("ai_guard_settings"))
         )
+    if "ai_policies" in selected:
         summary["counts"]["ai_guard_policies"] = await _import_ai_policies(
             db, data.get("ai_guard_policies") or [], channel_map
         )

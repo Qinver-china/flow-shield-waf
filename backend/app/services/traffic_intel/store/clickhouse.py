@@ -84,10 +84,21 @@ class ClickHouseTrafficStore:
         *,
         site_id: int | None = None,
     ) -> None:
+        self.insert_minutes([(minute, int(requests), site_id)])
+
+    def insert_minutes(
+        self,
+        rows: list[tuple[datetime, int, int | None]],
+    ) -> None:
+        if not rows:
+            return
         client = get_clickhouse_ingest()
         client.insert(
             CH_MINUTE_TABLE,
-            [[minute.replace(second=0, microsecond=0), int(requests), site_id]],
+            [
+                [minute.replace(second=0, microsecond=0), int(requests), site_id]
+                for minute, requests, site_id in rows
+            ],
             column_names=["minute", "requests", "site_id"],
         )
 

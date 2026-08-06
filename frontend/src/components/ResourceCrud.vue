@@ -232,7 +232,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { message } from "ant-design-vue";
+import { Modal, message } from "ant-design-vue";
 import { api } from "@/api";
 import ListFilterBar from "@/components/ListFilterBar.vue";
 import ResourceNameCell from "@/components/ResourceNameCell.vue";
@@ -271,7 +271,7 @@ const props = withDefaults(
     preparePayload?: (
       row: Record<string, any>,
       mode: FormDrawerMode,
-    ) => Record<string, any>;
+    ) => Record<string, any> | Promise<Record<string, any>>;
     canDelete?: (row: Record<string, any>) => boolean;
   }>(),
   { duplicatable: false, detailActions: false, embedded: false, showViewJson: true, createLabel: "新增", showCreate: true },
@@ -289,6 +289,7 @@ const { buildActions, runAction } = useResourceQuickActions();
 
 const rows = ref<any[]>([]);
 const loading = ref(false);
+let fetchSeq = 0;
 const saving = ref(false);
 const drawerOpen = ref(false);
 const drawerMode = ref<FormDrawerMode>("create");
@@ -391,13 +392,17 @@ function buildQueryParams() {
 }
 
 async function fetchList() {
+  const seq = ++fetchSeq;
   loading.value = true;
   try {
     const resp = await api.get(props.apiBase, buildQueryParams());
+    if (seq !== fetchSeq) return;
     rows.value = resp.data.items;
     total.value = resp.data.total;
   } finally {
-    loading.value = false;
+    if (seq === fetchSeq) {
+      loading.value = false;
+    }
   }
 }
 
@@ -470,6 +475,22 @@ function onMobilePageChange(p: number, size?: number) {
 
 function onFilterChange() {
   page.value = 1;
+  if (selectedCount.value > 0) {
+    Modal.confirm({
+      title: "筛选条件已变更",
+      content: `当前仍选中 ${selectedCount.value} 项（可能含跨页选择）。是否清空选择后再刷新列表？`,
+      okText: "清空并刷新",
+      cancelText: "保留选择",
+      onOk: () => {
+        clearSelection();
+        fetchList();
+      },
+      onCancel: () => {
+        fetchList();
+      },
+    });
+    return;
+  }
   fetchList();
 }
 
@@ -607,7 +628,7 @@ async function save() {
   saving.value = true;
   try {
     const payload = props.preparePayload
-      ? props.preparePayload({ ...record }, drawerMode.value)
+      ? await Promise.resolve(props.preparePayload({ ...record }, drawerMode.value))
       : record;
     const resp =
       record.id && drawerMode.value === "edit"
@@ -619,7 +640,9 @@ async function save() {
     drawerOpen.value = false;
     fetchList();
   } catch (err: any) {
-    if (!err?.response && err?.message) {
+    if (err?.message === "cancelled") {
+      // user dismissed confirm; keep drawer open
+    } else if (!err?.response && err?.message) {
       message.error(err.message);
     }
   } finally {

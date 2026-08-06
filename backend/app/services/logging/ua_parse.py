@@ -1,6 +1,8 @@
 """User-Agent parsing for log enrichment (ua-parser + vendored crawler rules)."""
 from __future__ import annotations
 
+from functools import lru_cache
+
 from ua_parser import parse_os, parse_user_agent
 
 from app.services.logging.crawler_detect import is_crawler_ua
@@ -45,11 +47,8 @@ def _normalize_browser(family: str | None) -> str | None:
     return _BROWSER_LABELS.get(family, family)
 
 
-def parse_client_ua(ua: str | None) -> tuple[str | None, str | None, str | None]:
-    """Return (ua_family, ua_os, ua_browser)."""
-    if not ua or not ua.strip():
-        return None, None, None
-
+@lru_cache(maxsize=4096)
+def _parse_client_ua_cached(ua: str) -> tuple[str | None, str | None, str | None]:
     browser_parsed = parse_user_agent(ua)
     os_parsed = parse_os(ua)
     os_name = _normalize_os(os_parsed.family if os_parsed else None)
@@ -60,3 +59,10 @@ def parse_client_ua(ua: str | None) -> tuple[str | None, str | None, str | None]
         return "bot", os_name, None
 
     return "browser", os_name, browser
+
+
+def parse_client_ua(ua: str | None) -> tuple[str | None, str | None, str | None]:
+    """Return (ua_family, ua_os, ua_browser)."""
+    if not ua or not ua.strip():
+        return None, None, None
+    return _parse_client_ua_cached(ua)

@@ -92,7 +92,7 @@
             <a-col :span="14">
               <a-form-item
                 label="客户端 IP 获取方式"
-                extra="使用了CDN或反代时，需选择与上游一致的IP来源头"
+                :extra="clientIpSourceExtra(record.client_ip_source)"
               >
                 <a-select
                   v-model:value="record.client_ip_source"
@@ -101,6 +101,14 @@
                   :options="clientIpSourceSelectOptions"
                 />
               </a-form-item>
+              <a-alert
+                v-if="record.client_ip_source && record.client_ip_source !== 'remote_addr'"
+                type="warning"
+                show-icon
+                style="margin-bottom: 16px"
+                message="非直连 IP 模式将信任请求头中的客户端地址"
+                description="请确保仅可信 CDN / 反代能直连本引擎；若攻击者可直连并伪造 IP 头，黑白名单、限速与挑战放行均可被绕过或嫁祸。生产环境务必在上游网络层限制来源。"
+              />
             </a-col>
             <a-col :span="10">
               <a-form-item
@@ -275,6 +283,13 @@ const clientIpSourceSelectOptions = CLIENT_IP_SOURCE_OPTIONS.map((o) => ({
   value: o.value,
   label: o.label,
 }));
+
+function clientIpSourceExtra(source: string | null | undefined) {
+  if (source && source !== "remote_addr") {
+    return "使用了 CDN 或反代时，需选择与上游一致的 IP 来源头。仅可信上游可直连引擎。";
+  }
+  return "使用了 CDN 或反代时，需选择与上游一致的 IP 来源头";
+}
 
 const blockStatusOptions = [
   { value: 403, label: "403 Forbidden" },

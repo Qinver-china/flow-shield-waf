@@ -55,12 +55,14 @@ import { computed, onMounted, watch } from "vue";
 import { CloseOutlined } from "@ant-design/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import AiChatPanel from "@/components/ai-chat/AiChatPanel.vue";
+import { useAiGuardChat } from "@/composables/useAiGuardChat";
 import { useBreakpoint } from "@/composables/useBreakpoint";
 import { useFabDragPosition } from "@/composables/useFabDragPosition";
 import { BRAND } from "@/constants/brand";
 import { useFloatingAiChatStore } from "@/stores/floatingAiChat";
 
 const floating = useFloatingAiChatStore();
+const { stopGeneration } = useAiGuardChat({ autoLoadSessions: false });
 const route = useRoute();
 const router = useRouter();
 const { isMobile } = useBreakpoint();
@@ -73,6 +75,13 @@ const showFab = computed(
 );
 const showFloatPanel = computed(
   () => floating.fabEnabled && floating.open && !isOnAiGuardPage.value,
+);
+
+watch(
+  () => floating.open,
+  (open) => {
+    if (!open) stopGeneration();
+  },
 );
 
 watch(isOnAiGuardPage, (onPage) => {

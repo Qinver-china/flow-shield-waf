@@ -87,6 +87,8 @@ function applyRouteQuery() {
   if (key === lastRouteQueryKey) return;
 
   if (!hasLogNavQuery(query)) {
+    // Empty query after a prior deep-link must clear sticky keep-alive filters.
+    filterState.applyFromRouteQuery(route.query);
     lastRouteQueryKey = key;
     return;
   }

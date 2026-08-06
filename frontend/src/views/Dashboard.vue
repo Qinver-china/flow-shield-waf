@@ -712,6 +712,7 @@ const charts: ECharts[] = [];
 const LIVE_REFRESH_DELAY_MS = 8000;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let liveRefreshRunning = false;
+let refreshSeq = 0;
 /** Epoch ms for rolling window end; numeric ref keeps live refresh label reactive. */
 const dashboardWindowEndAt = ref(Date.now());
 const liveClockTick = ref(0);
@@ -1642,7 +1643,9 @@ async function syncDashboardWindow() {
 }
 
 async function refreshAll(silent = false) {
+  const seq = ++refreshSeq;
   await syncDashboardWindow();
+  if (seq !== refreshSeq) return;
   await Promise.allSettled([
     loadOverview(silent),
     loadSummary(),
@@ -1653,6 +1656,7 @@ async function refreshAll(silent = false) {
     loadIntel(),
     loadSystemMetrics(silent),
   ]);
+  if (seq !== refreshSeq) return;
   await syncDashboardWindow();
 }
 
@@ -1660,6 +1664,10 @@ function scheduleLiveRefresh() {
   refreshTimer = setTimeout(async () => {
     refreshTimer = null;
     if (!liveRefreshRunning) return;
+    if (typeof document !== "undefined" && document.hidden) {
+      scheduleLiveRefresh();
+      return;
+    }
     await refreshAll(true);
     if (!liveRefreshRunning) return;
     scheduleLiveRefresh();
@@ -1677,6 +1685,13 @@ function stopLiveRefresh() {
   if (!refreshTimer) return;
   clearTimeout(refreshTimer);
   refreshTimer = null;
+}
+
+function onVisibilityChange() {
+  if (!liveRefreshRunning || !liveRefreshEnabled.value) return;
+  if (!document.hidden) {
+    void refreshAll(true);
+  }
 }
 
 watch(liveRefreshEnabled, (enabled) => {
@@ -1730,12 +1745,14 @@ onMounted(async () => {
   await refreshAll();
   if (liveRefreshEnabled.value) startLiveRefresh();
   window.addEventListener("resize", resizeCharts);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 });
 
 onUnmounted(() => {
   stopLiveRefresh();
   destroyCharts();
   window.removeEventListener("resize", resizeCharts);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
 });
 </script>
 
@@ -1831,7 +1848,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .health-dot {

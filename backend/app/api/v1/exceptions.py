@@ -19,6 +19,7 @@ from app.models.exception import SCOPES
 from app.schemas.common import ok
 from app.schemas.exception import ExceptionCreate, ExceptionOut, ExceptionUpdate
 from app.services import rule_sync
+from app.services.reference_validation import ensure_site_ids_exist
 from app.services.site_scope import apply_site_scope, enrich_row
 
 router = APIRouter()
@@ -98,6 +99,7 @@ async def create_item(
     require = (body.scope or "all") == "all"
     normalized = _check(body.scope, body.conditions, require_conditions=require)
     data = apply_site_scope(body.model_dump())
+    await ensure_site_ids_exist(db, data.get("site_ids"))
     data["conditions"] = normalized or {"logic": "and", "conditions": []}
     item = Exception_(**data)
     db.add(item)
@@ -119,12 +121,15 @@ async def update_item(
         raise HTTPException(status_code=404, detail="例外不存在")
     patch = body.model_dump(exclude_unset=True)
     scope = patch.get("scope", item.scope)
+    scoped = apply_site_scope(patch)
+    if "site_ids" in scoped:
+        await ensure_site_ids_exist(db, scoped.get("site_ids"))
     if "conditions" in patch or scope == "all":
         conditions = patch["conditions"] if "conditions" in patch else item.conditions
         normalized = _check(scope, conditions, require_conditions=(scope == "all"))
     else:
         normalized = None
-    for k, v in apply_site_scope(patch).items():
+    for k, v in scoped.items():
         if k == "conditions" and normalized is not None:
             v = normalized
         setattr(item, k, v)

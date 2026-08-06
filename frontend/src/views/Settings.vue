@@ -568,8 +568,30 @@ const importPayload = ref<any>(null);
 const importSections = ref<string[]>([]);
 const importResult = ref<any>(null);
 
+const LEGACY_BACKUP_SECTIONS: Record<string, string[]> = {
+  ai_guard: ["ai_config", "ai_policies"],
+};
+
+function expandBackupSections(sections: string[] | undefined | null): Set<string> {
+  const out = new Set<string>();
+  for (const key of sections || []) {
+    const aliases = LEGACY_BACKUP_SECTIONS[key];
+    if (aliases) aliases.forEach((item) => out.add(item));
+    else out.add(key);
+  }
+  return out;
+}
+
+function sectionsAvailableInPayload(payload: any): Set<string> {
+  const available = expandBackupSections(payload?.sections);
+  const data = payload?.data || {};
+  if (data.ai_guard_settings != null) available.add("ai_config");
+  if (Array.isArray(data.ai_guard_policies)) available.add("ai_policies");
+  return available;
+}
+
 const importSectionOptions = computed(() => {
-  const available = new Set<string>(importPayload.value?.sections || []);
+  const available = sectionsAvailableInPayload(importPayload.value);
   return backupSectionOptions.value.filter((item) => available.has(item.key));
 });
 
@@ -665,7 +687,7 @@ function onBackupFile(file: File) {
       }
       importPayload.value = parsed;
       importFileName.value = file.name;
-      const available = new Set<string>(parsed.sections || []);
+      const available = sectionsAvailableInPayload(parsed);
       importSections.value = backupSectionOptions.value
         .map((item) => item.key)
         .filter((key) => available.has(key));

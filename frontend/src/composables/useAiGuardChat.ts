@@ -1,6 +1,6 @@
 import { Modal, message } from "ant-design-vue";
 import dayjs from "dayjs";
-import { computed, h, onMounted, ref, watch } from "vue";
+import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import type { Conversation } from "ant-design-x-vue";
 import type { ConversationsProps, PromptProps } from "ant-design-x-vue";
 import { api, type ApiResp } from "@/api";
@@ -91,6 +91,19 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
   const pendingMessageId = ref<number | null>(null);
   const streamingAssistantKey = ref<string | null>(null);
   const messageListKey = ref(0);
+  let streamAbort: AbortController | null = null;
+
+  function stopGeneration() {
+    if (!streamAbort) {
+      sending.value = false;
+      streamingAssistantKey.value = null;
+      return;
+    }
+    streamAbort.abort();
+    streamAbort = null;
+    sending.value = false;
+    streamingAssistantKey.value = null;
+  }
 
   const conversationItems = computed<Conversation[]>(() =>
     sessions.value.map((s) => ({
@@ -391,6 +404,10 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
     const text = (textOverride ?? input.value).trim();
     if (!text || sending.value) return;
 
+    stopGeneration();
+    streamAbort = new AbortController();
+    const signal = streamAbort.signal;
+
     sending.value = true;
     messages.value.push({ role: "user", content: text });
     input.value = "";
@@ -410,6 +427,7 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ session_id: sessionId.value, message: text }),
+        signal,
       });
 
       if (!resp.ok) {
@@ -460,6 +478,12 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
         await loadMessages(sessionId.value);
       }
     } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        if (!assistantMsg.content?.trim()) {
+          assistantMsg.content = "（已停止生成）";
+        }
+        return;
+      }
       const errText = formatChatError(e);
       if (sessionId.value != null) {
         try {
@@ -477,6 +501,9 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
       }
       message.error(errText);
     } finally {
+      if (streamAbort?.signal === signal) {
+        streamAbort = null;
+      }
       sending.value = false;
       streamingAssistantKey.value = null;
     }
@@ -551,6 +578,7 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
     clearAllSessions,
     onConversationChange,
     send,
+    stopGeneration,
     onActionDone,
     onPromptClick,
     clearPending,
@@ -567,6 +595,11 @@ export function useAiGuardChat(options?: UseAiGuardChatOptions) {
   }
   onMounted(() => {
     void sharedChat?.ensureInitialized();
+  });
+  onUnmounted(() => {
+    // Abort in-flight stream when the last chat surface unmounts; shared state
+    // keeps messages but must not keep reading the network in the background.
+    sharedChat?.stopGeneration();
   });
   return sharedChat;
 }

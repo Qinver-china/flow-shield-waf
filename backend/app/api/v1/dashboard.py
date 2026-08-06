@@ -156,9 +156,10 @@ async def health(
 
     clickhouse_status = "ok"
     try:
-        from app.core.clickhouse import get_clickhouse
+        from app.core.clickhouse import ping as clickhouse_ping
 
-        get_clickhouse().query("SELECT 1")
+        if not await asyncio.to_thread(clickhouse_ping):
+            clickhouse_status = "error"
     except Exception:  # noqa: BLE001
         clickhouse_status = "error"
 
@@ -293,9 +294,8 @@ async def feed(
         )
 
     try:
-        from app.core.clickhouse import get_clickhouse
+        from app.core.clickhouse import clickhouse_client
 
-        client = get_clickhouse()
         since = datetime.utcnow() - timedelta(hours=24)
 
         # Observe hits are logged with blocked=0; still exclude them explicitly.
@@ -318,15 +318,16 @@ async def feed(
             if site_id is not None:
                 site_clause = " AND site_id = {site_id:UInt32}"
                 params["site_id"] = int(site_id)
-            return client.query(
-                "SELECT ts, client_ip, domain, rule_name, action FROM waf_logs "
-                "WHERE blocked = 1 "
-                "AND action IN {actions:Array(String)} "
-                "AND ts >= {start:DateTime}"
-                f"{site_clause} "
-                "ORDER BY ts DESC LIMIT {lim:UInt32}",
-                parameters=params,
-            ).result_rows
+            with clickhouse_client() as client:
+                return client.query(
+                    "SELECT ts, client_ip, domain, rule_name, action FROM waf_logs "
+                    "WHERE blocked = 1 "
+                    "AND action IN {actions:Array(String)} "
+                    "AND ts >= {start:DateTime}"
+                    f"{site_clause} "
+                    "ORDER BY ts DESC LIMIT {lim:UInt32}",
+                    parameters=params,
+                ).result_rows
 
         log_rows = await asyncio.wait_for(asyncio.to_thread(_query_logs), timeout=10)
         for ts, client_ip, domain, rule_name, action in log_rows:

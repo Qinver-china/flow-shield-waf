@@ -175,14 +175,14 @@ function createLogFilterState(defaultPreset: TimePreset) {
       hasFilter = true;
     }
 
-    if (hasFilter) {
-      const nextConditions = logDetailFiltersToConditions(filters);
-      const nextKey = JSON.stringify(nextConditions);
-      const currentKey = JSON.stringify(appliedConditions.value);
-      if (nextKey !== currentKey) {
-        appliedConditions.value = nextConditions;
-        changed = true;
-      }
+    // Always rebuild from route query when any filter key is present; otherwise
+    // clear sticky conditions left by a previous navigation (keep-alive singleton).
+    const nextConditions = hasFilter ? logDetailFiltersToConditions(filters) : [];
+    const nextKey = JSON.stringify(nextConditions);
+    const currentKey = JSON.stringify(appliedConditions.value);
+    if (nextKey !== currentKey) {
+      appliedConditions.value = nextConditions;
+      changed = true;
     }
 
     if (changed) {

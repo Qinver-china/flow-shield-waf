@@ -30,6 +30,7 @@
             @click="collapsed = !collapsed">
             <menu-unfold-outlined v-if="collapsed" />
             <menu-fold-outlined v-else />
+            <span v-if="!collapsed">收起菜单</span>
           </a-button>
         </a-tooltip>
       </div>
@@ -236,13 +237,21 @@ onMounted(() => {
 
 .sider-footer {
   display: flex;
-  justify-content: center;
   flex-shrink: 0;
-  padding: 10px 0 14px;
+  padding: 6px 10px 10px 4px;
 }
 
 .sider-collapse-btn {
   flex-shrink: 0;
+  justify-content:flex-start;
+  width: 100%;
+  height: auto;
+  padding: 8px;
+  padding-left: 24px;
+}
+.ant-layout-sider-collapsed .sider-collapse-btn {
+  padding-left: 8px;
+  justify-content:center;
 }
 
 .app-sider :deep(.ant-layout-sider-trigger) {

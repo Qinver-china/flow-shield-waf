@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LogOut(BaseModel):
@@ -70,8 +70,8 @@ class LogQuery(BaseModel):
     weekday: int | None = None
     keyword: str | None = None
     filters: str | None = None
-    page: int = 1
-    page_size: int = 20
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
 
 
 class LogStatsGroupItem(BaseModel):

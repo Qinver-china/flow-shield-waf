@@ -145,7 +145,7 @@ let cardResizeObserver: ResizeObserver | null = null;
 
 const popoverInnerStyle = computed(() => {
   if (!popoverCardWidth.value) return undefined;
-  return { width: `${popoverCardWidth.value}px` };
+  return { width: `${Math.min(popoverCardWidth.value, 700)}px` };
 });
 
 function syncPopoverCardWidth() {
@@ -270,10 +270,6 @@ function removeApplied(index: number) {
 
 .preset-group :deep(.ant-radio-button-wrapper:not(:first-child)::before) {
   display: none;
-}
-
-.log-filter-editor-popover .ant-popover-inner{
-  max-width: 700px;
 }
 
 .time-bar-meta {

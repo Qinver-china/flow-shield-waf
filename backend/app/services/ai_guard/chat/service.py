@@ -24,6 +24,8 @@ log = logging.getLogger("waf.ai_guard.chat")
 _MAX_TOOL_ROUNDS = 5
 _KNOWLEDGE_SNAPSHOT_MAX_CHARS = 14000
 _TOOL_RESULT_MAX_CHARS = 14000
+# Send only the recent turns to the LLM; DB still keeps the full session history.
+_CHAT_HISTORY_MAX_MESSAGES = 40
 _EMPTY_REPLY = "抱歉，我暂时未能生成有效回复，请重试或换个说法。"
 _PENDING_REPLY = "已生成待确认操作，请在下方的卡片中查看详情并确认是否执行。"
 
@@ -97,11 +99,16 @@ def _history_to_messages(rows: list) -> list[dict[str, Any]]:
     Only role + content are sent. Historical tool_calls are omitted because we do
     not persist tool-role messages; replaying tool_calls without tool responses
     breaks OpenAI-compatible APIs on follow-up turns.
+
+    Long sessions are truncated to the most recent turns for the model only;
+    the full history remains in the database for the UI.
     """
     out: list[dict[str, Any]] = []
     for row in rows:
         if row.role in ("user", "assistant", "system"):
             out.append({"role": row.role, "content": row.content or ""})
+    if len(out) > _CHAT_HISTORY_MAX_MESSAGES:
+        out = out[-_CHAT_HISTORY_MAX_MESSAGES:]
     return out
 
 

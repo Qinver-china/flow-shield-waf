@@ -5,7 +5,7 @@
 import crypto from "node:crypto";
 
 const BASE = process.env.WAF_ENGINE || "http://127.0.0.1";
-const HOST = process.env.WAF_HOST || "aaa.zibll.com";
+const HOST = process.env.WAF_HOST || "127.0.0.1";
 
 function leadingZeros(hash, n) {
   for (let i = 0; i < n; i++) {

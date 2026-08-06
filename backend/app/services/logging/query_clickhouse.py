@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from app.constants.traffic_timeline import TREND_GRANULARITY_BUCKET_SEC
-from app.core.clickhouse import get_clickhouse
+from app.core.clickhouse import clickhouse_client
 from app.core.db import SessionLocal
 from app.models import BotProfile, IpList, RateLimit, Rule
 from app.models.site import Site
@@ -796,33 +796,36 @@ def _row_to_log_item(row: dict) -> dict:
 async def query_logs(q: LogQuery) -> tuple[int, list[dict]]:
     start_ts, end_ts = _window(q.start, q.end, 24)
     where, params = _where_clause(q, start_ts, end_ts)
-    client = get_clickhouse()
-    total = client.query(
-        f"SELECT count() FROM waf_logs WHERE {where}",
-        parameters=params,
-    ).result_rows[0][0]
-    offset = (q.page - 1) * q.page_size
-    rows = client.query(
-        f"SELECT * FROM waf_logs WHERE {where} ORDER BY ts DESC "
-        f"LIMIT {int(q.page_size)} OFFSET {offset}",
-        parameters=params,
-    ).named_results()
-    items = [_row_to_log_item(dict(row)) for row in rows]
-    return int(total), items
+    page, page_size, page_clause = _paginate(q.page, q.page_size)
+
+    def _fetch() -> tuple[int, list[dict]]:
+        with clickhouse_client() as client:
+            total = client.query(
+                f"SELECT count() FROM waf_logs WHERE {where}",
+                parameters=params,
+            ).result_rows[0][0]
+            rows = client.query(
+                f"SELECT * FROM waf_logs WHERE {where} ORDER BY ts DESC {page_clause}",
+                parameters=params,
+            ).named_results()
+            items = [_row_to_log_item(dict(row)) for row in rows]
+            return int(total), items
+
+    return await asyncio.to_thread(_fetch)
 
 
 async def get_log(log_id: str) -> dict | None:
     def _fetch() -> dict | None:
-        client = get_clickhouse()
-        rows = list(
-            client.query(
-                "SELECT * FROM waf_logs WHERE request_id = {rid:String} ORDER BY ts DESC LIMIT 1",
-                parameters={"rid": log_id},
-            ).named_results()
-        )
-        if not rows:
-            return None
-        return _row_to_log_item(dict(rows[0]))
+        with clickhouse_client() as client:
+            rows = list(
+                client.query(
+                    "SELECT * FROM waf_logs WHERE request_id = {rid:String} ORDER BY ts DESC LIMIT 1",
+                    parameters={"rid": log_id},
+                ).named_results()
+            )
+            if not rows:
+                return None
+            return _row_to_log_item(dict(rows[0]))
 
     return await asyncio.to_thread(_fetch)
 
@@ -839,131 +842,131 @@ async def stats_overview(
 
     def _fetch():
         where, params = _where_clause(q, start_ts, end_ts)
-        client = get_clickhouse()
-        total = client.query(
-            f"SELECT count() FROM waf_logs WHERE {where}", parameters=params
-        ).result_rows[0][0]
-        blocked = client.query(
-            f"SELECT count() FROM waf_logs WHERE {where} AND {_col('blocked')} = 1",
-            parameters=params,
-        ).result_rows[0][0]
-        passed = int(total) - int(blocked)
-        unique_ips = client.query(
-            f"SELECT uniqExact(client_ip) FROM waf_logs WHERE {where} AND client_ip != ''",
-            parameters=params,
-        ).result_rows[0][0]
-        unique_rules = client.query(
-            f"SELECT uniqExact((rule_id, source)) FROM waf_logs WHERE {where} AND rule_id IS NOT NULL",
-            parameters=params,
-        ).result_rows[0][0]
-        window = end_ts - start_ts
-        effective_granularity = trend_granularity or _auto_trend_granularity(window)
-        bucket = _trend_bucket_expr(window, effective_granularity)
-        trend_mode_rows = client.query(
-            f"SELECT {bucket} AS t, "
-            f"if({_col('mode')} = '', 'unknown', {_col('mode')}) AS m, "
-            f"count() AS c "
-            f"FROM waf_logs WHERE {where} GROUP BY t, m ORDER BY t, m",
-            parameters=params,
-        ).result_rows
-        trend, trend_modes = _assemble_trend_by_mode(trend_mode_rows)
-        trend = _fill_trend_gaps(
-            trend,
-            start_ts=start_ts,
-            end_ts=end_ts,
-            granularity=effective_granularity,
-        )
-        top_rules = client.query(
-            f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
-            f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
-            f"AND {_col('mode')} != 'observe' "
-            f"GROUP BY rule_id, source ORDER BY c DESC LIMIT 10",
-            parameters=params,
-        ).result_rows
-        top_ips = client.query(
-            f"SELECT client_ip, count() AS c FROM waf_logs WHERE {where} "
-            f"AND client_ip != '' GROUP BY client_ip ORDER BY c DESC LIMIT 10",
-            parameters=params,
-        ).result_rows
-        top_domains = client.query(
-            f"SELECT domain, count() AS c FROM waf_logs WHERE {where} "
-            f"AND domain != '' GROUP BY domain ORDER BY c DESC LIMIT 8",
-            parameters=params,
-        ).result_rows
-        top_countries = client.query(
-            f"SELECT geo_country, count() AS c FROM waf_logs WHERE {where} "
-            f"AND {_col('blocked')} = 1 AND geo_country != '' "
-            f"GROUP BY geo_country ORDER BY c DESC LIMIT 8",
-            parameters=params,
-        ).result_rows
-        top_methods = client.query(
-            f"SELECT method, count() AS c FROM waf_logs WHERE {where} "
-            f"AND method != '' GROUP BY method ORDER BY c DESC LIMIT 6",
-            parameters=params,
-        ).result_rows
-        mode_split = client.query(
-            f"SELECT mode, count() AS c FROM waf_logs WHERE {where} GROUP BY mode",
-            parameters=params,
-        ).result_rows
-        source_split = client.query(
-            f"SELECT source, count() AS c FROM waf_logs WHERE {where} "
-            f"AND source != '' GROUP BY source ORDER BY c DESC",
-            parameters=params,
-        ).result_rows
-        log_type_split = client.query(
-            f"SELECT log_type, count() AS c FROM waf_logs WHERE {where} "
-            f"AND log_type != '' GROUP BY log_type ORDER BY c DESC",
-            parameters=params,
-        ).result_rows
-        return {
-            "start": start_ts.isoformat(),
-            "end": end_ts.isoformat(),
-            "window_hours": hours,
-            "total": int(total),
-            "blocked": int(blocked),
-            "passed": passed,
-            "block_rate": round((int(blocked) / int(total)) * 100, 2) if total else 0.0,
-            "unique_ips": int(unique_ips),
-            "unique_rules": int(unique_rules),
-            "trend": trend,
-            "trend_modes": trend_modes,
-            "top_rules_rows": top_rules,
-            "top_ips": [{"ip": r[0], "count": r[1]} for r in top_ips],
-            "top_domains": [{"domain": r[0], "count": r[1]} for r in top_domains],
-            "top_countries": [
-                {
-                    "country": r[0],
-                    "label": format_dimension_label("geo_country", str(r[0]), str(r[0])),
-                    "count": r[1],
-                }
-                for r in top_countries
-            ],
-            "top_methods": [{"method": r[0], "count": r[1]} for r in top_methods],
-            "mode_split": [
-                {
-                    "mode": r[0] or "unknown",
-                    "label": format_dimension_label("mode", str(r[0] or "unknown"), str(r[0] or "unknown")),
-                    "count": r[1],
-                }
-                for r in mode_split
-            ],
-            "source_split": [
-                {
-                    "source": r[0] or "unknown",
-                    "label": format_dimension_label("source", str(r[0] or "unknown"), str(r[0] or "unknown")),
-                    "count": r[1],
-                }
-                for r in source_split
-            ],
-            "log_type_split": [
-                {
-                    "log_type": r[0] or "unknown",
-                    "label": format_dimension_label("log_type", str(r[0] or "unknown"), str(r[0] or "unknown")),
-                    "count": r[1],
-                }
-                for r in log_type_split
-            ],
-        }
+        with clickhouse_client() as client:
+            total = client.query(
+                f"SELECT count() FROM waf_logs WHERE {where}", parameters=params
+            ).result_rows[0][0]
+            blocked = client.query(
+                f"SELECT count() FROM waf_logs WHERE {where} AND {_col('blocked')} = 1",
+                parameters=params,
+            ).result_rows[0][0]
+            passed = int(total) - int(blocked)
+            unique_ips = client.query(
+                f"SELECT uniqExact(client_ip) FROM waf_logs WHERE {where} AND client_ip != ''",
+                parameters=params,
+            ).result_rows[0][0]
+            unique_rules = client.query(
+                f"SELECT uniqExact((rule_id, source)) FROM waf_logs WHERE {where} AND rule_id IS NOT NULL",
+                parameters=params,
+            ).result_rows[0][0]
+            window = end_ts - start_ts
+            effective_granularity = trend_granularity or _auto_trend_granularity(window)
+            bucket = _trend_bucket_expr(window, effective_granularity)
+            trend_mode_rows = client.query(
+                f"SELECT {bucket} AS t, "
+                f"if({_col('mode')} = '', 'unknown', {_col('mode')}) AS m, "
+                f"count() AS c "
+                f"FROM waf_logs WHERE {where} GROUP BY t, m ORDER BY t, m",
+                parameters=params,
+            ).result_rows
+            trend, trend_modes = _assemble_trend_by_mode(trend_mode_rows)
+            trend = _fill_trend_gaps(
+                trend,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                granularity=effective_granularity,
+            )
+            top_rules = client.query(
+                f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
+                f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
+                f"AND {_col('mode')} != 'observe' "
+                f"GROUP BY rule_id, source ORDER BY c DESC LIMIT 10",
+                parameters=params,
+            ).result_rows
+            top_ips = client.query(
+                f"SELECT client_ip, count() AS c FROM waf_logs WHERE {where} "
+                f"AND client_ip != '' GROUP BY client_ip ORDER BY c DESC LIMIT 10",
+                parameters=params,
+            ).result_rows
+            top_domains = client.query(
+                f"SELECT domain, count() AS c FROM waf_logs WHERE {where} "
+                f"AND domain != '' GROUP BY domain ORDER BY c DESC LIMIT 8",
+                parameters=params,
+            ).result_rows
+            top_countries = client.query(
+                f"SELECT geo_country, count() AS c FROM waf_logs WHERE {where} "
+                f"AND {_col('blocked')} = 1 AND geo_country != '' "
+                f"GROUP BY geo_country ORDER BY c DESC LIMIT 8",
+                parameters=params,
+            ).result_rows
+            top_methods = client.query(
+                f"SELECT method, count() AS c FROM waf_logs WHERE {where} "
+                f"AND method != '' GROUP BY method ORDER BY c DESC LIMIT 6",
+                parameters=params,
+            ).result_rows
+            mode_split = client.query(
+                f"SELECT mode, count() AS c FROM waf_logs WHERE {where} GROUP BY mode",
+                parameters=params,
+            ).result_rows
+            source_split = client.query(
+                f"SELECT source, count() AS c FROM waf_logs WHERE {where} "
+                f"AND source != '' GROUP BY source ORDER BY c DESC",
+                parameters=params,
+            ).result_rows
+            log_type_split = client.query(
+                f"SELECT log_type, count() AS c FROM waf_logs WHERE {where} "
+                f"AND log_type != '' GROUP BY log_type ORDER BY c DESC",
+                parameters=params,
+            ).result_rows
+            return {
+                "start": start_ts.isoformat(),
+                "end": end_ts.isoformat(),
+                "window_hours": hours,
+                "total": int(total),
+                "blocked": int(blocked),
+                "passed": passed,
+                "block_rate": round((int(blocked) / int(total)) * 100, 2) if total else 0.0,
+                "unique_ips": int(unique_ips),
+                "unique_rules": int(unique_rules),
+                "trend": trend,
+                "trend_modes": trend_modes,
+                "top_rules_rows": top_rules,
+                "top_ips": [{"ip": r[0], "count": r[1]} for r in top_ips],
+                "top_domains": [{"domain": r[0], "count": r[1]} for r in top_domains],
+                "top_countries": [
+                    {
+                        "country": r[0],
+                        "label": format_dimension_label("geo_country", str(r[0]), str(r[0])),
+                        "count": r[1],
+                    }
+                    for r in top_countries
+                ],
+                "top_methods": [{"method": r[0], "count": r[1]} for r in top_methods],
+                "mode_split": [
+                    {
+                        "mode": r[0] or "unknown",
+                        "label": format_dimension_label("mode", str(r[0] or "unknown"), str(r[0] or "unknown")),
+                        "count": r[1],
+                    }
+                    for r in mode_split
+                ],
+                "source_split": [
+                    {
+                        "source": r[0] or "unknown",
+                        "label": format_dimension_label("source", str(r[0] or "unknown"), str(r[0] or "unknown")),
+                        "count": r[1],
+                    }
+                    for r in source_split
+                ],
+                "log_type_split": [
+                    {
+                        "log_type": r[0] or "unknown",
+                        "label": format_dimension_label("log_type", str(r[0] or "unknown"), str(r[0] or "unknown")),
+                        "count": r[1],
+                    }
+                    for r in log_type_split
+                ],
+            }
 
     raw = await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=10)
     top_rows = raw.pop("top_rules_rows", [])
@@ -1011,9 +1014,9 @@ async def stats_sites_24h_compare(*, hours: int = 24) -> dict[int, dict[str, int
     prev_start = prev_end - (end_ts - start_ts)
 
     def _fetch() -> dict[int, dict[str, int | float | None]]:
-        client = get_clickhouse()
-        rows = client.query(
-            f"""
+        with clickhouse_client() as client:
+            rows = client.query(
+                f"""
             SELECT
               site_id,
               countIf(ts >= {{cur_start:DateTime64(3)}}) AS requests,
@@ -1029,40 +1032,126 @@ async def stats_sites_24h_compare(*, hours: int = 24) -> dict[int, dict[str, int
             WHERE ts >= {{prev_start:DateTime64(3)}} AND site_id IS NOT NULL
             GROUP BY site_id
             """,
-            parameters={
-                "cur_start": start_ts,
-                "prev_start": prev_start,
-            },
-        ).result_rows
-        out: dict[int, dict[str, int | float | None]] = {}
-        for (
-            site_id,
-            requests,
-            blocked,
-            unique_ips,
-            requests_prev,
-            blocked_prev,
-            unique_ips_prev,
-        ) in rows:
-            if site_id is None:
-                continue
-            req = int(requests or 0)
-            blk = int(blocked or 0)
-            ips = int(unique_ips or 0)
-            req_prev = int(requests_prev or 0)
-            blk_prev = int(blocked_prev or 0)
-            ips_prev = int(unique_ips_prev or 0)
-            out[int(site_id)] = {
-                "requests": req,
-                "blocked": blk,
-                "unique_ips": ips,
-                "requests_delta_pct": _delta_pct(req, req_prev),
-                "blocked_delta_pct": _delta_pct(blk, blk_prev),
-                "unique_ips_delta_pct": _delta_pct(ips, ips_prev),
-            }
-        return out
+                parameters={
+                    "cur_start": start_ts,
+                    "prev_start": prev_start,
+                },
+            ).result_rows
+            out: dict[int, dict[str, int | float | None]] = {}
+            for (
+                site_id,
+                requests,
+                blocked,
+                unique_ips,
+                requests_prev,
+                blocked_prev,
+                unique_ips_prev,
+            ) in rows:
+                if site_id is None:
+                    continue
+                req = int(requests or 0)
+                blk = int(blocked or 0)
+                ips = int(unique_ips or 0)
+                req_prev = int(requests_prev or 0)
+                blk_prev = int(blocked_prev or 0)
+                ips_prev = int(unique_ips_prev or 0)
+                out[int(site_id)] = {
+                    "requests": req,
+                    "blocked": blk,
+                    "unique_ips": ips,
+                    "requests_delta_pct": _delta_pct(req, req_prev),
+                    "blocked_delta_pct": _delta_pct(blk, blk_prev),
+                    "unique_ips_delta_pct": _delta_pct(ips, ips_prev),
+                }
+            return out
 
     return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=15)
+
+
+def _fetch_dimension_rows(
+    *,
+    dimension: str,
+    where: str,
+    params: dict,
+    page_clause: str,
+) -> tuple[int, int, list]:
+    """Run ClickHouse dimension aggregation synchronously (for to_thread)."""
+    with clickhouse_client() as client:
+        group_total = _count_dimension_groups(client, dimension, where, params)
+
+        if dimension == "rule_id":
+            rows = client.query(
+                f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
+                f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
+                f"GROUP BY rule_id, source ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "site_id":
+            rows = client.query(
+                f"SELECT site_id, anyLast(domain) AS domain_snapshot, count() AS c "
+                f"FROM waf_logs WHERE {where} "
+                f"GROUP BY site_id ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "query_count_bucket":
+            rows = client.query(
+                f"SELECT multiIf(query_count = 0, '0', query_count <= 5, '1-5', "
+                f"query_count <= 20, '6-20', '20+') AS bucket, count() AS c "
+                f"FROM waf_logs WHERE {where} GROUP BY bucket ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "cookie_count_bucket":
+            rows = client.query(
+                f"SELECT multiIf({_COOKIE_COUNT_EXPR} = 0, '0', {_COOKIE_COUNT_EXPR} <= 5, '1-5', "
+                f"{_COOKIE_COUNT_EXPR} <= 20, '6-20', '20+') AS bucket, count() AS c "
+                f"FROM waf_logs WHERE {where} GROUP BY bucket ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "cookie_name":
+            rows = client.query(
+                f"SELECT name, count() AS c FROM waf_logs "
+                f"ARRAY JOIN JSONExtractKeys(JSONExtractRaw(payload, 'cookies')) AS name "
+                f"WHERE {where} AND JSONHas(payload, 'cookies') "
+                f"GROUP BY name ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "hour_of_day":
+            rows = client.query(
+                f"SELECT toHour(ts) AS h, count() AS c FROM waf_logs WHERE {where} "
+                f"GROUP BY h ORDER BY h {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "weekday":
+            rows = client.query(
+                f"SELECT toDayOfWeek(ts) AS d, count() AS c FROM waf_logs WHERE {where} "
+                f"GROUP BY d ORDER BY d {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "blocked":
+            rows = client.query(
+                f"SELECT blocked, count() AS c FROM waf_logs WHERE {where} "
+                f"GROUP BY blocked ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+        elif dimension == "full_url":
+            rows = client.query(
+                f"SELECT concat(scheme, '://', domain, request_uri) AS full_url, count() AS c "
+                f"FROM waf_logs WHERE {where} AND domain != '' AND request_uri != '' "
+                f"GROUP BY full_url ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+        else:
+            col = _DIM_COLUMN.get(dimension, dimension)
+            rows = client.query(
+                f"SELECT {col}, count() AS c FROM waf_logs WHERE {where} "
+                f"GROUP BY {col} ORDER BY c DESC {page_clause}",
+                parameters=params,
+            ).result_rows
+
+        total = client.query(
+            f"SELECT count() FROM waf_logs WHERE {where}", parameters=params
+        ).result_rows[0][0]
+        return int(group_total), int(total), list(rows)
 
 
 async def stats_by_dimension(
@@ -1084,20 +1173,23 @@ async def stats_by_dimension(
     if limit is not None:
         page_size = limit
     page, page_size, page_clause = _paginate(page, page_size)
-    client = get_clickhouse()
-    group_total = _count_dimension_groups(client, dimension, where, params)
 
     if dimension == "bot_category":
         async with SessionLocal() as db:
             set_bot_category_labels(await category_label_map(db))
 
+    group_total, total, rows = await asyncio.wait_for(
+        asyncio.to_thread(
+            _fetch_dimension_rows,
+            dimension=dimension,
+            where=where,
+            params=params,
+            page_clause=page_clause,
+        ),
+        timeout=10,
+    )
+
     if dimension == "rule_id":
-        rows = client.query(
-            f"SELECT rule_id, source, anyLast(rule_name) AS rule_name, count() AS c "
-            f"FROM waf_logs WHERE {where} AND rule_id IS NOT NULL "
-            f"GROUP BY rule_id, source ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
         refs = [(source, int(rule_id)) for rule_id, source, _, _ in rows if rule_id is not None]
         snapshots = {
             _rule_ref(source, int(rule_id)): snapshot
@@ -1119,12 +1211,6 @@ async def stats_by_dimension(
                 )
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
     elif dimension == "site_id":
-        rows = client.query(
-            f"SELECT site_id, anyLast(domain) AS domain_snapshot, count() AS c "
-            f"FROM waf_logs WHERE {where} "
-            f"GROUP BY site_id ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
         site_ids = [int(site_id) for site_id, _, _ in rows if site_id is not None]
         site_labels = await _site_label_map(site_ids)
         items = []
@@ -1142,77 +1228,33 @@ async def stats_by_dimension(
                     site_domain=domain,
                 )
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
-    elif dimension == "query_count_bucket":
-        rows = client.query(
-            f"SELECT multiIf(query_count = 0, '0', query_count <= 5, '1-5', "
-            f"query_count <= 20, '6-20', '20+') AS bucket, count() AS c "
-            f"FROM waf_logs WHERE {where} GROUP BY bucket ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
-        items = [
-            LogStatsGroupItem(key=str(b), label=str(b), count=int(c)) for b, c in rows
-        ]
-    elif dimension == "cookie_count_bucket":
-        rows = client.query(
-            f"SELECT multiIf({_COOKIE_COUNT_EXPR} = 0, '0', {_COOKIE_COUNT_EXPR} <= 5, '1-5', "
-            f"{_COOKIE_COUNT_EXPR} <= 20, '6-20', '20+') AS bucket, count() AS c "
-            f"FROM waf_logs WHERE {where} GROUP BY bucket ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
+    elif dimension in ("query_count_bucket", "cookie_count_bucket"):
         items = [
             LogStatsGroupItem(key=str(b), label=str(b), count=int(c)) for b, c in rows
         ]
     elif dimension == "cookie_name":
-        rows = client.query(
-            f"SELECT name, count() AS c FROM waf_logs "
-            f"ARRAY JOIN JSONExtractKeys(JSONExtractRaw(payload, 'cookies')) AS name "
-            f"WHERE {where} AND JSONHas(payload, 'cookies') "
-            f"GROUP BY name ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
         items = [
             LogStatsGroupItem(key=str(name), label=str(name), count=int(c))
             for name, c in rows
             if name
         ]
     elif dimension == "hour_of_day":
-        rows = client.query(
-            f"SELECT toHour(ts) AS h, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY h ORDER BY h {page_clause}",
-            parameters=params,
-        ).result_rows
         items = [
             LogStatsGroupItem(key=str(h), label=f"{h}:00", count=int(c)) for h, c in rows
         ]
     elif dimension == "weekday":
-        rows = client.query(
-            f"SELECT toDayOfWeek(ts) AS d, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY d ORDER BY d {page_clause}",
-            parameters=params,
-        ).result_rows
         names = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
         items = [
             LogStatsGroupItem(key=str(d), label=names[int(d)] if d else str(d), count=int(c))
             for d, c in rows
         ]
     elif dimension == "blocked":
-        rows = client.query(
-            f"SELECT blocked, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY blocked ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
         items = []
         for val, count in rows:
             key = "true" if val else "false"
             label = "已拦截" if val else "已放行"
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
     elif dimension == "full_url":
-        rows = client.query(
-            f"SELECT concat(scheme, '://', domain, request_uri) AS full_url, count() AS c "
-            f"FROM waf_logs WHERE {where} AND domain != '' AND request_uri != '' "
-            f"GROUP BY full_url ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
         items = []
         for val, count in rows:
             if val is None or val == "":
@@ -1222,12 +1264,6 @@ async def stats_by_dimension(
             label = format_dimension_label(dimension, key, raw)
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
     else:
-        col = _DIM_COLUMN.get(dimension, dimension)
-        rows = client.query(
-            f"SELECT {col}, count() AS c FROM waf_logs WHERE {where} "
-            f"GROUP BY {col} ORDER BY c DESC {page_clause}",
-            parameters=params,
-        ).result_rows
         items = []
         for val, count in rows:
             if val is None or val == "":
@@ -1237,14 +1273,11 @@ async def stats_by_dimension(
             label = format_dimension_label(dimension, key, raw)
             items.append(LogStatsGroupItem(key=key, label=label, count=int(count)))
 
-    total = client.query(
-        f"SELECT count() FROM waf_logs WHERE {where}", parameters=params
-    ).result_rows[0][0]
     return LogStatsGroupOut(
         dimension=dimension,
         start=start_ts,
         end=end_ts,
-        total=int(total),
+        total=total,
         group_total=group_total,
         page=page,
         page_size=page_size,

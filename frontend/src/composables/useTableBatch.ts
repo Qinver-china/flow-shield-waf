@@ -77,7 +77,13 @@ export function useTableBatch(options: UseTableBatchOptions) {
     if (!selectedRowKeys.value.length) return;
     batchProcessing.value = true;
     const ids = [...selectedRowKeys.value];
-    const results = await Promise.allSettled(ids.map((id) => action(id)));
+    const results: PromiseSettledResult<unknown>[] = [];
+    const concurrency = 5;
+    for (let i = 0; i < ids.length; i += concurrency) {
+      const chunk = ids.slice(i, i + concurrency);
+      const chunkResults = await Promise.allSettled(chunk.map((id) => action(id)));
+      results.push(...chunkResults);
+    }
     const failed = results.filter((r) => r.status === "rejected").length;
     batchProcessing.value = false;
     if (failed === 0) {

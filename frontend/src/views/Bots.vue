@@ -38,6 +38,7 @@
         :default-record="defaultBotRecord"
         :map-record="mapBotRecord"
         :prepare-payload="prepareBotPayload"
+        :batch="botBatchConfig"
         name-field="name"
         detail-actions
         duplicatable
@@ -121,6 +122,7 @@
         :map-record="mapCategoryRecord"
         :prepare-payload="prepareCategoryPayload"
         :can-delete="canDeleteCategory"
+        :batch="categoryBatchConfig"
         name-field="label"
         detail-actions
       >
@@ -241,6 +243,7 @@ import FsFormSection from "@/components/FsFormSection.vue";
 import FsSlideTransition from "@/components/FsSlideTransition.vue";
 import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
+import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
 
 const activeTab = ref("bots");
@@ -317,9 +320,33 @@ const botFilters = computed<ResourceFilterField[]>(() => [
   },
 ]);
 
+const botBatchConfig = computed<BatchConfig>(() => ({
+  enableToggle: false,
+  editFields: [
+    {
+      key: "categories",
+      label: "分类",
+      type: "multi_select",
+      options: categoryOptions.value,
+      placeholder: "选择分类（可多选）",
+    },
+  ],
+}));
+
+const categoryBatchConfig: BatchConfig = {
+  editFields: [
+    {
+      key: "sort_order",
+      label: "排序",
+      type: "number",
+      min: 0,
+    },
+  ],
+};
+
 const botColumns: ResourceColumn[] = [
-  { title: "名称", dataIndex: "name", sorter: true },
-  { title: "分类", key: "categories", width: 180, slotCell: true },
+  { title: "名称", dataIndex: "name", width: 260,ellipsis: true,sorter: true },
+  { title: "分类", key: "categories", width: 220, slotCell: true },
   { title: "UA 匹配模式", key: "ua_patterns", slotCell: true, ellipsis: true },
   { title: "备注", dataIndex: "remark", ellipsis: true },
 ];
@@ -465,7 +492,7 @@ onMounted(() => {
 }
 
 .vendored-descriptions :deep(.ant-descriptions-item-label) {
-  width: 120px;
+  width: 140px;
   color: var(--fs-text-secondary);
   background: var(--fs-bg-muted, #f8fafc);
 }

@@ -18,6 +18,7 @@ from app.models import IpList, User
 from app.schemas.common import ok
 from app.schemas.ip_list import IpListCreate, IpListOut, IpListUpdate
 from app.services import rule_sync
+from app.services.reference_validation import ensure_site_ids_exist
 from app.services.site_scope import apply_site_scope, enrich_row
 
 
@@ -83,6 +84,7 @@ def make_router(list_type: str) -> APIRouter:
     ):
         normalized = _validate(body.conditions, allow_empty=allow_empty)
         data = apply_site_scope(body.model_dump())
+        await ensure_site_ids_exist(db, data.get("site_ids"))
         data["list_type"] = list_type
         data["conditions"] = normalized or {"logic": "and", "conditions": []}
         item = IpList(**data)
@@ -114,6 +116,8 @@ def make_router(list_type: str) -> APIRouter:
         if item is None or item.list_type != list_type:
             raise HTTPException(status_code=404, detail="记录不存在")
         patch = apply_site_scope(body.model_dump(exclude_unset=True))
+        if "site_ids" in patch:
+            await ensure_site_ids_exist(db, patch.get("site_ids"))
         normalized = None
         if "conditions" in patch:
             normalized = _validate(patch["conditions"], allow_empty=allow_empty)

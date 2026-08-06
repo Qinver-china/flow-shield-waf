@@ -16,6 +16,7 @@
       :default-record="defaultRecord"
       :map-record="mapRecord"
       :prepare-payload="preparePayload"
+      :batch="batchConfig"
       :show-view-json="false"
       name-field="name"
       detail-actions
@@ -139,11 +140,16 @@ import { api } from "@/api";
 import FsFormSection from "@/components/FsFormSection.vue";
 import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
+import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
 
 const entryTab = ref("manual");
 const batchLoading = ref(false);
 const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
+
+const batchConfig: BatchConfig = {
+  allowDelete: true,
+};
 
 const listFilters: ResourceFilterField[] = [
   { key: "q", label: "搜索", type: "search", placeholder: "名称 / IP 地址" },

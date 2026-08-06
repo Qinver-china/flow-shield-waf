@@ -1,7 +1,8 @@
 """ClickHouse client factory.
 
 Query paths use a fresh client per call (clickhouse-connect HTTP sessions are not
-safe for concurrent use on the same object).
+safe for concurrent use on the same object). Prefer ``clickhouse_client()`` so the
+client is always closed after the query batch.
 
 Log ingest uses a thread-local client with optional async_insert so worker threads
 reuse connections without cross-thread sharing.
@@ -10,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import threading
+from contextlib import contextmanager
+from typing import Iterator
 
 import clickhouse_connect
 
@@ -40,7 +43,21 @@ def _ingest_settings() -> dict[str, int]:
 
 
 def get_clickhouse():
+    """Create a fresh query client. Prefer ``clickhouse_client()`` to ensure close()."""
     return clickhouse_connect.get_client(**_client_kwargs())
+
+
+@contextmanager
+def clickhouse_client() -> Iterator:
+    """Fresh query client with guaranteed close (avoids FD/connection leaks)."""
+    client = get_clickhouse()
+    try:
+        yield client
+    finally:
+        try:
+            client.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def get_clickhouse_ingest():
@@ -58,7 +75,8 @@ def get_clickhouse_ingest():
 
 def ping() -> bool:
     try:
-        get_clickhouse().command("SELECT 1")
+        with clickhouse_client() as client:
+            client.command("SELECT 1")
         return True
     except Exception:  # noqa: BLE001
         return False

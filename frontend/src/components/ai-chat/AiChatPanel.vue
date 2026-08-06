@@ -94,7 +94,7 @@
           <prompts v-if="!messages.length" class="ai-chat-sender-prompts" :items="senderPrompts" wrap
             @item-click="onPromptClick" />
           <sender v-model:value="input" class="ai-chat-sender" :loading="sending" placeholder="描述你的需求，例如：生成防 XSS 观察规则"
-            @submit="send()" />
+            @submit="send()" @cancel="stopGeneration" />
         </div>
       </section>
     </div>
@@ -180,6 +180,7 @@ const {
   clearAllSessions,
   onConversationChange,
   send,
+  stopGeneration,
   onActionDone,
   onPromptClick,
   clearPending,

@@ -20,8 +20,14 @@ CONSUMER = "worker-1"
 IDLE_SLEEP = 0.5
 ERROR_SLEEP = 2.0
 MAX_PERSIST_RETRIES = 3
+DLQ_MAXLEN = 50_000
+# Reclaim pending messages idle longer than this (ms) after worker crash.
+CLAIM_MIN_IDLE_MS = 60_000
+CLAIM_COUNT = 200
 
 _last_bot_catalog_refresh = 0.0
+_last_claim_at = 0.0
+CLAIM_INTERVAL_SEC = 30.0
 
 
 async def _ensure_group(redis) -> None:
@@ -67,6 +73,38 @@ async def _read_stream_batch(redis, *, count: int, block_ms: int) -> list[tuple[
     return out
 
 
+async def _claim_stale_pending(redis) -> list[tuple[str, dict]]:
+    """Reclaim idle pending messages left by a crashed consumer."""
+    global _last_claim_at
+    now = time.monotonic()
+    if now - _last_claim_at < CLAIM_INTERVAL_SEC:
+        return []
+    _last_claim_at = now
+    try:
+        result = await redis.xautoclaim(
+            name=STREAM_KEY,
+            groupname=GROUP,
+            consumername=CONSUMER,
+            min_idle_time=CLAIM_MIN_IDLE_MS,
+            start_id="0-0",
+            count=CLAIM_COUNT,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.debug("xautoclaim skipped: %s", exc)
+        return []
+
+    # redis-py returns (next_id, messages[, deleted_ids])
+    messages = result[1] if isinstance(result, (list, tuple)) and len(result) >= 2 else []
+    out: list[tuple[str, dict]] = []
+    for msg_id, fields in messages or []:
+        msg_id_s = _as_text(msg_id)
+        parsed_fields = {_as_text(k): _as_text(v) for k, v in (fields or {}).items()}
+        out.append((msg_id_s, parsed_fields))
+    if out:
+        log.info("reclaimed %d pending log stream messages", len(out))
+    return out
+
+
 async def _drain_stream_batch(redis) -> list[tuple[str, dict]]:
     """Read up to batch_size * max_drain_batches messages when backlog exists."""
     batch_size = settings.log_collector_batch_size
@@ -74,11 +112,15 @@ async def _drain_stream_batch(redis) -> list[tuple[str, dict]]:
     max_entries = batch_size * max_batches
     collected: list[tuple[str, dict]] = []
 
+    claimed = await _claim_stale_pending(redis)
+    if claimed:
+        collected.extend(claimed[:max_entries])
+
     for batch_idx in range(max_batches):
         remaining = max_entries - len(collected)
         if remaining <= 0:
             break
-        block_ms = 1000 if batch_idx == 0 else 0
+        block_ms = 1000 if batch_idx == 0 and not collected else 0
         chunk = await _read_stream_batch(
             redis,
             count=min(batch_size, remaining),
@@ -107,7 +149,12 @@ async def _send_dlq(redis, msg_id: str, error: str, fields: dict | None = None) 
     payload: dict = {"msg_id": msg_id, "error": error}
     if fields is not None:
         payload["fields"] = fields
-    await redis.xadd(DLQ_STREAM_KEY, {"data": json.dumps(payload, default=str)})
+    await redis.xadd(
+        DLQ_STREAM_KEY,
+        {"data": json.dumps(payload, default=str)},
+        maxlen=DLQ_MAXLEN,
+        approximate=True,
+    )
 
 
 async def _ack_messages(redis, msg_ids: list[str]) -> None:

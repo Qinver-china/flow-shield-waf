@@ -91,7 +91,7 @@ class SnapshotIngestor:
 
         now = datetime.utcnow().replace(second=0, microsecond=0)
         analysis_samples: list[WindowSample] = []
-        sites_written = 0
+        minute_rows: list[tuple[datetime, int, int | None]] = []
 
         for site_id, site_samples in snapshot.site_windows.items():
             site_minute = 0
@@ -109,10 +109,12 @@ class SnapshotIngestor:
                         )
                     )
             if site_minute > 0:
-                await asyncio.to_thread(
-                    self._store.insert_minute, now, site_minute, site_id=site_id
-                )
-                sites_written += 1
+                minute_rows.append((now, site_minute, site_id))
+
+        sites_written = 0
+        if minute_rows:
+            await asyncio.to_thread(self._store.insert_minutes, minute_rows)
+            sites_written = len(minute_rows)
 
         if analysis_samples:
             await asyncio.to_thread(

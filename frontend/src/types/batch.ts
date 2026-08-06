@@ -1,4 +1,4 @@
-export type BatchEditFieldType = "switch" | "select" | "number" | "site_ids";
+export type BatchEditFieldType = "switch" | "select" | "multi_select" | "number" | "site_ids";
 
 export interface BatchEditFieldOption {
   label: string;
