@@ -158,9 +158,9 @@ watch(
 
 const welcomeIcon = () =>
   h("img", {
-    src: BRAND.logoSquare,
+    src: BRAND.icon,
     alt: BRAND.name,
-    style: "width: 48px; height: 48px; border-radius: 12px;",
+    style: "width: 48px; height: 48px;",
   });
 
 const {
@@ -364,6 +364,10 @@ function onConversationSelect(key: string) {
   gap: 10px;
   padding: 4px 8px;
   min-width: 0;
+}
+
+.ai-chat-logo .app-logo{
+  width: auto;
 }
 
 .ai-chat-logo-text {

@@ -3,7 +3,7 @@
     <a-layout-sider v-if="!isMobile" v-model:collapsed="collapsed" collapsible :trigger="null" class="app-sider"
       :width="160" :collapsed-width="72">
       <div class="logo" :class="{ collapsed }">
-        <app-logo variant="sidebar" :collapsed="collapsed" :show-text="!collapsed" />
+        <app-logo variant="sidebar" :collapsed="collapsed" />
       </div>
       <div class="sider-menu-wrap">
         <a-menu mode="inline" class="app-nav-menu" :selected-keys="[selectedKey]" :open-keys="openKeys" @click="onMenu"
@@ -39,11 +39,8 @@
       class="nav-drawer" :body-style="{ padding: 0, background: 'transparent' }">
       <div class="drawer-head">
         <div class="logo">
-          <app-logo variant="sidebar" :show-text="true" />
+          <app-logo variant="sidebar" />
         </div>
-        <a-button type="text" class="drawer-close" @click="drawerOpen = false">
-          <close-outlined />
-        </a-button>
       </div>
       <a-menu mode="inline" class="app-nav-menu" :selected-keys="[selectedKey]" @click="onMenu">
         <template v-for="group in menuGroups" :key="group.key">
@@ -288,7 +285,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   min-height: 56px;
-  margin: 12px;
+  margin: 12px 6px;
   border-radius: var(--fs-radius-md);
   background: transparent;
 }

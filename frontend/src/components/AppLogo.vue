@@ -14,7 +14,14 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { BRAND } from "@/constants/brand";
+import { storeToRefs } from "pinia";
+import {
+  BRAND,
+  brandLogoHorizontal,
+  brandLogoSquare,
+  type BrandSurface,
+} from "@/constants/brand";
+import { useThemeStore } from "@/stores/theme";
 
 const props = withDefaults(
   defineProps<{
@@ -25,20 +32,37 @@ const props = withDefaults(
   {
     variant: "sidebar",
     collapsed: false,
-    showText: true,
+    showText: false,
   },
 );
 
+const { isDark } = storeToRefs(useThemeStore());
+
+/** Login left brand panel stays on dark chrome; everything else follows theme. */
+const surface = computed<BrandSurface>(() => {
+  if (props.variant === "horizontal") return "dark";
+  return isDark.value ? "dark" : "light";
+});
+
+const useHorizontal = computed(() => {
+  if (props.variant === "horizontal" || props.variant === "login") return true;
+  // Expanded sidebar / mobile drawer: horizontal wordmark, no companion text.
+  if (props.variant === "sidebar" && !props.collapsed) return true;
+  return false;
+});
+
 const imageSrc = computed(() => {
-  if (props.variant === "horizontal" || props.variant === "login") {
-    return BRAND.logoHorizontal;
+  // Collapsed sidebar + square/icon slots share the transparent brand mark.
+  if (props.variant === "square" || (props.variant === "sidebar" && props.collapsed)) {
+    return BRAND.icon;
   }
-  return BRAND.logoSquare;
+  if (useHorizontal.value) return brandLogoHorizontal(surface.value);
+  return brandLogoSquare(surface.value);
 });
 
 const imageSize = computed(() => {
-  if (props.variant === "horizontal" || props.variant === "login") return undefined;
-  if (props.variant === "sidebar" && props.collapsed) return 36;
+  if (useHorizontal.value) return undefined;
+  if (props.variant === "sidebar" && props.collapsed) return 40;
   if (props.variant === "sidebar") return 32;
   return 40;
 });
@@ -50,6 +74,7 @@ const imageSize = computed(() => {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  width: 100%;
 }
 
 .app-logo--sidebar {
@@ -59,6 +84,7 @@ const imageSize = computed(() => {
 .app-logo--sidebar.app-logo--collapsed {
   justify-content: center;
   padding: 0;
+  width: auto;
 }
 
 .app-logo--horizontal,
@@ -72,10 +98,12 @@ const imageSize = computed(() => {
   object-fit: contain;
 }
 
-.app-logo--sidebar .app-logo-image {
-  border-radius: 8px;
+.app-logo--sidebar.app-logo--collapsed .app-logo-image,
+.app-logo--square .app-logo-image {
+  border-radius: 0;
 }
 
+.app-logo--sidebar:not(.app-logo--collapsed) .app-logo-image,
 .app-logo--horizontal .app-logo-image,
 .app-logo--login .app-logo-image {
   width: auto;

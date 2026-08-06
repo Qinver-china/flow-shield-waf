@@ -13,7 +13,7 @@
         <span class="ai-fab-ring" aria-hidden="true" />
         <span class="ai-fab-glow" aria-hidden="true" />
         <span class="ai-fab-core">
-          <img :src="BRAND.logoSquare" :alt="BRAND.name" class="ai-fab-logo" />
+          <img :src="BRAND.icon" :alt="BRAND.name" class="ai-fab-logo" />
         </span>
       </button>
     </transition>
@@ -27,7 +27,7 @@
         <div class="ai-float-header">
           <div class="ai-float-title">
             <span class="ai-float-title-icon">
-              <img :src="BRAND.logoSquare" :alt="BRAND.name" />
+              <img :src="BRAND.icon" :alt="BRAND.name" />
             </span>
             <span>AI 智能助手</span>
           </div>
@@ -126,62 +126,44 @@ function goFullPage() {
 }
 
 .ai-fab-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: linear-gradient(
-    135deg,
-    #6366f1 0%,
-    #8b5cf6 45%,
-    #22d3ee 100%
-  );
-  animation: ai-fab-spin 8s linear infinite;
+  display: none;
 }
 
 .ai-fab-glow {
   position: absolute;
-  inset: -6px;
+  top: -6px;
+  right: -6px;
+  bottom: -6px;
+  left: -6px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, #8b5cf6 35%, transparent) 0%,
-    transparent 70%
-  );
+  background: linear-gradient(135deg, #6366f196, #8b5cf6c7 45%, #22d3eed1);
   filter: blur(6px);
-  opacity: 0.85;
-  animation: ai-fab-pulse 2.8s ease-in-out infinite;
+  opacity: 1;
+  animation: ai-fab-pulse-ea48bc1f 2.8s ease-in-out infinite, ai-fab-spin-ea48bc1f 3s linear infinite;
 }
 
 .ai-fab-core {
   position: absolute;
-  inset: 3px;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  left: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, #ffffff 92%, #eef2ff) 0%,
-    color-mix(in srgb, #f5f3ff 88%, #e0e7ff) 100%
-  );
-  box-shadow:
-    0 6px 20px color-mix(in srgb, #6366f1 28%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background: color-mix(in srgb, var(--fs-bg-elevated) 90%, transparent);
 }
 
 .ai-fab-logo {
   width: 26px;
   height: 26px;
-  border-radius: 8px;
-  object-fit: cover;
+  object-fit: contain;
+  transition: .2s;
 }
 
 .ai-fab:hover .ai-fab-core {
   transform: scale(1.04);
-  box-shadow:
-    0 8px 24px color-mix(in srgb, #6366f1 36%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
 .ai-fab:active .ai-fab-core {
@@ -259,15 +241,12 @@ function goFullPage() {
   display: inline-flex;
   width: 24px;
   height: 24px;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px color-mix(in srgb, #6366f1 20%, transparent);
 }
 
 .ai-float-title-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .ai-float-body {

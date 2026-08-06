@@ -6,16 +6,22 @@
         <h1>{{ BRAND.tagline }}</h1>
         <p>智能流量防护 · CC 攻击识别 · 可视化管理</p>
         <ul class="brand-features">
-          <li><check-circle-outlined /> 反向代理型防护</li>
-          <li><check-circle-outlined /> 规则热同步，无需 reload</li>
-          <li><check-circle-outlined /> 多维日志与 AI 辅助分析</li>
+          <li><check-circle-outlined /> 反向代理接入，流量先过流盾再回源</li>
+          <li><check-circle-outlined /> 规则热同步，改配置无需重启引擎</li>
+          <li><check-circle-outlined /> 观察 / 拦截 / JS 挑战 / 滑动验证多模式</li>
+          <li><check-circle-outlined /> 多维速率防护，精准识别 CC 与自动化攻击</li>
+          <li><check-circle-outlined /> ClickHouse 日志可观测，支持预警通知</li>
+          <li><check-circle-outlined /> AI 辅助分析日志并生成防护规则</li>
         </ul>
       </div>
     </div>
     <div class="login-panel">
       <a-card class="login-card" :bordered="false">
         <div class="panel-head">
-          <app-logo variant="login" class="panel-logo" />
+          <div class="panel-header">
+            <app-logo variant="login" class="panel-logo" />
+            <theme-toggle />
+          </div>
           <h2>登录管理面板</h2>
           <p>请输入管理员账号密码</p>
         </div>
@@ -30,9 +36,6 @@
             登录
           </a-button>
         </a-form>
-        <div class="panel-foot">
-          <theme-toggle />
-        </div>
       </a-card>
     </div>
   </div>
@@ -91,12 +94,19 @@ async function onSubmit() {
   color: #f8fafc;
 }
 
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .brand-inner {
   max-width: 460px;
 }
 
 .brand-logo {
   margin-bottom: 28px;
+  min-height: 71px;
 }
 
 .brand-logo :deep(.app-logo-image) {
@@ -109,7 +119,7 @@ async function onSubmit() {
   line-height: 1.2;
 }
 
-.brand-inner > p {
+.brand-inner>p {
   margin: 0 0 28px;
   color: #94a3b8;
   font-size: 15px;
@@ -141,6 +151,7 @@ async function onSubmit() {
   align-items: center;
   justify-content: center;
   padding: 32px 24px;
+  background: var(--fs-bg-body);
 }
 
 .login-card {
@@ -163,8 +174,10 @@ async function onSubmit() {
   font-size: 13px;
 }
 
+.app-logo.app-logo--login,
 .panel-logo :deep(.app-logo-image) {
   max-height: 40px;
+  min-height: 40px;
 }
 
 .panel-foot {
@@ -181,7 +194,14 @@ async function onSubmit() {
   .login-brand {
     padding: 28px 24px 20px;
     min-height: auto;
+    text-align: center;
   }
+
+  .brand-logo {
+    justify-content: center;
+    min-height: 51px;
+  }
+
 
   .brand-logo :deep(.app-logo-image) {
     max-height: 52px;
