@@ -11,7 +11,7 @@
     </a-tabs>
     <fs-slide-transition :transition-key="activeTab">
       <template v-if="activeTab === 'account'">
-<a-card class="settings-panel" :bordered="false">
+  <a-card class="settings-panel" :bordered="false">
           <a-row :gutter="[24, 24]">
             <a-col :xs="24" :xl="12">
               <section class="settings-section">

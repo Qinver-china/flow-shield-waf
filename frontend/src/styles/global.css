@@ -64,6 +64,18 @@ code,
     background: rgba(146, 146, 146, 0.1);
 }
 
+.flex {
+    display: flex;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.items-center {
+    align-items: center;
+}
+
 .fs-page {
     display: flex;
     flex-direction: column;
