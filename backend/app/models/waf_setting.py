@@ -19,7 +19,7 @@ class WafSetting(Base, TimestampMixin):
     logging_control_mode: Mapped[str] = mapped_column(String(24), default="manual")
     logging_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     logging_skip_observe: Mapped[bool] = mapped_column(Boolean, default=False)
-    observe_sample_rate_idle: Mapped[float] = mapped_column(Float, default=0.01)
+    observe_sample_rate_idle: Mapped[float] = mapped_column(Float, default=1.0)
     observe_sample_rate_active: Mapped[float] = mapped_column(Float, default=1.0)
     logging_detail_on_block: Mapped[bool] = mapped_column(Boolean, default=True)
     logging_auto_thresholds: Mapped[str | None] = mapped_column(Text, nullable=True)

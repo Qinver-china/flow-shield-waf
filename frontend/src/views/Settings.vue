@@ -779,7 +779,7 @@ const logForm = reactive({
   logging_control_mode: "manual",
   logging_enabled: true,
   logging_skip_observe: false,
-  observe_sample_rate_idle: 0.01,
+  observe_sample_rate_idle: 1.0,
   observe_sample_rate_active: 1.0,
   logging_detail_on_block: true,
   logging_auto_thresholds: [

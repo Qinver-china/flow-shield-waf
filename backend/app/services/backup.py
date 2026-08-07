@@ -397,6 +397,10 @@ async def _import_certificates(
             existing.not_before = meta["not_before"]
             existing.not_after = meta["not_after"]
             existing.remark = item.get("remark")
+            if "expiry_notify_enabled" in item:
+                existing.expiry_notify_enabled = bool(item.get("expiry_notify_enabled"))
+            if "expiry_notify_channel_id" in item:
+                existing.expiry_notify_channel_id = item.get("expiry_notify_channel_id")
             paths = certificate_store.write_cert_files(existing.id, cert_pem, key_pem)
             existing.cert_path, existing.key_path = paths
             await db.flush()
@@ -411,6 +415,8 @@ async def _import_certificates(
                 not_before=meta["not_before"],
                 not_after=meta["not_after"],
                 remark=item.get("remark"),
+                expiry_notify_enabled=bool(item.get("expiry_notify_enabled")),
+                expiry_notify_channel_id=item.get("expiry_notify_channel_id"),
             )
             db.add(cert)
             await db.flush()

@@ -6,7 +6,8 @@
       'ai-chat-panel--sider-collapsed': effectiveCollapsibleSider && !siderVisible,
     }">
       <transition name="fade">
-        <div v-if="effectiveCollapsibleSider && siderVisible" class="ai-chat-sider-backdrop" @click="siderVisible = false" />
+        <div v-if="effectiveCollapsibleSider && siderVisible" class="ai-chat-sider-backdrop"
+          @click="siderVisible = false" />
       </transition>
       <aside class="ai-chat-sider"
         :class="{ 'ai-chat-sider--overlay': effectiveCollapsibleSider, 'ai-chat-sider--hidden': effectiveCollapsibleSider && !siderVisible }">
@@ -329,8 +330,11 @@ function onConversationSelect(key: string) {
   flex-direction: column;
   gap: 12px;
   padding: 16px 12px;
-  background: linear-gradient(294deg, color-mix(in srgb, #29b8f3 10%, var(--fs-bg-modal)) 0%, var(--fs-bg-modal) 100%);
   border-right: 1px solid var(--fs-border);
+}
+
+.ai-float-panel .ai-chat-sider {
+  background: linear-gradient(294deg, color-mix(in srgb, #29b8f3 10%, var(--fs-bg-modal)) 0%, var(--fs-bg-modal) 100%);
 }
 
 .ai-chat-sider--overlay {
@@ -343,7 +347,7 @@ function onConversationSelect(key: string) {
   transition: transform 0.2s ease;
 }
 
-.ai-chat-panel--sider-collapsed .ai-chat-sider--overlay{
+.ai-chat-panel--sider-collapsed .ai-chat-sider--overlay {
   transform: translateX(-105%);
 }
 
@@ -367,7 +371,7 @@ function onConversationSelect(key: string) {
   min-width: 0;
 }
 
-.ai-chat-logo .app-logo{
+.ai-chat-logo .app-logo {
   width: auto;
 }
 

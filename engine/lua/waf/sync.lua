@@ -18,7 +18,7 @@ local function default_logging_settings()
         logging_control_mode = "manual",
         logging_enabled = true,
         logging_skip_observe = false,
-        observe_sample_rate_idle = 0.01,
+        observe_sample_rate_idle = 1.0,
         observe_sample_rate_active = 1.0,
         logging_detail_on_block = true,
         logging_auto_cooldown_sec = 120,
@@ -180,7 +180,19 @@ function _M.needs_load()
 end
 
 function _M.site_by_domain(domain)
-    return _config.sites[domain]
+    if not domain or domain == "" then
+        return nil
+    end
+    local site = _config.sites[domain]
+    if site then
+        return site
+    end
+    -- nginx `*.example.com` matches one label only (www.example.com, not a.b.example.com)
+    local dot = string.find(domain, ".", 1, true)
+    if not dot then
+        return nil
+    end
+    return _config.sites["*." .. string.sub(domain, dot + 1)]
 end
 
 return _M

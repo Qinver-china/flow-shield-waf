@@ -65,7 +65,7 @@ function _M.should_log(cfg, mode, request_id)
         if traffic.viewer_active() then
             rate = tonumber(log.observe_sample_rate_active) or 1.0
         else
-            rate = tonumber(log.observe_sample_rate_idle) or 0.01
+            rate = tonumber(log.observe_sample_rate_idle) or 1.0
         end
         rate = math.max(0, math.min(1, rate))
         if rate <= 0 then
@@ -92,7 +92,7 @@ function _M.observe_sample_rate(cfg)
     if traffic.viewer_active() then
         return tonumber(log.observe_sample_rate_active) or 1.0
     end
-    return tonumber(log.observe_sample_rate_idle) or 0.01
+    return tonumber(log.observe_sample_rate_idle) or 1.0
 end
 
 -- Heavy trace fields (body/json/geo lookups during rule match). Baseline snapshot

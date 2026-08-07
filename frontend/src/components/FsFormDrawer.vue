@@ -3,6 +3,7 @@
     :open="open"
     :width="resolvedWidth"
     :destroy-on-close="destroyOnClose"
+    :z-index="zIndex"
     placement="right"
     class="fs-form-drawer"
     @update:open="emit('update:open', $event)"
@@ -59,6 +60,7 @@ const props = withDefaults(
     jsonContent?: string;
     jsonTitle?: string;
     destroyOnClose?: boolean;
+    zIndex?: number;
   }>(),
   {
     mode: "create",

@@ -10,6 +10,7 @@ from app.services.system_metrics.worker import run_system_metrics_loop
 from app.services.traffic_intel.live_backup import run_traffic_live_backup_loop
 from app.services.traffic_intel.pipeline import run_pipeline_loop
 from app.workers.alerts import run_alert_loop
+from app.workers.certificate_expiry import run_certificate_expiry_loop
 from app.workers.retention import run_retention
 
 log = logging.getLogger("waf.worker")
@@ -47,6 +48,7 @@ async def main() -> None:
         _run_supervised("traffic_live_backup", run_traffic_live_backup_loop, stop),
         _run_supervised("ai_guard", run_ai_guard_loop, stop),
         _run_supervised("alerts", run_alert_loop, stop),
+        _run_supervised("certificate_expiry", run_certificate_expiry_loop, stop),
         _run_supervised("system_metrics", run_system_metrics_loop, stop),
     )
 

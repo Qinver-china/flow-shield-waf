@@ -146,6 +146,14 @@
       placeholder="长度"
     />
 
+    <a-textarea
+      v-else-if="isAutoHeightTextOp(row.op)"
+      v-model:value="row.valueText"
+      class="value-input value-textarea"
+      placeholder="值"
+      :auto-size="{ minRows: 1, maxRows: 8 }"
+    />
+
     <a-input
       v-else-if="row.op && !NO_VALUE_OPS.includes(row.op)"
       v-model:value="row.valueText"
@@ -183,6 +191,13 @@ import {
   opsFor,
   optionsFor,
 } from "@/composables/useConditionModel";
+
+/** 等于 / 不等于 / 正则匹配：长文本时用自适应高度输入 */
+const AUTO_HEIGHT_TEXT_OPS = ["equals", "not_equals", "regex"];
+
+function isAutoHeightTextOp(op?: string) {
+  return !!op && AUTO_HEIGHT_TEXT_OPS.includes(op);
+}
 
 const props = defineProps<{
   row: UiLeaf;
@@ -227,7 +242,7 @@ const ipGroupSelectOptions = computed(() =>
 <style scoped>
 .cond-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   margin-bottom: 6px;
   flex-wrap: wrap;
@@ -248,6 +263,10 @@ const ipGroupSelectOptions = computed(() =>
 .value-input {
   flex: 1;
   min-width: 110px;
+}
+.value-textarea {
+  line-height: 1.5;
+  resize: none;
 }
 .cond-leaf-readonly {
   padding: 4px 0 4px 12px;

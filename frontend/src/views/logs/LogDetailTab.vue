@@ -9,6 +9,7 @@
         size="small"
         bordered
         :scroll="{ x: 1100 }"
+        :show-sorter-tooltip="false"
         @change="onTableChange"
       >
         <template #bodyCell="{ column, record, text }">

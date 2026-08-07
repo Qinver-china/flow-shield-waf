@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Site
 
 _DOMAIN_SPLIT_RE = re.compile(r"[\s,;，；]+")
+# Regular FQDN, or a single-label nginx wildcard like *.example.com
 _DOMAIN_RE = re.compile(
-    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+"
+    r"^(?:\*\.)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+"
     r"[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
 )
 
@@ -20,8 +21,12 @@ def validate_domain(value: str) -> str:
     domain = value.strip().lower().rstrip(".")
     if not domain:
         raise ValueError("域名不能为空")
-    if domain.startswith("*.") or "*" in domain:
-        raise ValueError(f"暂不支持通配符域名：{value}")
+    if "*" in domain:
+        # Only allow nginx-style leftmost wildcard: *.example.com
+        if not domain.startswith("*.") or domain.count("*") != 1:
+            raise ValueError(f"通配符仅支持 *.example.com 格式：{value}")
+        if domain == "*." or domain.count(".") < 2:
+            raise ValueError(f"通配符域名格式无效：{value}")
     if not _DOMAIN_RE.match(domain):
         raise ValueError(f"域名格式无效：{value}")
     return domain

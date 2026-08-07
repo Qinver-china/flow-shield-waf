@@ -1,25 +1,28 @@
 <template>
   <page-shell title="防护日志" description="多维统计分析与日志明细查询">
     <log-filter-bar :filter-state="filterState" />
-
     <a-tabs v-model:active-key="activeTab" size="large" class="logs-tabs fs-tabs-animated">
       <a-tab-pane key="stats" tab="统计筛选" />
       <a-tab-pane key="detail" tab="日志明细" />
     </a-tabs>
     <div class="logs-tab-panel">
-      <log-stats-tab
-        v-show="activeTab === 'stats'"
-        ref="statsTabRef"
-        :active="activeTab === 'stats'"
-        :filter-state="filterState"
-        @drill-down="onDrillDown"
-      />
-      <log-detail-tab
-        v-show="activeTab === 'detail'"
-        ref="detailTabRef"
-        :active="activeTab === 'detail'"
-        :filter-state="filterState"
-      />
+      <transition name="logs-slide" @after-leave="onTabAfterLeave">
+        <log-stats-tab
+          v-show="visibleTab === 'stats'"
+          ref="statsTabRef"
+          :active="activeTab === 'stats'"
+          :filter-state="filterState"
+          @drill-down="onDrillDown"
+        />
+      </transition>
+      <transition name="logs-slide" @after-leave="onTabAfterLeave">
+        <log-detail-tab
+          v-show="visibleTab === 'detail'"
+          ref="detailTabRef"
+          :active="activeTab === 'detail'"
+          :filter-state="filterState"
+        />
+      </transition>
     </div>
   </page-shell>
 </template>
@@ -42,6 +45,32 @@ const activeTab = logsPageActiveTab;
 const filterState = useLogFilterState("6h");
 const detailTabRef = ref<InstanceType<typeof LogDetailTab> | null>(null);
 const statsTabRef = ref<InstanceType<typeof LogStatsTab> | null>(null);
+
+/** Currently shown pane (v-show). `null` = leave in progress (out-in). */
+const visibleTab = ref<"stats" | "detail" | null>(activeTab.value);
+let tabLeaveInFlight = false;
+let pendingTab: "stats" | "detail" | null = null;
+
+function onTabAfterLeave() {
+  tabLeaveInFlight = false;
+  const next = pendingTab ?? activeTab.value;
+  pendingTab = null;
+  visibleTab.value = next;
+}
+
+watch(activeTab, (next) => {
+  if (next === visibleTab.value && !tabLeaveInFlight) return;
+  pendingTab = next;
+  if (tabLeaveInFlight) return;
+  if (visibleTab.value == null) {
+    visibleTab.value = next;
+    pendingTab = null;
+    return;
+  }
+  tabLeaveInFlight = true;
+  // Hide current pane first; after-leave reveals pendingTab.
+  visibleTab.value = null;
+});
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let lastRouteQueryKey = "";
@@ -82,6 +111,10 @@ function hasDetailFilters(query: Record<string, unknown>) {
 }
 
 function applyRouteQuery() {
+  // keep-alive 下 Logs 仍挂载；跳到 /rules?id=&drawer= 等外页时，
+  // route.query 变化会误触发这里，把筛选/tab 清掉。只在日志页消费 query。
+  if (route.path !== "/logs") return;
+
   const query = route.query as Record<string, unknown>;
   const key = routeQueryKey(query);
   if (key === lastRouteQueryKey) return;
@@ -112,7 +145,7 @@ function onDrillDown(payload: LogDrillDownFilter) {
 }
 
 function sendHeartbeat(active: boolean) {
-  api.post("/api/v1/logs/viewer-heartbeat", { active }).catch(() => {});
+  api.post("/api/v1/logs/viewer-heartbeat", { active }).catch(() => { });
 }
 
 function startHeartbeat() {
@@ -159,6 +192,22 @@ onUnmounted(() => {
 }
 
 .logs-tab-panel {
+  position: relative;
+  overflow: hidden;
   min-height: 0;
+}
+
+/* 对齐 fs-slide；由 visibleTab 串行切换实现 out-in，组件始终 v-show 不卸载 */
+.logs-slide-enter-active,
+.logs-slide-leave-active {
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.logs-slide-enter-from,
+.logs-slide-leave-to {
+  transform: translateY(20px);
+  opacity: 0;
 }
 </style>

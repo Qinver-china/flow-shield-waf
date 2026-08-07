@@ -232,6 +232,7 @@
           </template>
           <a-table class="feed-list-body" :columns="ruleCols" :data-source="stats.top_rules" :pagination="false"
             :row-key="(record: { id?: number; name: string }) => String(record.id ?? record.name)" size="small" bordered
+            :show-sorter-tooltip="false"
             :scroll="{ x: 180 }" :custom-row="ruleTableRow" />
         </a-card>
       </a-col>
@@ -241,7 +242,7 @@
             <span class="panel-title"><aim-outlined /> Top 攻击 IP</span>
           </template>
           <a-table class="feed-list-body" :columns="ipCols" :data-source="stats.top_ips" :pagination="false"
-            row-key="ip" size="small" bordered :scroll="{ x: 180 }" :custom-row="ipTableRow" />
+            row-key="ip" size="small" bordered :scroll="{ x: 180 }" :show-sorter-tooltip="false" :custom-row="ipTableRow" />
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="12">

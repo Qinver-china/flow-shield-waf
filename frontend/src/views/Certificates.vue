@@ -39,83 +39,20 @@
       </template>
     </fs-data-table>
 
-    <fs-form-drawer
+    <certificate-form-drawer
       v-model:open="modalOpen"
-      title="SSL 证书"
-      :subtitle="editingId ? `#${editingId}` : undefined"
-      :mode="editingId ? 'edit' : 'create'"
-      :width="760"
-      :loading="detailLoading"
-      :confirm-loading="saving"
-      @ok="save"
-    >
-      <a-form layout="vertical">
-          <fs-form-section title="基本信息">
-            <a-form-item label="证书名称" required>
-              <a-input v-model:value="form.name" placeholder="" />
-            </a-form-item>
-            <a-form-item label="备注">
-              <a-input v-model:value="form.remark" placeholder="可选" />
-            </a-form-item>
-          </fs-form-section>
-
-          <fs-form-section title="证书内容" description="支持粘贴 PEM 文本或上传文件">
-            <a-tabs v-model:activeKey="importMode">
-              <a-tab-pane key="paste" tab="粘贴内容">
-                <a-form-item label="证书内容 (PEM)" required>
-                  <a-textarea
-                    v-model:value="form.cert_content"
-                    :rows="6"
-                    placeholder="-----BEGIN CERTIFICATE-----"
-                    class="fs-code-textarea"
-                  />
-                </a-form-item>
-                <a-form-item label="私钥内容 (PEM)" required>
-                  <a-textarea
-                    v-model:value="form.key_content"
-                    :rows="6"
-                    placeholder="-----BEGIN PRIVATE KEY-----"
-                    class="fs-code-textarea"
-                  />
-                </a-form-item>
-              </a-tab-pane>
-              <a-tab-pane key="upload" tab="上传文件">
-                <a-form-item label="证书文件 (.pem / .crt)" required>
-                  <a-upload
-                    :before-upload="onCertFile"
-                    :max-count="1"
-                    :file-list="certFileList"
-                    @remove="clearCertFile"
-                  >
-                    <a-button>选择证书文件</a-button>
-                  </a-upload>
-                </a-form-item>
-                <a-form-item label="私钥文件 (.key / .pem)" required>
-                  <a-upload
-                    :before-upload="onKeyFile"
-                    :max-count="1"
-                    :file-list="keyFileList"
-                    @remove="clearKeyFile"
-                  >
-                    <a-button>选择私钥文件</a-button>
-                  </a-upload>
-                </a-form-item>
-                <p v-if="editingId" class="fs-hint">未选择新文件时，将保留当前证书内容。</p>
-              </a-tab-pane>
-            </a-tabs>
-          </fs-form-section>
-        </a-form>
-    </fs-form-drawer>
+      :certificate-id="editingId"
+      @saved="fetchList"
+    />
   </page-shell>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { message, type UploadProps } from "ant-design-vue";
+import { message } from "ant-design-vue";
 import { api } from "@/api";
+import CertificateFormDrawer from "@/components/CertificateFormDrawer.vue";
 import FsDataTable from "@/components/FsDataTable.vue";
-import FsFormDrawer from "@/components/FsFormDrawer.vue";
-import FsFormSection from "@/components/FsFormSection.vue";
 import ListFilterBar from "@/components/ListFilterBar.vue";
 import PageShell from "@/components/PageShell.vue";
 import { certificateExpiryFilterOptions } from "@/constants/resourceList";
@@ -129,11 +66,6 @@ interface CertificateRow {
   not_before: string | null;
   not_after: string | null;
   remark: string | null;
-}
-
-interface CertificateDetail extends CertificateRow {
-  cert_content: string;
-  key_content: string;
 }
 
 const listFilters: ResourceFilterField[] = [
@@ -170,11 +102,8 @@ const columns = computed(() => [
 
 const rows = ref<CertificateRow[]>([]);
 const loading = ref(false);
-const detailLoading = ref(false);
-const saving = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<number | null>(null);
-const importMode = ref<"paste" | "upload">("paste");
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
@@ -182,36 +111,12 @@ const filterValues = reactive<Record<string, unknown>>({});
 const sortField = ref<string | undefined>();
 const sortOrder = ref<"asc" | "desc" | undefined>("desc");
 
-const form = reactive({
-  name: "",
-  remark: "",
-  cert_content: "",
-  key_content: "",
-});
-
-const certFile = ref<File | null>(null);
-const keyFile = ref<File | null>(null);
-const certFileList = ref<UploadProps["fileList"]>([]);
-const keyFileList = ref<UploadProps["fileList"]>([]);
-
 const pagination = computed(() => ({
   current: page.value,
   pageSize: pageSize.value,
   total: total.value,
   showTotal: (t: number) => `共 ${t} 条`,
 }));
-
-function resetForm() {
-  form.name = "";
-  form.remark = "";
-  form.cert_content = "";
-  form.key_content = "";
-  certFile.value = null;
-  keyFile.value = null;
-  certFileList.value = [];
-  keyFileList.value = [];
-  importMode.value = "paste";
-}
 
 function formatTime(value: string | null) {
   return formatDateTime(value);
@@ -279,131 +184,12 @@ function resetFilters() {
 
 function openCreate() {
   editingId.value = null;
-  resetForm();
   modalOpen.value = true;
 }
 
-async function openUpdate(row: CertificateRow) {
+function openUpdate(row: CertificateRow) {
   editingId.value = row.id;
-  resetForm();
   modalOpen.value = true;
-  detailLoading.value = true;
-  try {
-    const resp = await api.get<CertificateDetail>(`/api/v1/certificates/${row.id}`);
-    const detail = resp.data;
-    form.name = detail.name;
-    form.remark = detail.remark || "";
-    form.cert_content = detail.cert_content;
-    form.key_content = detail.key_content;
-  } finally {
-    detailLoading.value = false;
-  }
-}
-
-const onCertFile: UploadProps["beforeUpload"] = (file) => {
-  certFile.value = file as File;
-  certFileList.value = [file];
-  return false;
-};
-
-const onKeyFile: UploadProps["beforeUpload"] = (file) => {
-  keyFile.value = file as File;
-  keyFileList.value = [file];
-  return false;
-};
-
-function clearCertFile() {
-  certFile.value = null;
-  certFileList.value = [];
-}
-
-function clearKeyFile() {
-  keyFile.value = null;
-  keyFileList.value = [];
-}
-
-async function readFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
-}
-
-async function resolveCertContents(): Promise<{ cert: string; key: string } | null> {
-  if (importMode.value === "upload") {
-    if (certFile.value && keyFile.value) {
-      return {
-        cert: await readFile(certFile.value),
-        key: await readFile(keyFile.value),
-      };
-    }
-    if (editingId.value && form.cert_content.trim() && form.key_content.trim()) {
-      return {
-        cert: form.cert_content,
-        key: form.key_content,
-      };
-    }
-    if (!editingId.value) {
-      message.warning("请上传证书文件和私钥文件");
-      return null;
-    }
-    message.warning("请选择新的证书文件和私钥文件");
-    return null;
-  }
-
-  if (!form.cert_content.trim() || !form.key_content.trim()) {
-    message.warning("请填写证书和私钥内容");
-    return null;
-  }
-  return {
-    cert: form.cert_content,
-    key: form.key_content,
-  };
-}
-
-async function save() {
-  if (!form.name.trim()) {
-    message.warning("请填写证书名称");
-    return;
-  }
-
-  const contents = await resolveCertContents();
-  if (!contents) return;
-
-  saving.value = true;
-  try {
-    if (editingId.value) {
-      await api.put(`/api/v1/certificates/${editingId.value}`, {
-        name: form.name.trim(),
-        remark: form.remark || null,
-        cert_content: contents.cert,
-        key_content: contents.key,
-      });
-    } else if (importMode.value === "upload") {
-      const fd = new FormData();
-      fd.append("name", form.name.trim());
-      if (form.remark) fd.append("remark", form.remark);
-      fd.append("cert_file", certFile.value!);
-      fd.append("key_file", keyFile.value!);
-      await api.upload("/api/v1/certificates/upload", fd);
-    } else {
-      await api.post("/api/v1/certificates", {
-        name: form.name.trim(),
-        remark: form.remark || null,
-        cert_content: contents.cert,
-        key_content: contents.key,
-      });
-    }
-    message.success("保存成功");
-    modalOpen.value = false;
-    fetchList();
-  } catch {
-    // interceptor shows error
-  } finally {
-    saving.value = false;
-  }
 }
 
 async function remove(id: number) {
@@ -416,15 +202,6 @@ onMounted(fetchList);
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.toolbar h3 {
-  margin: 0;
-}
 .danger {
   color: #ef4444;
 }

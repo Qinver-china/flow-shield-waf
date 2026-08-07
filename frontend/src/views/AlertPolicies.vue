@@ -69,6 +69,7 @@
         size="small"
         bordered
         :pagination="logsPagination"
+        :show-sorter-tooltip="false"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.dataIndex === 'created_at'">

@@ -42,6 +42,7 @@
       size="middle"
       bordered
       :scroll="{ x: tableScrollX }"
+      :show-sorter-tooltip="false"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record, text }">
@@ -277,6 +278,14 @@ const props = withDefaults(
   { duplicatable: false, detailActions: false, embedded: false, showViewJson: true, createLabel: "新增", showCreate: true },
 );
 
+const emit = defineEmits<{
+  mutated: [];
+}>();
+
+function notifyMutated() {
+  emit("mutated");
+}
+
 function allowDelete(row: Record<string, any>) {
   return props.canDelete ? props.canDelete(row) : true;
 }
@@ -428,7 +437,10 @@ const {
   rows,
   batch: batchConfig,
   hasEnabledColumn,
-  onRefresh: fetchList,
+  onRefresh: async () => {
+    await fetchList();
+    notifyMutated();
+  },
 });
 
 function onBatchExecute(action: import("@/types/batch").BatchActionKey, mode?: string) {
@@ -639,6 +651,7 @@ async function save() {
     else message.success(tip);
     drawerOpen.value = false;
     fetchList();
+    notifyMutated();
   } catch (err: any) {
     if (err?.message === "cancelled") {
       // user dismissed confirm; keep drawer open
@@ -654,6 +667,7 @@ async function remove(id: number) {
   await api.del(`${props.apiBase}/${id}`);
   message.success("已删除");
   fetchList();
+  notifyMutated();
 }
 
 async function toggleEnabled(row: any, enabled: boolean) {
@@ -662,6 +676,7 @@ async function toggleEnabled(row: any, enabled: boolean) {
     await api.put(`${props.apiBase}/${row.id}`, { enabled });
     row.enabled = enabled;
     message.success(enabled ? "已启用" : "已停用");
+    notifyMutated();
   } catch {
     // interceptor shows error; keep previous switch state
   } finally {
@@ -679,6 +694,7 @@ async function persistDrawerEnabled(enabled: boolean) {
     const row = rows.value.find((item) => item.id === record.id);
     if (row) row.enabled = enabled;
     message.success(enabled ? "已启用" : "已停用");
+    notifyMutated();
   } catch {
     record.enabled = previous;
   } finally {

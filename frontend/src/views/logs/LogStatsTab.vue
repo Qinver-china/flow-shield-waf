@@ -1,35 +1,15 @@
 <template>
   <div class="log-stats-tab">
     <div class="stats-body">
-      <log-stats-dimension-picker
-        v-if="isMobileLayout"
-        :model-value="dimension"
-        trigger-variant="card"
-        @change="selectDimension"
-      />
-      <a-card
-        v-else
-        size="small"
-        class="dimension-panel"
-        title="统计维度"
-      >
+      <log-stats-dimension-picker v-if="isMobileLayout" :model-value="dimension" trigger-variant="card"
+        @change="selectDimension" />
+      <a-card v-else size="small" class="dimension-panel" title="统计维度">
         <div class="dimension-scroll">
-          <section
-            v-for="group in statsDimensionGroups"
-            :key="group.label"
-            class="dimension-group"
-          >
+          <section v-for="group in statsDimensionGroups" :key="group.label" class="dimension-group">
             <div class="dimension-group-title">{{ group.label }}</div>
             <div class="dimension-grid">
-              <button
-                v-for="item in group.items"
-                :key="item.key"
-                type="button"
-                class="dimension-btn"
-                :class="{ active: dimension === item.key }"
-                :title="item.desc"
-                @click="selectDimension(item.key)"
-              >
+              <button v-for="item in group.items" :key="item.key" type="button" class="dimension-btn"
+                :class="{ active: dimension === item.key }" :title="item.desc" @click="selectDimension(item.key)">
                 {{ item.label }}
               </button>
             </div>
@@ -55,72 +35,48 @@
         </a-row>
 
         <a-card size="small" class="result-panel">
-        <template #title>
-          <span>{{ currentDimension?.label || "统计结果" }}</span>
-          <span v-if="currentDimension?.desc" class="panel-desc">{{ currentDimension.desc }}</span>
-        </template>
-
-        <div class="chart-block">
-          <div class="chart-block-header">
-            <div class="chart-block-title">命中时间趋势</div>
-            <a-dropdown :trigger="['click']" placement="bottomRight" :arrow="true">
-              <button type="button" class="granularity-trigger" @click.prevent>
-                {{ trendGranularityLabel }}
-                <down-outlined />
-              </button>
-              <template #overlay>
-                <a-menu
-                  class="granularity-menu"
-                  :selected-keys="[trendGranularity]"
-                  @click="onGranularitySelect"
-                >
-                  <a-menu-item v-for="item in trendGranularityOptions" :key="item.key">
-                    {{ item.label }}
-                  </a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
-          </div>
-          <div class="chart-content">
-            <div v-if="chartLoading" class="stats-chart chart-loading">
-              <a-spin />
+          <template #title>
+            <div class="chart-block-header">
+              <div class="chart-block-title">命中趋势</div>
+              <a-dropdown :trigger="['click']" placement="bottomRight" :arrow="true">
+                <button type="button" class="granularity-trigger" @click.prevent>
+                  {{ trendGranularityLabel }}
+                  <down-outlined />
+                </button>
+                <template #overlay>
+                  <a-menu class="granularity-menu" :selected-keys="[trendGranularity]" @click="onGranularitySelect">
+                    <a-menu-item v-for="item in trendGranularityOptions" :key="item.key">
+                      {{ item.label }}
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
             </div>
-            <a-empty
-              v-else-if="!overview.trend.length"
-              class="chart-empty"
-              description="当前时间范围内暂无命中日志"
-            />
-            <div v-else ref="trendChartEl" class="stats-chart" />
-          </div>
-        </div>
+          </template>
 
-        <a-table
-          :columns="tableColumns"
-          :data-source="groupItems"
-          :loading="groupLoading"
-          :pagination="tablePagination"
-          size="small"
-          row-key="key"
-          class="stats-table"
-          bordered
-          @change="onTableChange"
-        >
+          <div class="chart-block">
+            <div class="chart-content">
+              <div v-if="chartLoading" class="stats-chart chart-loading">
+                <a-spin />
+              </div>
+              <a-empty v-else-if="!overview.trend.length" class="chart-empty" description="当前时间范围内暂无命中日志" />
+              <div v-else ref="trendChartEl" class="stats-chart" />
+            </div>
+          </div>
+        </a-card>
+
+        <a-table :columns="tableColumns" :data-source="groupItems" :loading="groupLoading" :pagination="tablePagination"
+          size="small" row-key="key" class="stats-table" bordered :show-sorter-tooltip="false" @change="onTableChange">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'label'">
-              <log-dimension-action-cell
-                :label="record.label"
-                :dimension="dimension"
-                :item-key="record.key"
-                :filter-state="filterState"
-                @drill-down="emit('drill-down', buildDrillDown(record))"
-              />
+              <log-dimension-action-cell :label="record.label" :dimension="dimension" :item-key="record.key"
+                :filter-state="filterState" @drill-down="emit('drill-down', buildDrillDown(record))" />
             </template>
             <template v-else-if="column.key === 'percent'">
               {{ percentOf(record.count) }}
             </template>
           </template>
         </a-table>
-        </a-card>
       </div>
     </div>
   </div>
@@ -222,7 +178,7 @@ const trendGranularityLabel = computed(
 
 const tableColumns = computed(() => [
   {
-    title: currentDimension.value?.label || "维度值",
+    title: (currentDimension.value?.label || "维度值") + (currentDimension.value?.desc ? ` (${currentDimension.value.desc})` : ""),
     key: "label",
     dataIndex: "label",
     ellipsis: true,
@@ -531,7 +487,6 @@ onUnmounted(() => {
 }
 
 .result-panel {
-  flex: 1;
   min-height: 0;
   height: auto;
 }
@@ -540,7 +495,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: minmax(260px, 300px) 1fr;
   gap: 12px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .dimension-panel {
@@ -584,7 +539,7 @@ onUnmounted(() => {
   padding-right: 2px;
 }
 
-.dimension-group + .dimension-group {
+.dimension-group+.dimension-group {
   margin-top: 12px;
 }
 
@@ -665,7 +620,7 @@ onUnmounted(() => {
   justify-content: center;
 }
 
-.chart-block + .chart-block {
+.chart-block+.chart-block {
   margin-top: 4px;
 }
 
@@ -674,7 +629,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  width: 100%;
 }
 
 .chart-block-title {

@@ -28,12 +28,14 @@
       <template v-if="domainList.length">
         <template v-for="(domain, index) in domainList" :key="domain">
           <a
+            v-if="!domain.includes('*')"
             class="site-card__domain-link"
             :href="domainHref(domain)"
             target="_blank"
             rel="noopener noreferrer"
             :title="`打开 ${domainHref(domain)}`"
           >{{ domain }}</a>
+          <span v-else class="site-card__domain-text" :title="domain">{{ domain }}</span>
           <span v-if="index < domainList.length - 1" class="site-card__domain-sep"> · </span>
         </template>
       </template>
@@ -439,6 +441,10 @@ function trafficBaselineClass(w: SiteTrafficWindow) {
 .site-card__domain-link:hover {
   text-decoration: underline;
   color: var(--fs-color-primary-hover);
+}
+
+.site-card__domain-text {
+  color: var(--fs-color-primary);
 }
 
 .site-card__domain-sep {

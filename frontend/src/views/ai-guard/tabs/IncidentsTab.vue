@@ -10,6 +10,7 @@
       bordered
       class="incidents-table"
       :scroll="{ x: 960 }"
+      :show-sorter-tooltip="false"
       @change="onTableChange"
     >
       <template #bodyCell="{ column, record }">
@@ -143,10 +144,10 @@ const resolvedPagination = computed(() => withPaginationSize(pagination));
 
 const columns = [
   { title: "状态", key: "status", width: 100 },
-  { title: "分析摘要", key: "summary", width: 360, ellipsis: true },
+  { title: "分析摘要", key: "summary", width: 460, ellipsis: true },
   { title: "应用规则", dataIndex: "applied_rule_id", width: 100 },
   { title: "时间", dataIndex: "created_at", width: 180 },
-  { title: "操作", key: "actions", width: 160, fixed: "right" as const },
+  { title: "操作", key: "actions", width: 100, fixed: "right" as const },
 ];
 
 const summaryItems = computed(() => {

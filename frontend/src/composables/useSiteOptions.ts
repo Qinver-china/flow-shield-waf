@@ -20,13 +20,42 @@ function siteDisplayName(site: SiteOption): string {
   return site.name || site.domain || `#${site.id}`;
 }
 
+/** Shared across all useSiteOptions() callers so invalidate refreshes every dropdown. */
+const sites = ref<SiteOption[]>([]);
+const loading = ref(false);
 let cached: SiteOption[] | null = null;
 let pending: Promise<SiteOption[]> | null = null;
 
-export function useSiteOptions() {
-  const sites = ref<SiteOption[]>(cached ?? []);
-  const loading = ref(false);
+async function fetchOptions(force = false): Promise<SiteOption[]> {
+  if (!force && cached) {
+    sites.value = cached;
+    return cached;
+  }
+  if (pending) return pending;
 
+  loading.value = true;
+  pending = api
+    .get<SiteOption[]>("/api/v1/sites/options")
+    .then((resp) => {
+      cached = resp.data;
+      sites.value = cached;
+      return cached;
+    })
+    .finally(() => {
+      pending = null;
+      loading.value = false;
+    });
+  return pending;
+}
+
+/** Drop cache and reload so site selects pick up create/edit/delete/toggle. */
+export async function invalidateSiteOptions() {
+  cached = null;
+  pending = null;
+  await fetchOptions(true);
+}
+
+export function useSiteOptions() {
   const siteMap = computed(() => new Map(sites.value.map((s) => [s.id, s])));
 
   const selectOptions = computed(() =>
@@ -38,22 +67,7 @@ export function useSiteOptions() {
   );
 
   async function load() {
-    if (cached) {
-      sites.value = cached;
-      return;
-    }
-    loading.value = true;
-    try {
-      if (!pending) {
-        pending = api
-          .get<SiteOption[]>("/api/v1/sites/options")
-          .then((resp) => resp.data);
-      }
-      cached = await pending;
-      sites.value = cached;
-    } finally {
-      loading.value = false;
-    }
+    await fetchOptions(false);
   }
 
   function resolveSiteName(id: number): string {
@@ -71,7 +85,9 @@ export function useSiteOptions() {
     return resolveSiteName(id);
   }
 
-  onMounted(load);
+  onMounted(() => {
+    void load();
+  });
 
   return {
     sites,
@@ -82,6 +98,7 @@ export function useSiteOptions() {
     formatSiteIds,
     formatSiteId,
     load,
+    invalidate: invalidateSiteOptions,
   };
 }
 

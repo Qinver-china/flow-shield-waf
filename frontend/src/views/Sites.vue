@@ -3,260 +3,207 @@
     <template #actions>
       <a-button type="primary" @click="crudRef?.openCreate()">新增站点</a-button>
     </template>
-    <resource-crud
-    ref="crudRef"
-    embedded
-    title="站点管理"
-    api-base="/api/v1/sites"
-    :columns="columns"
-    :filters="filters"
-    :default-record="defaultRecord"
-    :prepare-payload="preparePayload"
-    :batch="batchConfig"
-    name-field="name"
-    detail-actions
-    duplicatable
-  >
-    <template #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate }">
-      <a-spin :spinning="loading || (metricsLoading && !Object.keys(metricsMap).length)">
-        <a-empty v-if="!rows.length" description="暂无站点，点击右上角新增" />
-        <div v-else class="site-card-grid">
-          <site-card
-            v-for="site in rows"
-            :key="site.id"
-            :site="site"
-            :metrics="metricsMap[String(site.id)]"
-            :toggling="togglingId === site.id"
-            :more-actions="cardMoreActions(site, { openEdit, openDuplicate, remove, allowDelete, canDuplicate, nameActions })"
-            @view="openView(site)"
-            @edit="openEdit(site)"
-            @logs="goSiteLogs(site)"
-            @toggle-enabled="(enabled) => toggleEnabled(site, enabled)"
-          />
-        </div>
-      </a-spin>
-    </template>
-
-    <template #form="{ record, readonly, mode, enabledLoading, onEnabledPersist }">
-      <div class="site-form">
-        <fs-form-section title="域名配置">
-          <template #extra>
-            <form-enabled-switch
-              v-model:checked="record.enabled"
-              :immediate="mode === 'view'"
-              :loading="enabledLoading"
-              @immediate-change="onEnabledPersist"
-            />
-          </template>
-          <a-alert
-            v-if="!record.enabled"
-            type="warning"
-            show-icon
-            style="margin-bottom: 16px"
-            message="禁用站点将从引擎移除 Nginx 配置，该域名将无法访问（并非仅关闭 WAF 检测）。"
-          />
-          <a-row :gutter="16">
-            <a-col :span="12">
-              <a-form-item label="站点名称" required>
-                <a-input v-model:value="record.name" placeholder="例如：官网" :disabled="readonly" />
-              </a-form-item>
-            </a-col>
-            <a-col :span="24">
-              <a-form-item label="域名" required extra="可输入多个域名，回车或逗号分隔，例如 www.example.com 与 example.com">
-                <a-select
-                  v-model:value="record.domains"
-                  mode="tags"
-                  :token-separators="[',', ' ', ';']"
-                  placeholder="输入域名后回车"
-                  style="width: 100%"
-                  :disabled="readonly"
-                  :options="[]"
-                />
-              </a-form-item>
-            </a-col>
-          </a-row>
-        </fs-form-section>
-
-        <fs-form-section title="回源配置" description="配置 WAF 到源站的转发地址与协议">
-          <a-row :gutter="16">
-            <a-col :span="14">
-              <a-form-item label="源站" required extra="合法域名或 IP，无需 https:// 前缀">
-                <origin-host-input v-model:value="record.origin_host" :disabled="readonly" />
-              </a-form-item>
-            </a-col>
-            <a-col :span="10">
-              <a-form-item label="回源协议">
-                <a-select v-model:value="record.origin_protocol" :options="protocolOptions" :disabled="readonly" />
-              </a-form-item>
-            </a-col>
-            <a-col :span="14">
-              <a-form-item
-                label="客户端 IP 获取方式"
-                :extra="clientIpSourceExtra(record.client_ip_source)"
-              >
-                <a-select
-                  v-model:value="record.client_ip_source"
-                  :disabled="readonly"
-                  style="width: 100%"
-                  :options="clientIpSourceSelectOptions"
-                />
-              </a-form-item>
-              <a-alert
-                v-if="record.client_ip_source && record.client_ip_source !== 'remote_addr'"
-                type="warning"
-                show-icon
-                style="margin-bottom: 16px"
-                message="非直连 IP 模式将信任请求头中的客户端地址"
-                description="请确保仅可信 CDN / 反代能直连本引擎；若攻击者可直连并伪造 IP 头，黑白名单、限速与挑战放行均可被绕过或嫁祸。生产环境务必在上游网络层限制来源。"
-              />
-            </a-col>
-            <a-col :span="10">
-              <a-form-item
-                label="关闭内容缓冲"
-                extra="如果源站在本机，建议开启此开关"
-              >
-                <a-switch v-model:checked="record.disable_content_buffering" :disabled="readonly" />
-              </a-form-item>
-            </a-col>
-          </a-row>
-          <a-row :gutter="16" style="margin-bottom: 12px;">
-            <a-col :span="12">
-              <a-form-item label="HTTP 端口">
-                <a-input-number
-                  v-model:value="record.origin_http_port"
-                  :min="1"
-                  :max="65535"
-                  style="width: 100%"
-                  :disabled="readonly"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :span="12">
-              <a-form-item label="HTTPS 端口">
-                <a-input-number
-                  v-model:value="record.origin_https_port"
-                  :min="1"
-                  :max="65535"
-                  style="width: 100%"
-                  :disabled="readonly"
-                />
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-row :gutter="16">
-            <a-col :span="12">
-              <div class="fs-switch-row">
-                <span>监听 HTTP</span>
-                <a-switch v-model:checked="record.listen_http" :disabled="readonly" />
-              </div>
-            </a-col>
-            <a-col :span="12">
-              <div class="fs-switch-row">
-                <span>监听 HTTPS</span>
-                <a-switch v-model:checked="record.listen_https" :disabled="readonly" />
-              </div>
-            </a-col>
-          </a-row>
-
-          <template v-if="record.listen_https">
-            <a-form-item label="SSL 证书" required>
-              <template v-if="certOptions.length">
-                <a-select
-                  v-model:value="record.certificate_id"
-                  placeholder="请选择证书"
-                  style="width: 100%"
-                  :options="certSelectOptions"
-                  allow-clear
-                  :disabled="readonly"
-                />
-              </template>
-              <a-empty v-else-if="!readonly" description="暂无可用证书" :image-style="{ height: '48px' }">
-                <a-button type="primary" size="small" @click="goCertificates">前往证书管理</a-button>
-              </a-empty>
-              <span v-else>{{ certName(record.certificate_id) }}</span>
-            </a-form-item>
-            <div class="fs-switch-row" style="margin-bottom: 16px">
-              <span>强制 HTTPS</span>
-              <a-switch v-model:checked="record.force_https" :disabled="readonly" />
-            </div>
-            <a-alert
-              v-if="record.force_https"
-              type="info"
-              show-icon
-              style="margin-bottom: 16px"
-              message="已开启强制 HTTPS：HTTP 请求将自动 301 跳转到 HTTPS，不再经 WAF 代理处理。"
-            />
-          </template>
-        </fs-form-section>
-
-        <fs-form-section title="自定义防护页面" description="关闭时使用系统设置中的全局防护页面；优先级低于规则/黑名单/限速的专属配置">
-          <div class="fs-switch-row">
-            <span>启用站点专属防护页面</span>
-            <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
+    <resource-crud ref="crudRef" embedded title="站点管理" api-base="/api/v1/sites" :columns="columns" :filters="filters"
+      :default-record="defaultRecord" :prepare-payload="preparePayload" :batch="batchConfig" name-field="name"
+      detail-actions duplicatable @mutated="invalidateSiteOptions">
+      <template
+        #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate }">
+        <a-spin :spinning="loading || (metricsLoading && !Object.keys(metricsMap).length)">
+          <a-empty v-if="!rows.length" description="暂无站点，点击右上角新增" />
+          <div v-else class="site-card-grid">
+            <site-card v-for="site in rows" :key="site.id" :site="site" :metrics="metricsMap[String(site.id)]"
+              :toggling="togglingId === site.id"
+              :more-actions="cardMoreActions(site, { openEdit, openDuplicate, remove, allowDelete, canDuplicate, nameActions })"
+              @view="openView(site)" @edit="openEdit(site)" @logs="goSiteLogs(site)"
+              @toggle-enabled="(enabled) => toggleEnabled(site, enabled)" />
           </div>
-          <template v-if="record.custom_block_page_enabled">
+        </a-spin>
+      </template>
+
+      <template #form="{ record, readonly, mode, enabledLoading, onEnabledPersist }">
+        <div class="site-form">
+          <fs-form-section title="域名配置">
+            <template #extra>
+              <form-enabled-switch v-model:checked="record.enabled" :immediate="mode === 'view'"
+                :loading="enabledLoading" @immediate-change="onEnabledPersist" />
+            </template>
             <a-row :gutter="16">
-              <a-col :span="8">
-                <a-form-item label="响应状态码">
-                  <a-select
-                    v-model:value="record.block_page_status_code"
-                    :disabled="readonly"
-                    :options="blockStatusOptions"
-                  />
+              <a-col :md="10" :lg="10" :xs="24">
+                <a-form-item label="站点名称" required>
+                  <a-input v-model:value="record.name" placeholder="例如：官网" :disabled="readonly" />
+                </a-form-item>
+              </a-col>
+              <a-col :md="14" :lg="14" :xs="24">
+                <a-form-item label="域名" required>
+                  <a-select v-model:value="record.domains" mode="tags" :open="false" :token-separators="[',', ' ', ';']"
+                    placeholder="输入域名后回车，支持输入多个域名，支持通配符" style="width: 100%" :disabled="readonly" />
                 </a-form-item>
               </a-col>
             </a-row>
-            <a-form-item label="HTML 内容">
-              <a-textarea
-                v-model:value="record.block_page_html"
-                :rows="10"
-                :disabled="readonly"
-                class="fs-code-textarea"
-              />
-            </a-form-item>
-          </template>
-        </fs-form-section>
+          </fs-form-section>
+          <fs-form-section title="回源配置">
+            <a-row :gutter="16">
+              <a-col :md="12" :lg="12" :xs="18">
+                <a-form-item label="源站地址" required>
+                  <origin-host-input v-model:value="record.origin_host" :disabled="readonly" />
+                </a-form-item>
+              </a-col>
+              <a-col :md="4" :lg="4" :xs="6">
+                <a-form-item label="回源协议">
+                  <a-select v-model:value="record.origin_protocol" :options="protocolOptions" :disabled="readonly" />
+                </a-form-item>
+              </a-col>
+              <a-col :md="8" :lg="8" :xs="24">
+                <a-form-item label="客户端 IP 获取方式">
+                  <a-select v-model:value="record.client_ip_source" :disabled="readonly" style="width: 100%"
+                    :options="clientIpSourceSelectOptions" />
+                </a-form-item>
+              </a-col>
+              <a-col :span="24">
+                <a-form-item label="回源端口">
+                  <a-row :gutter="16">
+                    <a-col :md="12" :lg="12" :xs="24">
+                      <a-input-number v-model:value="record.origin_http_port" class="site-listen-port" :min="1"
+                        :max="65535" :disabled="readonly" style="width: 100%">
+                        <template #addonBefore>HTTP端口</template>
+                        <template #addonAfter>
+                          <div class="site-listen-addon">
+                            <a-switch v-model:checked="record.listen_http" :disabled="readonly" />
+                          </div>
+                        </template>
+                      </a-input-number>
+                    </a-col>
+                    <a-col :md="12" :lg="12" :xs="24">
+                      <a-input-number v-model:value="record.origin_https_port" class="site-listen-port" :min="1"
+                        :max="65535" :disabled="readonly" style="width: 100%">
+                        <template #addonBefore>HTTPS端口</template>
+                        <template #addonAfter>
+                          <div class="site-listen-addon">
+                            <a-switch v-model:checked="record.listen_https" :disabled="readonly" />
+                          </div>
+                        </template>
+                      </a-input-number>
+                    </a-col>
+                  </a-row>
+                </a-form-item>
+                <template v-if="record.listen_https">
+                  <a-form-item label="SSL 证书" required>
+                    <template v-if="!readonly">
+                      <div class="site-cert-combo">
+                        <a-select v-model:value="record.certificate_id" class="site-cert-combo__select"
+                          placeholder="请选择证书" :options="certSelectOptions"
+                          :not-found-content="certOptions.length ? undefined : '暂无证书，请先导入'" allow-clear
+                          @change="(v) => { if (!v) record.force_https = false }">
+                          <template #dropdownRender="{ menuNode: menu }">
+                            <div>
+                              <site-cert-menu :vnodes="menu" />
+                              <a-divider style="margin: 4px 0" />
+                              <div class="site-cert-dropdown-action" @mousedown.prevent>
+                                <a-button type="link" block @click="openImportCert(record)">
+                                  <template #icon><plus-outlined /></template>
+                                  添加新的证书
+                                </a-button>
+                              </div>
+                            </div>
+                          </template>
+                        </a-select>
+                        <div class="site-cert-combo__addon">
+                          <span>强制 HTTPS</span>
+                          <a-switch v-model:checked="record.force_https" :disabled="!record.certificate_id" />
+                        </div>
+                      </div>
+                    </template>
+                    <div v-else class="site-cert-combo"
+                      :class="{ 'site-cert-combo--with-addon': !!record.certificate_id }">
+                      <span class="site-cert-combo__readonly">{{ certName(record.certificate_id) }}</span>
+                      <div class="site-cert-combo__addon">
+                        <span>强制 HTTPS</span>
+                        <a-switch v-model:checked="record.force_https" :disabled="readonly || !record.certificate_id" />
+                      </div>
+                    </div>
+                  </a-form-item>
+                </template>
+              </a-col>
+            </a-row>
 
-        <fs-form-section title="自定义人机验证页脚" description="关闭时使用系统设置中的全局页脚代码">
-          <div class="fs-switch-row">
-            <span>启用站点专属页脚</span>
-            <a-switch v-model:checked="record.custom_captcha_footer_enabled" :disabled="readonly" />
-          </div>
-          <template v-if="record.custom_captcha_footer_enabled">
-            <a-form-item label="页脚 HTML">
-              <a-textarea
-                v-model:value="record.captcha_footer_html"
-                :rows="4"
-                :disabled="readonly"
-                class="fs-code-textarea"
-              />
-            </a-form-item>
-          </template>
-        </fs-form-section>
-      </div>
-    </template>
-  </resource-crud>
+          </fs-form-section>
+          <fs-form-section title="高级配置">
+            <div class="fs-switch-row">
+              <div>
+                <div><b>关闭内容缓冲</b></div>
+                <div>如果源站在本机，建议开启此开关</div>
+              </div>
+              <a-switch v-model:checked="record.disable_content_buffering" :disabled="readonly" />
+            </div>
+            <div class="fs-switch-row">
+              <div>
+                <div><b>自定义拦截页面</b></div>
+                <div>为此站点自定义拦截页面内容，优先级低于规则/黑名单/限速的专属配置</div>
+              </div>
+              <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
+            </div>
+            <template v-if="record.custom_block_page_enabled">
+              <a-form-item label="响应状态码">
+                <a-select v-model:value="record.block_page_status_code" :disabled="readonly"
+                  :options="blockStatusOptions" />
+              </a-form-item>
+              <a-form-item label="HTML 内容">
+                <a-textarea v-model:value="record.block_page_html" :rows="10" :disabled="readonly"
+                  class="fs-code-textarea" />
+              </a-form-item>
+            </template>
+            <div class="fs-switch-row">
+              <div>
+                <div><b>自定义人机验证页脚</b></div>
+                <div>为此站点自定义人机验证页面的底部页脚显示内容，优先级低于规则/黑名单/限速的专属配置</div>
+              </div>
+              <a-switch v-model:checked="record.custom_captcha_footer_enabled" :disabled="readonly" />
+            </div>
+            <template v-if="record.custom_captcha_footer_enabled">
+              <a-form-item label="页脚 HTML">
+                <a-textarea v-model:value="record.captcha_footer_html" :rows="4" :disabled="readonly"
+                  class="fs-code-textarea" />
+              </a-form-item>
+            </template>
+          </fs-form-section>
+        </div>
+      </template>
+    </resource-crud>
+
+    <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100" @saved="onCertImported" />
   </page-shell>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, defineComponent, onMounted, onUnmounted, reactive, ref } from "vue";
+import { PlusOutlined } from "@ant-design/icons-vue";
 import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import OriginHostInput from "@/components/OriginHostInput.vue";
+import CertificateFormDrawer, { type CertificateSaved } from "@/components/CertificateFormDrawer.vue";
 import SiteCard, { type SiteCardMetrics } from "@/components/SiteCard.vue";
 import { enabledFilterOptions } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
 import { CLIENT_IP_SOURCE_OPTIONS } from "@/constants/clientIpSource";
 import { useLogNavigation } from "@/composables/useLogNavigation";
+import { invalidateSiteOptions } from "@/composables/useSiteOptions";
 import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
 import { api } from "@/api";
 import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
+
+/** Render Select dropdown menu VNode inside custom dropdownRender. */
+const SiteCertMenu = defineComponent({
+  name: "SiteCertMenu",
+  props: {
+    vnodes: { type: Object, required: true },
+  },
+  setup(props) {
+    return () => props.vnodes as any;
+  },
+});
 
 interface CertOption {
   id: number;
@@ -265,10 +212,11 @@ interface CertOption {
   not_after: string | null;
 }
 
-const router = useRouter();
 const { goToLogs } = useLogNavigation();
 const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const certOptions = ref<CertOption[]>([]);
+const certDrawerOpen = ref(false);
+const certSelectRecord = ref<Record<string, any> | null>(null);
 const metricsLoading = ref(false);
 const metricsMap = reactive<Record<string, SiteCardMetrics>>({});
 let metricsTimer: ReturnType<typeof setInterval> | null = null;
@@ -283,13 +231,6 @@ const clientIpSourceSelectOptions = CLIENT_IP_SOURCE_OPTIONS.map((o) => ({
   value: o.value,
   label: o.label,
 }));
-
-function clientIpSourceExtra(source: string | null | undefined) {
-  if (source && source !== "remote_addr") {
-    return "使用了 CDN 或反代时，需选择与上游一致的 IP 来源头。仅可信上游可直连引擎。";
-  }
-  return "使用了 CDN 或反代时，需选择与上游一致的 IP 来源头";
-}
 
 const blockStatusOptions = [
   { value: 403, label: "403 Forbidden" },
@@ -356,10 +297,10 @@ function preparePayload(row: Record<string, any>) {
   if (row.listen_https && !row.certificate_id) {
     throw new Error("开启 HTTPS 时必须选择 SSL 证书");
   }
-  if (row.force_https && !row.listen_https) {
-    throw new Error("开启强制 HTTPS 需要先开启 HTTPS 监听");
+  if (row.force_https && (!row.listen_https || !row.certificate_id)) {
+    throw new Error("开启强制 HTTPS 需要先开启 HTTPS 监听并选择 SSL 证书");
   }
-  if (!row.listen_https) {
+  if (!row.listen_https || !row.certificate_id) {
     row.force_https = false;
   }
   if (row.custom_block_page_enabled && !(row.block_page_html || "").trim()) {
@@ -376,6 +317,19 @@ async function loadCertOptions() {
   certOptions.value = resp.data;
 }
 
+function openImportCert(record: Record<string, any>) {
+  certSelectRecord.value = record;
+  certDrawerOpen.value = true;
+}
+
+async function onCertImported(cert: CertificateSaved) {
+  await loadCertOptions();
+  const target = certSelectRecord.value;
+  if (target) {
+    target.certificate_id = cert.id;
+  }
+}
+
 async function loadMetrics() {
   metricsLoading.value = true;
   try {
@@ -390,10 +344,6 @@ async function loadMetrics() {
   } finally {
     metricsLoading.value = false;
   }
-}
-
-function goCertificates() {
-  router.push("/certificates");
 }
 
 function certName(id: number | null) {
@@ -458,6 +408,71 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
+}
+
+.site-listen-addon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.site-listen-port :deep(.ant-input-number-group-addon) {
+  padding-inline: 11px;
+}
+
+.site-cert-combo {
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+}
+
+.site-cert-combo__select {
+  flex: 1;
+  min-width: 0;
+}
+
+.site-cert-combo__select :deep(.ant-select-selector) {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.site-cert-combo__readonly {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 4px 11px;
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  background: var(--fs-bg-muted);
+  color: var(--fs-text-secondary);
+  line-height: 1.5715;
+}
+
+.site-cert-combo--with-addon .site-cert-combo__readonly {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-inline-end: 0;
+}
+
+.site-cert-combo__addon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 0 11px;
+  border: 1px solid var(--fs-border, #d9d9d9);
+  border-inline-start: 0;
+  border-radius: 0 var(--fs-radius-sm, 6px) var(--fs-radius-sm, 6px) 0;
+  background: var(--fs-bg-muted, rgba(0, 0, 0, 0.02));
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--fs-text-secondary, rgba(0, 0, 0, 0.65));
+}
+
+.site-cert-dropdown-action {
+  padding: 4px 8px;
 }
 
 @media (max-width: 767px) {

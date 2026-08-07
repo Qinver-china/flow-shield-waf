@@ -10,7 +10,11 @@ import shutil
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, ec, ed25519
-from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    PublicFormat,
+    load_pem_private_key,
+)
 
 from app.core.config import settings
 
@@ -24,6 +28,16 @@ _KEY_BEGIN = re.compile(
 
 def _normalize_pem(content: str) -> str:
     return content.replace("\r\n", "\n").strip() + "\n"
+
+
+def _public_keys_match(cert_pub, key_pub) -> bool:
+    """Compare public keys across RSA/EC/Ed25519 without relying on public_numbers()."""
+    try:
+        left = cert_pub.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+        right = key_pub.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+        return left == right
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def validate_pem_pair(cert_pem: str, key_pem: str) -> tuple[x509.Certificate, object]:
@@ -45,16 +59,11 @@ def validate_pem_pair(cert_pem: str, key_pem: str) -> tuple[x509.Certificate, ob
     except Exception as exc:  # noqa: BLE001
         raise ValueError("无法解析私钥 PEM 内容（暂不支持加密私钥）") from exc
 
-    cert_pub = cert.public_key()
     key_pub = None
-    if isinstance(key, rsa.RSAPrivateKey):
-        key_pub = key.public_key()
-    elif isinstance(key, ec.EllipticCurvePrivateKey):
-        key_pub = key.public_key()
-    elif isinstance(key, ed25519.Ed25519PrivateKey):
+    if isinstance(key, (rsa.RSAPrivateKey, ec.EllipticCurvePrivateKey, ed25519.Ed25519PrivateKey)):
         key_pub = key.public_key()
 
-    if key_pub is None or cert_pub.public_numbers() != key_pub.public_numbers():
+    if key_pub is None or not _public_keys_match(cert.public_key(), key_pub):
         raise ValueError("证书与私钥不匹配")
 
     return cert, key

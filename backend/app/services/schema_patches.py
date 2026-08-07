@@ -33,6 +33,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_ai_guard_floating_chat_enabled(conn)
     await _ensure_ai_guard_policy_custom_prompt(conn)
     await _ensure_rule_remark(conn)
+    await _ensure_certificate_expiry_notify(conn)
 
 
 async def _ensure_resource_block_page_columns(conn) -> None:
@@ -212,3 +213,24 @@ async def _ensure_rule_remark(conn) -> None:
         return
     await conn.execute(text("ALTER TABLE rule ADD COLUMN remark VARCHAR(255) NULL"))
     log.info("schema patch applied: rule.remark")
+
+
+async def _ensure_certificate_expiry_notify(conn) -> None:
+    if not await _column_exists(conn, "certificate", "expiry_notify_enabled"):
+        await conn.execute(
+            text(
+                "ALTER TABLE certificate "
+                "ADD COLUMN expiry_notify_enabled BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        log.info("schema patch applied: certificate.expiry_notify_enabled")
+    if not await _column_exists(conn, "certificate", "expiry_notify_channel_id"):
+        await conn.execute(
+            text("ALTER TABLE certificate ADD COLUMN expiry_notify_channel_id INTEGER NULL")
+        )
+        log.info("schema patch applied: certificate.expiry_notify_channel_id")
+    if not await _column_exists(conn, "certificate", "expiry_last_notified_on"):
+        await conn.execute(
+            text("ALTER TABLE certificate ADD COLUMN expiry_last_notified_on VARCHAR(10) NULL")
+        )
+        log.info("schema patch applied: certificate.expiry_last_notified_on")

@@ -10,6 +10,7 @@
       :row-key="rowKey"
       :size="size"
       :scroll="resolvedScroll"
+      :show-sorter-tooltip="false"
       bordered
       @change="(...args) => emit('change', ...args)"
     >

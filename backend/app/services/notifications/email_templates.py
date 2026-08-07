@@ -550,7 +550,8 @@ def build_test_email() -> tuple[str, str]:
             "恭喜！若您正在阅读此邮件，说明邮件通知通道已正确配置。\n\n"
             "流盾 WAF 将在以下场景通过此通道向您发送通知：\n"
             "· 预警策略触发（流量异常、拦截率过高等）\n"
-            "· AI 防护完成攻击分析与规则建议\n\n"
+            "· AI 防护完成攻击分析与规则建议\n"
+            "· SSL 证书即将到期提醒\n\n"
             "您无需回复此邮件。"
         ),
     )
@@ -561,6 +562,7 @@ def build_test_email() -> tuple[str, str]:
             "<ul style=\"margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;\">"
             "<li>预警策略触发（流量异常、拦截率过高等）</li>"
             "<li>AI 防护完成攻击分析与规则建议</li>"
+            "<li>SSL 证书即将到期提醒</li>"
             "</ul>",
         )
         + html_paragraph("您无需回复此邮件。", muted=True)
@@ -570,5 +572,56 @@ def build_test_email() -> tuple[str, str]:
         subtitle=subtitle,
         body_html=body_html,
         preheader="流盾 WAF 通知通道测试邮件",
+    )
+    return plain, html_body
+
+
+def build_cert_expiry_email(
+    *,
+    cert_name: str,
+    domains: str,
+    not_after_local: str,
+    days_left: int,
+    timezone_name: str,
+) -> tuple[str, str]:
+    """Return (plain_text, html_body) for SSL certificate expiry reminder."""
+    if days_left == 0:
+        urgency = "将于今天到期"
+    else:
+        urgency = f"将于 {days_left} 天后到期"
+    title = f"证书即将到期 · {cert_name}"
+    subtitle = f"{urgency}，请及时更新以免影响 HTTPS 访问。"
+    message = (
+        f"证书「{cert_name}」{urgency}。\n"
+        f"覆盖域名：{domains}\n"
+        f"到期时间（{timezone_name}）：{not_after_local}"
+    )
+    plain = build_plain_email(
+        title=title,
+        subtitle=subtitle,
+        body=(
+            f"{message}\n\n"
+            "建议操作：\n"
+            "1. 登录流盾 WAF 管理面板，打开「证书管理」；\n"
+            "2. 更新或重新导入有效证书；\n"
+            "3. 确认相关站点已绑定新证书并完成生效。"
+        ),
+    )
+    body_html = (
+        html_paragraph(message.replace("\n", "<br/>"))
+        + html_section(
+            "建议操作",
+            "<ol style=\"margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;\">"
+            "<li>登录流盾 WAF 管理面板，打开「证书管理」；</li>"
+            "<li>更新或重新导入有效证书；</li>"
+            "<li>确认相关站点已绑定新证书并完成生效。</li>"
+            "</ol>",
+        )
+    )
+    html_body = build_email_html(
+        title=title,
+        subtitle=subtitle,
+        body_html=body_html,
+        preheader=f"证书「{cert_name}」{urgency}",
     )
     return plain, html_body
