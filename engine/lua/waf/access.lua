@@ -136,6 +136,12 @@ end
 function _M.run()
     pending_observe = nil
 
+    -- Internal upstream-error pages: skip WAF pipeline (no double counting / re-proxy).
+    local uri = ngx.var.uri or ""
+    if uri:sub(1, 13) == "/__waf_error/" then
+        return
+    end
+
     if sync.needs_load() then
         sync.load(true)
     end
