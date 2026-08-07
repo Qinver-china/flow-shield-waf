@@ -67,14 +67,17 @@ WORKDIR /app/backend
 COPY backend/requirements-base.txt backend/requirements-extra.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip \
     echo "==> [base] installing stable Python deps (skipped when requirements-base.txt unchanged)..." \
-    && apk add --no-cache --virtual .py-build-deps python3-dev gcc musl-dev jpeg-dev zlib-dev \
+    && apk add --no-cache --virtual .py-build-deps \
+        python3-dev gcc musl-dev jpeg-dev zlib-dev rust cargo \
     && python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install -r requirements-base.txt \
+    && MAKEFLAGS="-j1" CARGO_BUILD_JOBS=1 \
+       /opt/venv/bin/pip install --prefer-binary -r requirements-base.txt \
     && apk del .py-build-deps
 RUN --mount=type=cache,target=/root/.cache/pip \
     echo "==> [extra] installing incremental deps (only when requirements-extra.txt changes)..." \
-    && /opt/venv/bin/pip install -r requirements-extra.txt
+    && MAKEFLAGS="-j1" CARGO_BUILD_JOBS=1 \
+       /opt/venv/bin/pip install --prefer-binary -r requirements-extra.txt
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY slide_captcha /opt/flowshield/slide-captcha-defaults
