@@ -37,8 +37,6 @@ const props = withDefaults(
 );
 
 const presets = [
-  { value: "127.0.0.1", description: "本机回环地址" },
-  { value: "localhost", description: "本机主机名" },
   { value: "host.docker.internal", description: "Docker 容器访问宿主机" },
   { value: "172.17.0.1", description: "Docker 默认网桥网关（Linux）" },
 ];

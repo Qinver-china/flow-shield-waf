@@ -75,7 +75,11 @@
             </a-select>
           </a-form-item>
           <a-form-item label="备注">
-            <a-input v-model:value="form.remark" placeholder="可选" />
+            <a-textarea
+              v-model:value="form.remark"
+              placeholder="可选"
+              :auto-size="{ minRows: 1, maxRows: 6 }"
+            />
           </a-form-item>
         </fs-form-section>
 

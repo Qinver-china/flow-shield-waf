@@ -34,9 +34,14 @@
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
         <a-form-item label="备注">
-          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+          <a-textarea
+            v-model:value="record.remark"
+            :disabled="readonly"
+            placeholder="可选"
+            :auto-size="{ minRows: 1, maxRows: 6 }"
+          />
         </a-form-item>
-        <a-form-item label="生效站点（不选=全局）">
+        <a-form-item label="生效站点">
           <site-select v-model:value="record.site_ids" :readonly="readonly" class="site-select-block" />
         </a-form-item>
       </fs-form-section>

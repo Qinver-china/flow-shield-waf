@@ -1,4 +1,8 @@
-from app.services.nginx_conf import classify_reload_error
+from app.services.nginx_conf import (
+    EngineReloadResult,
+    classify_reload_error,
+    format_reload_warn_message,
+)
 
 
 def test_classify_reload_error_certificate():
@@ -12,3 +16,31 @@ def test_classify_reload_error_certificate():
 def test_classify_reload_error_engine():
     assert classify_reload_error("openresty: invalid option") == "engine"
     assert classify_reload_error("") == "engine"
+
+
+def test_format_reload_warn_includes_certificate_detail():
+    result = EngineReloadResult(
+        ok=False,
+        reason="certificate",
+        detail='cannot load certificate "/data/engine/certs/2/fullchain.pem"',
+    )
+    msg = format_reload_warn_message(result)
+    assert "证书异常" in msg
+    assert "fullchain.pem" in msg
+
+
+def test_format_reload_warn_includes_engine_detail():
+    result = EngineReloadResult(
+        ok=False,
+        reason="engine",
+        detail="bind() to 0.0.0.0:80 failed (98: Address already in use)",
+    )
+    msg = format_reload_warn_message(result)
+    assert "引擎配置重载失败" in msg
+    assert "Address already in use" in msg
+
+
+def test_format_reload_warn_fallback_without_detail():
+    result = EngineReloadResult(ok=False, reason="engine")
+    msg = format_reload_warn_message(result)
+    assert "请检查引擎状态" in msg

@@ -136,9 +136,14 @@ async def health():
 
 @app.exception_handler(HTTPException)
 async def http_exc_handler(_req: Request, exc: HTTPException):
+    detail = exc.detail
+    if not isinstance(detail, str):
+        detail = jsonable_encoder(detail)
+        if not isinstance(detail, str):
+            detail = str(detail)
     return JSONResponse(
         status_code=exc.status_code,
-        content={"code": exc.status_code, "message": exc.detail, "data": None},
+        content={"code": exc.status_code, "message": detail, "data": None},
     )
 
 
@@ -147,4 +152,15 @@ async def validation_handler(_req: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
         content={"code": 422, "message": "参数校验失败", "data": jsonable_encoder(exc.errors())},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exc_handler(_req: Request, exc: Exception):
+    """Surface unexpected failures with a concrete message for the panel."""
+    log.exception("unhandled api error: %s", exc)
+    detail = str(exc).strip() or exc.__class__.__name__
+    return JSONResponse(
+        status_code=500,
+        content={"code": 500, "message": f"服务器错误：{detail}", "data": None},
     )

@@ -38,22 +38,27 @@
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
         <a-form-item label="备注">
-          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+          <a-textarea
+            v-model:value="record.remark"
+            :disabled="readonly"
+            placeholder="可选"
+            :auto-size="{ minRows: 1, maxRows: 6 }"
+          />
         </a-form-item>
         <a-row :gutter="16" style="margin-bottom: 12px;">
-          <a-col :xs="24" :sm="16" :md="18">
-            <a-form-item label="生效站点（不选=全局）">
+          <a-col :xs="12" :sm="16" :md="16">
+            <a-form-item label="生效站点">
               <site-select v-model:value="record.site_ids" style="width: 100%" :readonly="readonly" class="site-select-block" />
             </a-form-item>
           </a-col>
-          <a-col :xs="24" :sm="8" :md="6">
+          <a-col :xs="12" :sm="8" :md="8">
             <a-form-item label="优先级 (小=先)">
               <a-input-number v-model:value="record.priority" :min="1" style="width: 100%" :disabled="readonly" />
             </a-form-item>
           </a-col>
         </a-row>
         <a-row :gutter="16" style="margin-bottom: 12px;">
-          <a-col :xs="12" :sm="8" :md="8">
+          <a-col :xs="6" :sm="8" :md="8">
             <a-form-item label="时间窗口 (秒)">
               <a-input-number
                 v-model:value="record.window"
@@ -63,7 +68,7 @@
               />
             </a-form-item>
           </a-col>
-          <a-col :xs="12" :sm="8" :md="8">
+          <a-col :xs="6" :sm="8" :md="8">
             <a-form-item label="阈值 (次)">
               <a-input-number
                 v-model:value="record.threshold"
@@ -73,7 +78,7 @@
               />
             </a-form-item>
           </a-col>
-          <a-col :xs="24" :sm="8" :md="8">
+          <a-col :xs="12" :sm="8" :md="8">
             <a-form-item label="超限动作">
               <a-select v-model:value="record.mode" style="width: 100%" :disabled="readonly">
                 <a-select-option value="observe">观察模式</a-select-option>
@@ -110,19 +115,18 @@
             v-if="!readonly"
             danger
             type="text"
-            size="small"
-            @click="record.keys.splice(idx, 1)"
-          >
-            删除
-          </a-button>
+            :icon="h(DeleteOutlined)"
+            :disabled="record.keys.length <= 1"
+            @click="record.keys.length > 1 && record.keys.splice(idx, 1)"
+          />
         </div>
         <a-button
           v-if="!readonly"
           type="dashed"
-          size="small"
+          :icon="h(PlusOutlined)"
           @click="record.keys.push({ field: 'ip.src', arg: '' })"
         >
-          + 添加维度
+          添加维度
         </a-button>
       </fs-form-section>
 
@@ -143,7 +147,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { h, ref } from "vue";
+import { DeleteOutlined, PlusOutlined } from "@ant-design/icons-vue";
 import BlockPageFormSection from "@/components/BlockPageFormSection.vue";
 import ConditionEditor from "@/components/ConditionEditor.vue";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
@@ -265,8 +270,7 @@ function preparePayload(row: Record<string, any>) {
 }
 
 .key-field-select {
-  width: 200px;
-  flex-shrink: 0;
+  flex: 1 0 auto;
 }
 
 .key-arg-input {

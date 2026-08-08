@@ -1,7 +1,7 @@
 <template>
   <page-shell title="防护日志" description="多维统计分析与日志明细查询">
     <log-filter-bar :filter-state="filterState" />
-    <a-tabs v-model:active-key="activeTab" size="large" class="logs-tabs fs-tabs-animated">
+     <a-tabs v-model:active-key="activeTab" size="large" class="logs-tabs fs-tabs-animated">
       <a-tab-pane key="stats" tab="统计筛选" />
       <a-tab-pane key="detail" tab="日志明细" />
     </a-tabs>

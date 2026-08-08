@@ -161,12 +161,13 @@
       placeholder="值"
     />
 
-    <a-button danger size="small" type="text" @click="$emit('remove')">删除</a-button>
+    <a-button danger type="text" @click="$emit('remove')" :icon="h(DeleteOutlined)"></a-button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, h } from "vue";
+import { DeleteOutlined } from "@ant-design/icons-vue";
 import ConditionFieldPicker from "@/components/ConditionFieldPicker.vue";
 import type { Category, Field, UiLeaf } from "@/composables/useConditionModel";
 import type { IpGroupOption } from "@/composables/useIpGroupOptions";

@@ -601,8 +601,15 @@ function onConversationSelect(key: string) {
   gap: 2px;
 }
 
-.ai-chat-panel :deep(.ant-prompts .ant-prompts-item) {
+:deep(.ant-prompts .ant-prompts-item) {
   background: transparent;
+  border: 1px solid var(--fs-border);
+  padding-block: 10px;
+}
+
+.ai-chat-panel :deep(.ant-prompts.ant-prompts-nested .ant-prompts-item) {
+  border-color: color-mix(in srgb, var(--fs-border) 50%, transparent);
+  padding-block: 6px;
 }
 
 .ai-chat-panel :deep(.ant-prompts .ant-prompts-item:not(.ant-prompts-item-has-nest):hover),

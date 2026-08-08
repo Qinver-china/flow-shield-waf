@@ -9,15 +9,13 @@ export interface SiteOption {
   enabled: boolean;
 }
 
-/** Select labels keep domain for disambiguation. */
+/** Select / table display: site name only. */
 function siteSelectLabel(site: SiteOption): string {
-  const domains = site.domains?.length ? site.domains.join(", ") : site.domain;
-  return `${site.name} (${domains})`;
+  return site.name || site.domain || `#${site.id}`;
 }
 
-/** Table / plain display: site name only. */
 function siteDisplayName(site: SiteOption): string {
-  return site.name || site.domain || `#${site.id}`;
+  return siteSelectLabel(site);
 }
 
 /** Shared across all useSiteOptions() callers so invalidate refreshes every dropdown. */

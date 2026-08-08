@@ -916,6 +916,7 @@ async def apply_import(
     except Exception as exc:  # noqa: BLE001
         log.exception("rule_sync after import failed: %s", exc)
         reload_ok = False
+        summary["engine_error"] = f"配置已导入，但规则同步失败：{exc}"
         try:
             await get_redis_dirty()
         except Exception:  # noqa: BLE001
@@ -923,10 +924,17 @@ async def apply_import(
 
     if "sites" in selected or "certificates" in selected:
         try:
-            reload_ok = bool(await nginx_conf.regenerate(db)) and reload_ok
+            reload_result = await nginx_conf.regenerate(db)
+            reload_ok = bool(reload_result) and reload_ok
+            if not reload_result.ok:
+                summary["engine_error"] = nginx_conf.format_reload_warn_message(
+                    reload_result,
+                    saved_label="配置已导入",
+                )
         except Exception as exc:  # noqa: BLE001
             log.exception("nginx regenerate after import failed: %s", exc)
             reload_ok = False
+            summary["engine_error"] = f"配置已导入，但引擎重载失败：{exc}"
 
     summary["engine_synced"] = reload_ok
     return summary

@@ -43,7 +43,12 @@
             <a-input v-model:value="record.name" :disabled="readonly" placeholder="如：办公网、CDN 节点" />
           </a-form-item>
           <a-form-item label="备注">
-            <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+            <a-textarea
+              v-model:value="record.remark"
+              :disabled="readonly"
+              placeholder="可选"
+              :auto-size="{ minRows: 1, maxRows: 6 }"
+            />
           </a-form-item>
         </fs-form-section>
 
@@ -56,7 +61,7 @@
             </template>
             <a-empty v-else description="暂无 IP 条目" :image-style="{ height: '48px' }" />
           </div>
-          <a-tabs v-else v-model:active-key="entryTab">
+           <a-tabs v-else v-model:active-key="entryTab">
             <a-tab-pane key="manual" tab="手动编辑">
               <a-textarea
                 v-model:value="record._entriesText"

@@ -8,8 +8,8 @@ SITE_SCOPE_ANY = "any"
 SITE_SCOPE_SINGLE = "single"
 
 SITE_SCOPE_OPTIONS = [
-    {"value": SITE_SCOPE_ALL, "label": "全部站点（合计）"},
-    {"value": SITE_SCOPE_ANY, "label": "任意站点（任一满足）"},
+    {"value": SITE_SCOPE_ALL, "label": "全部站点合计"},
+    {"value": SITE_SCOPE_ANY, "label": "任意站点"},
 ]
 
 

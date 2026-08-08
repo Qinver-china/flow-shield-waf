@@ -19,7 +19,6 @@ _SITE_PARAM = {
     "label": "生效站点",
     "kind": "alert_site_scope",
     "required": False,
-    "help": "全部站点：各站流量合计后判断；任意站点：任一站点满足即触发；也可指定单个站点",
     "options": SITE_SCOPE_OPTIONS,
 }
 
@@ -154,9 +153,9 @@ ALERT_CONDITION_TYPES: list[dict] = [
         "category": "安全事件",
         "description": "短时间内大量拦截，可能有扫描、爆破或 Web 攻击。",
         "params": [
+            _SITE_PARAM,
             {"key": "window_min", "label": "统计窗口", "kind": "block_window", "required": True},
             {"key": "threshold", "label": "拦截次数", "kind": "number", "min": 1, "required": True},
-            _SITE_PARAM,
         ],
     },
     {
@@ -165,9 +164,9 @@ ALERT_CONDITION_TYPES: list[dict] = [
         "category": "安全事件",
         "description": "拦截占比过高，攻击流量可能已占主导。",
         "params": [
+            _SITE_PARAM,
             {"key": "window_min", "label": "统计窗口", "kind": "block_window", "required": True},
             {"key": "percent", "label": "拦截率 (%)", "kind": "number", "min": 1, "max": 100, "required": True},
-            _SITE_PARAM,
         ],
     },
     {

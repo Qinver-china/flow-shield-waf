@@ -167,7 +167,7 @@
       @ok="save"
     >
       <a-form layout="vertical">
-        <a-tabs
+         <a-tabs
           v-if="showJsonImport"
           v-model:active-key="createFormTab"
           class="resource-crud__create-tabs"
@@ -647,7 +647,7 @@ async function save() {
         ? await api.put(`${props.apiBase}/${record.id}`, payload)
         : await api.post(props.apiBase, payload);
     const tip = resp?.message && resp.message !== "ok" ? resp.message : "保存成功";
-    if (resp?.message && resp.message !== "ok") message.warning(tip);
+    if (resp?.message && resp.message !== "ok") message.warning(tip, 12);
     else message.success(tip);
     drawerOpen.value = false;
     fetchList();

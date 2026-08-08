@@ -3,83 +3,61 @@
     <template #actions>
       <a-button type="primary" @click="crudRef?.openCreate()">新增规则</a-button>
     </template>
-    <resource-crud
-    ref="crudRef"
-    embedded
-    title="自定义规则"
-    api-base="/api/v1/rules"
-    :columns="columns"
-    :filters="filters"
-    :default-sort="defaultSort"
-    :default-record="defaultRecord"
-    :prepare-payload="preparePayload"
-    :batch="batchConfig"
-    name-field="name"
-    detail-actions
-    duplicatable
-  >
-    <template #cell="{ column, record }">
-      <template v-if="column.key === 'mode'">
-        <a-tag :color="modeColor[record.mode]">{{ modeLabel[record.mode] || record.mode }}</a-tag>
-      </template>
-      <site-ids-cell v-else-if="column.key === 'site_ids'" :site-ids="record.site_ids" />
-    </template>
-    <template #form="{ record, readonly, mode, enabledLoading, onEnabledPersist }">
-      <fs-form-section title="规则信息">
-        <template #extra>
-          <form-enabled-switch
-            v-model:checked="record.enabled"
-            :immediate="mode === 'view'"
-            :loading="enabledLoading"
-            @immediate-change="onEnabledPersist"
-          />
+    <resource-crud ref="crudRef" embedded title="自定义规则" api-base="/api/v1/rules" :columns="columns" :filters="filters"
+      :default-sort="defaultSort" :default-record="defaultRecord" :prepare-payload="preparePayload" :batch="batchConfig"
+      name-field="name" detail-actions duplicatable>
+      <template #cell="{ column, record }">
+        <template v-if="column.key === 'mode'">
+          <a-tag :color="modeColor[record.mode]">{{ modeLabel[record.mode] || record.mode }}</a-tag>
         </template>
-        <a-form-item label="规则名称" required>
-          <a-input v-model:value="record.name" :disabled="readonly" />
-        </a-form-item>
-        <a-form-item label="备注">
-          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
-        </a-form-item>
-        <a-row :gutter="16">
-          <a-col :span="6">
-            <a-form-item label="优先级 (小=先)">
-              <a-input-number v-model:value="record.priority" :min="1" style="width: 100%" :disabled="readonly" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="10">
-            <a-form-item label="生效站点（不选=全局）">
-              <site-select v-model:value="record.site_ids" style="width: 100%" :readonly="readonly" />
-            </a-form-item>
-          </a-col>
-          <a-col :span="8">
-            <a-form-item label="防护方式">
-              <a-select v-model:value="record.mode" style="width: 100%" :disabled="readonly">
-                <a-select-option value="observe">观察模式</a-select-option>
-                <a-select-option value="block">拦截模式</a-select-option>
-                <a-select-option value="captcha">数学计算验证</a-select-option>
-                <a-select-option value="js_challenge">JS 挑战</a-select-option>
-                <a-select-option value="slide_captcha">滑动验证</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-col>
-        </a-row>
-      </fs-form-section>
+        <site-ids-cell v-else-if="column.key === 'site_ids'" :site-ids="record.site_ids" />
+      </template>
+      <template #form="{ record, readonly, mode, enabledLoading, onEnabledPersist }">
+        <fs-form-section title="规则信息">
+          <template #extra>
+            <form-enabled-switch v-model:checked="record.enabled" :immediate="mode === 'view'" :loading="enabledLoading"
+              @immediate-change="onEnabledPersist" />
+          </template>
+          <a-form-item label="规则名称" required>
+            <a-input v-model:value="record.name" :disabled="readonly" />
+          </a-form-item>
+          <a-form-item label="备注">
+            <a-textarea v-model:value="record.remark" :disabled="readonly" placeholder="可选"
+              :auto-size="{ minRows: 1, maxRows: 6 }" />
+          </a-form-item>
+          <a-row :gutter="16">
+            <a-col :span="8">
+              <a-form-item label="优先级 (小=先)">
+                <a-input-number v-model:value="record.priority" :min="1" style="width: 100%" :disabled="readonly" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="8">
+              <a-form-item label="生效站点">
+                <site-select v-model:value="record.site_ids" style="width: 100%" :readonly="readonly" />
+              </a-form-item>
+            </a-col>
+            <a-col :span="8">
+              <a-form-item label="防护方式">
+                <a-select v-model:value="record.mode" style="width: 100%" :disabled="readonly">
+                  <a-select-option value="observe">观察模式</a-select-option>
+                  <a-select-option value="block">拦截模式</a-select-option>
+                  <a-select-option value="captcha">数学计算验证</a-select-option>
+                  <a-select-option value="js_challenge">JS 挑战</a-select-option>
+                  <a-select-option value="slide_captcha">滑动验证</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </fs-form-section>
 
-      <fs-form-section title="匹配条件" description="配置请求匹配逻辑，支持嵌套条件组">
-        <a-form-item label="条件表达式">
+        <fs-form-section title="匹配条件" description="配置请求匹配逻辑，支持嵌套条件组">
           <condition-editor v-model:value="record.conditions" :readonly="readonly" />
-        </a-form-item>
-      </fs-form-section>
+        </fs-form-section>
 
-      <block-page-form-section
-        v-if="record.mode === 'block'"
-        :record="record"
-        :readonly="readonly"
-        switch-label="启用规则专属拦截页"
-        description="关闭时使用站点或全局防护页面；命中本规则时优先使用此处配置"
-      />
-    </template>
-  </resource-crud>
+        <block-page-form-section v-if="record.mode === 'block'" :record="record" :readonly="readonly"
+          switch-label="启用规则专属拦截页" description="关闭时使用站点或全局防护页面；命中本规则时优先使用此处配置" />
+      </template>
+    </resource-crud>
   </page-shell>
 </template>
 

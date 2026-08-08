@@ -1,6 +1,6 @@
 <template>
   <page-shell title="系统设置" description="按模块管理账户、防护挑战、日志采样、通知、调试与配置备份">
-    <a-tabs v-model:activeKey="activeTab" size="large" class="settings-tabs fs-tabs-animated">
+     <a-tabs v-model:activeKey="activeTab" size="large" class="settings-tabs fs-tabs-animated">
       <a-tab-pane key="account" tab="账户安全" />
       <a-tab-pane key="display" tab="显示设置" />
       <a-tab-pane key="challenge" tab="挑战验证" />
@@ -284,8 +284,10 @@
                     <a-input-number
                       v-model:value="logForm.observe_sample_rate_idle"
                       :min="0"
-                      :max="1"
-                      :step="0.01"
+                      :max="100"
+                      :step="1"
+                      :precision="0"
+                      addon-after="%"
                       style="width: 100%"
                     />
                   </a-form-item>
@@ -295,8 +297,10 @@
                     <a-input-number
                       v-model:value="logForm.observe_sample_rate_active"
                       :min="0"
-                      :max="1"
-                      :step="0.01"
+                      :max="100"
+                      :step="1"
+                      :precision="0"
+                      addon-after="%"
                       style="width: 100%"
                     />
                   </a-form-item>
@@ -350,8 +354,10 @@
                     <a-input-number
                       v-model:value="logForm.logging_auto_observe_sample_rate"
                       :min="0"
-                      :max="1"
-                      :step="0.01"
+                      :max="100"
+                      :step="1"
+                      :precision="0"
+                      addon-after="%"
                       style="width: 100%"
                     />
                   </a-form-item>
@@ -601,7 +607,9 @@ const importResultMessage = computed(() => {
   const parts = Object.entries(result.counts || {})
     .filter(([, n]) => Number(n) > 0)
     .map(([k, n]) => `${k}: ${n}`);
-  const sync = result.engine_synced ? "引擎已同步" : "引擎同步未完成";
+  const sync = result.engine_synced
+    ? "引擎已同步"
+    : result.engine_error || "引擎同步未完成";
   return parts.length ? `已处理 ${parts.join("，")}；${sync}` : sync;
 });
 
@@ -720,7 +728,7 @@ async function runImport() {
     )) as { data: any; message?: string };
     importResult.value = resp.data;
     if (resp.message && resp.message !== "ok") {
-      message.warning(resp.message);
+      message.warning(resp.message, 12);
     } else {
       message.success("导入完成");
     }
@@ -775,12 +783,25 @@ const displaySaving = ref(false);
 const trafficWindows = ref<any[]>([]);
 let trafficTimer: ReturnType<typeof setInterval> | null = null;
 
+/** API 存 0～1；表单按百分比 0～100 展示与编辑。 */
+function rateToPercent(rate: unknown) {
+  const n = Number(rate);
+  if (!Number.isFinite(n)) return 100;
+  return Math.round(Math.min(1, Math.max(0, n)) * 100);
+}
+
+function percentToRate(percent: unknown) {
+  const n = Number(percent);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1, Math.max(0, n / 100));
+}
+
 const logForm = reactive({
   logging_control_mode: "manual",
   logging_enabled: true,
   logging_skip_observe: false,
-  observe_sample_rate_idle: 1.0,
-  observe_sample_rate_active: 1.0,
+  observe_sample_rate_idle: 100,
+  observe_sample_rate_active: 100,
   logging_detail_on_block: true,
   logging_auto_thresholds: [
     { window_sec: 10, max_requests: 500 },
@@ -791,7 +812,7 @@ const logForm = reactive({
     { window_sec: 3600, max_requests: 80000 },
   ],
   logging_auto_cooldown_sec: 120,
-  logging_auto_observe_sample_rate: 1.0,
+  logging_auto_observe_sample_rate: 100,
   log_retention_days: 30,
 });
 
@@ -950,12 +971,12 @@ async function loadLogging() {
     logging_control_mode: resp.data.logging_control_mode,
     logging_enabled: resp.data.logging_enabled,
     logging_skip_observe: resp.data.logging_skip_observe,
-    observe_sample_rate_idle: resp.data.observe_sample_rate_idle,
-    observe_sample_rate_active: resp.data.observe_sample_rate_active,
+    observe_sample_rate_idle: rateToPercent(resp.data.observe_sample_rate_idle),
+    observe_sample_rate_active: rateToPercent(resp.data.observe_sample_rate_active),
     logging_detail_on_block: resp.data.logging_detail_on_block,
     logging_auto_thresholds: resp.data.logging_auto_thresholds,
     logging_auto_cooldown_sec: resp.data.logging_auto_cooldown_sec,
-    logging_auto_observe_sample_rate: resp.data.logging_auto_observe_sample_rate,
+    logging_auto_observe_sample_rate: rateToPercent(resp.data.logging_auto_observe_sample_rate),
     log_retention_days: resp.data.log_retention_days,
   });
 }
@@ -1062,7 +1083,12 @@ async function loadTraffic() {
 async function saveLogging() {
   logSaving.value = true;
   try {
-    await api.put("/api/v1/settings/logging", { ...logForm });
+    await api.put("/api/v1/settings/logging", {
+      ...logForm,
+      observe_sample_rate_idle: percentToRate(logForm.observe_sample_rate_idle),
+      observe_sample_rate_active: percentToRate(logForm.observe_sample_rate_active),
+      logging_auto_observe_sample_rate: percentToRate(logForm.logging_auto_observe_sample_rate),
+    });
     message.success("日志设置已保存并下发");
   } finally {
     logSaving.value = false;

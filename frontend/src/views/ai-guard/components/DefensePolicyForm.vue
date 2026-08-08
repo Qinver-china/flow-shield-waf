@@ -8,11 +8,16 @@
         <a-input v-model:value="model.name" placeholder="例如：流量突增自动分析" />
       </a-form-item>
       <a-form-item label="备注">
-        <a-input v-model:value="model.remark" placeholder="可选" />
+        <a-textarea
+          v-model:value="model.remark"
+          placeholder="可选"
+          :auto-size="{ minRows: 1, maxRows: 6 }"
+        />
       </a-form-item>
     </fs-form-section>
 
-    <fs-form-section title="触发条件" description="与预警通知共用同一套条件类型；命中后由 AI 分析并生成防护建议">
+    <fs-form-section title="触发条件" description="命中后由 AI 自动分析并生成防护建议">
+      
       <a-form-item label="触发条件" required>
         <a-select v-model:value="model.trigger_type" @change="onTriggerChange">
           <a-select-opt-group
@@ -31,7 +36,7 @@
       </a-form-item>
 
       <a-row v-if="selectedTrigger?.params?.length" :gutter="16">
-        <a-col v-for="p in selectedTrigger.params" :key="p.key" :span="12">
+        <a-col v-for="p in selectedTrigger.params" :key="p.key" :span="24 / selectedTrigger.params.length">
           <a-form-item :label="p.label || p.key" :required="p.required !== false">
             <a-select
               v-if="p.kind === 'traffic_window'"
@@ -88,7 +93,7 @@
     </fs-form-section>
 
     <fs-form-section title="AI 分析指引">
-      <a-form-item label="自定义提示词">
+      <a-form-item>
         <a-textarea
           v-model:value="model.custom_prompt"
           :rows="5"

@@ -24,6 +24,7 @@ from app.models import Certificate, Site, User
 from app.schemas.common import ok
 from app.schemas.site import SiteCreate, SiteOption, SiteOut, SiteUpdate
 from app.services import nginx_conf, rule_sync, waf_settings
+from app.services.nginx_conf import format_reload_warn_message
 from app.constants.traffic_windows import TRAFFIC_WINDOW_LABELS
 from app.services.logging.query_clickhouse import stats_sites_24h_compare
 from app.services.traffic_intel.windows import label as traffic_window_label
@@ -38,20 +39,24 @@ log = logging.getLogger("waf.api.sites")
 
 SITE_CARD_TRAFFIC_WINDOWS_SEC = (300, 1800, 3600, 86400)
 
-_ENGINE_RELOAD_WARN = "站点已保存，但 WAF 引擎配置重载失败，请检查引擎状态后再次保存或重启容器"
-_ENGINE_CERT_WARN = "站点已保存，但证书异常，无法重载引擎，请更新证书"
-
 
 async def _sync(db: AsyncSession):
-    """Publish rules and regenerate nginx conf. Returns EngineReloadResult."""
-    await rule_sync.publish(db)
-    return await nginx_conf.regenerate(db)
+    """Publish rules and regenerate nginx conf. Returns EngineReloadResult.
+
+    Site rows may already be committed; convert unexpected sync errors into a
+    soft-fail result so the panel still gets a concrete reason.
+    """
+    try:
+        await rule_sync.publish(db)
+        return await nginx_conf.regenerate(db)
+    except Exception as exc:  # noqa: BLE001
+        detail = str(exc).strip() or exc.__class__.__name__
+        log.exception("site sync failed after commit: %s", detail)
+        return nginx_conf.EngineReloadResult(ok=False, reason="engine", detail=detail)
 
 
 def _reload_warn_message(result) -> str:
-    if getattr(result, "reason", None) == "certificate":
-        return _ENGINE_CERT_WARN
-    return _ENGINE_RELOAD_WARN
+    return format_reload_warn_message(result)
 
 
 def _validate_listen(*, listen_http: bool, listen_https: bool) -> None:

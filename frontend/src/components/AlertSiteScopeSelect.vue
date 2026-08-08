@@ -2,7 +2,7 @@
   <a-select
     v-model:value="selected"
     allow-clear
-    placeholder="全部站点（合计）"
+    placeholder="全部站点合计"
     :options="options"
     :loading="loading"
     show-search
@@ -37,8 +37,8 @@ const emit = defineEmits<{
 const { selectOptions, loading } = useSiteOptions();
 
 const options = computed(() => [
-  { value: SCOPE_ALL, label: "全部站点（合计）" },
-  { value: SCOPE_ANY, label: "任意站点（任一满足）" },
+  { value: SCOPE_ALL, label: "全部站点合计" },
+  { value: SCOPE_ANY, label: "任意站点" },
   ...selectOptions.value,
 ]);
 

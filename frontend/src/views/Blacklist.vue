@@ -34,9 +34,14 @@
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
         <a-form-item label="备注">
-          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+          <a-textarea
+            v-model:value="record.remark"
+            :disabled="readonly"
+            placeholder="可选"
+            :auto-size="{ minRows: 1, maxRows: 6 }"
+          />
         </a-form-item>
-        <a-form-item label="生效站点（不选=全局）">
+        <a-form-item label="生效站点">
           <site-select v-model:value="record.site_ids" :readonly="readonly" class="site-select-block" />
         </a-form-item>
       </fs-form-section>
@@ -47,8 +52,8 @@
       <block-page-form-section
         :record="record"
         :readonly="readonly"
-        switch-label="启用黑名单专属拦截页"
-        description="关闭时使用站点或全局防护页面；命中本条目时优先使用此处配置"
+        switch-label="自定义此规则的拦截页"
+        description="命中此规则时单独显示的页面内容"
       />
     </template>
   </resource-crud>

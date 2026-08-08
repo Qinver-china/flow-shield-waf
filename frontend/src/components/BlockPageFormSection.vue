@@ -1,28 +1,18 @@
 <template>
-  <fs-form-section :title="title" :description="description">
+  <fs-form-section :title="title">
     <div class="fs-switch-row">
-      <span>{{ switchLabel }}</span>
+      <div>
+        <div><b>{{ switchLabel }}</b></div>
+        <div class="fs-muted" v-if="description">{{ description }}</div>
+      </div>
       <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
     </div>
     <template v-if="record.custom_block_page_enabled">
-      <a-row :gutter="16">
-        <a-col :span="8">
-          <a-form-item label="响应状态码">
-            <a-select
-              v-model:value="record.block_page_status_code"
-              :disabled="readonly"
-              :options="BLOCK_STATUS_OPTIONS"
-            />
-          </a-form-item>
-        </a-col>
-      </a-row>
+      <a-form-item label="响应状态码">
+        <a-select v-model:value="record.block_page_status_code" :disabled="readonly" :options="BLOCK_STATUS_OPTIONS" />
+      </a-form-item>
       <a-form-item label="HTML 内容">
-        <a-textarea
-          v-model:value="record.block_page_html"
-          :rows="10"
-          :disabled="readonly"
-          class="fs-code-textarea"
-        />
+        <a-textarea v-model:value="record.block_page_html" :rows="10" :disabled="readonly" class="fs-code-textarea" />
       </a-form-item>
       <page-template-hints :variables="templateVariables" />
     </template>
@@ -46,9 +36,9 @@ withDefaults(
   }>(),
   {
     readonly: false,
-    title: "自定义拦截响应",
-    description: "关闭时使用站点或全局防护页面；命中本规则时优先使用此处配置",
-    switchLabel: "启用规则专属拦截页",
+    title: "自定义拦截响应页面",
+    description: "",
+    switchLabel: "",
   },
 );
 
@@ -63,3 +53,9 @@ onMounted(async () => {
   }
 });
 </script>
+
+<style scoped>
+.fs-switch-row {
+  margin-bottom: 16px;
+}
+</style>

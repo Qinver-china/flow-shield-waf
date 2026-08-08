@@ -1932,7 +1932,7 @@ onUnmounted(() => {
 }
 
 .traffic-timeline-bucket {
-  width: 90px;
+  width: 96px;
 }
 
 .traffic-live-panel :deep(.ant-card-head) {
@@ -2268,10 +2268,6 @@ onUnmounted(() => {
 
 
 @media (max-width: 767px) {
-  .traffic-site-filter {
-    width: 120px !important;
-  }
-
   .traffic-live-hero {
     gap: 16px;
   }

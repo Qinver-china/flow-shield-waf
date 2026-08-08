@@ -37,10 +37,15 @@
           <a-input v-model:value="record.name" :disabled="readonly" />
         </a-form-item>
         <a-form-item label="备注">
-          <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+          <a-textarea
+            v-model:value="record.remark"
+            :disabled="readonly"
+            placeholder="可选"
+            :auto-size="{ minRows: 1, maxRows: 6 }"
+          />
         </a-form-item>
-        <a-row :gutter="16">
-          <a-col :xs="24" :sm="10" :md="8">
+        <a-row :gutter="12">
+          <a-col :xs="24" :sm="12" :md="12">
             <a-form-item label="跳过范围">
               <a-select v-model:value="record.scope" style="width: 100%" :disabled="readonly">
                 <a-select-option value="all">跳过全部防护</a-select-option>
@@ -49,8 +54,8 @@
               </a-select>
             </a-form-item>
           </a-col>
-          <a-col :xs="24" :sm="14" :md="16">
-            <a-form-item label="生效站点（不选=全局）">
+          <a-col :xs="12" :sm="12" :md="12">
+            <a-form-item label="生效站点">
               <site-select v-model:value="record.site_ids" :readonly="readonly" class="site-select-block" />
             </a-form-item>
           </a-col>

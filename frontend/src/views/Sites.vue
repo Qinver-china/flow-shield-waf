@@ -43,12 +43,12 @@
           </fs-form-section>
           <fs-form-section title="回源配置">
             <a-row :gutter="16">
-              <a-col :md="12" :lg="12" :xs="18">
+              <a-col :md="12" :lg="12" :xs="16">
                 <a-form-item label="源站地址" required>
                   <origin-host-input v-model:value="record.origin_host" :disabled="readonly" />
                 </a-form-item>
               </a-col>
-              <a-col :md="4" :lg="4" :xs="6">
+              <a-col :md="4" :lg="4" :xs="8">
                 <a-form-item label="回源协议">
                   <a-select v-model:value="record.origin_protocol" :options="protocolOptions" :disabled="readonly" />
                 </a-form-item>
@@ -131,14 +131,14 @@
             <div class="fs-switch-row">
               <div>
                 <div><b>关闭内容缓冲</b></div>
-                <div>如果源站在本机，建议开启此开关</div>
+                <div class="fs-muted">如果源站在本机，建议开启此开关</div>
               </div>
               <a-switch v-model:checked="record.disable_content_buffering" :disabled="readonly" />
             </div>
             <div class="fs-switch-row">
               <div>
                 <div><b>自定义拦截页面</b></div>
-                <div>为此站点自定义拦截页面内容，优先级低于规则/黑名单/限速的专属配置</div>
+                <div class="fs-muted">为此站点自定义拦截页面内容，优先级低于规则/黑名单/限速的专属配置</div>
               </div>
               <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
             </div>
@@ -155,7 +155,7 @@
             <div class="fs-switch-row">
               <div>
                 <div><b>自定义人机验证页脚</b></div>
-                <div>为此站点自定义人机验证页面的底部页脚显示内容，优先级低于规则/黑名单/限速的专属配置</div>
+                <div class="fs-muted">为此站点自定义人机验证页面的底部页脚显示内容，优先级低于规则/黑名单/限速的专属配置</div>
               </div>
               <a-switch v-model:checked="record.custom_captcha_footer_enabled" :disabled="readonly" />
             </div>
@@ -417,8 +417,8 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.site-listen-port :deep(.ant-input-number-group-addon) {
-  padding-inline: 11px;
+.site-listen-port :deep(.ant-input-number-group-addon):first-child {
+  width: 98px;
 }
 
 .site-cert-combo {
@@ -478,6 +478,9 @@ onUnmounted(() => {
 @media (max-width: 767px) {
   .site-card-grid {
     grid-template-columns: 1fr;
+  }
+  .site-listen-port{
+    margin-bottom: 6px;
   }
 }
 </style>

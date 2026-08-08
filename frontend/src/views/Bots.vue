@@ -1,48 +1,24 @@
 <template>
-  <page-shell
-    title="Bot 库"
-    description="BOT机器抓取识别库与分类"
-  >
+  <page-shell title="Bot 库" description="BOT机器抓取识别库与分类">
     <template #actions>
-      <a-button
-        v-if="activeTab === 'bots'"
-        type="primary"
-        @click="botCrudRef?.openCreate()"
-      >
+      <a-button v-if="activeTab === 'bots'" type="primary" @click="botCrudRef?.openCreate()">
         新增 Bot
       </a-button>
-      <a-button
-        v-else-if="activeTab === 'categories'"
-        type="primary"
-        @click="categoryCrudRef?.openCreate()"
-      >
+      <a-button v-else-if="activeTab === 'categories'" type="primary" @click="categoryCrudRef?.openCreate()">
         新增分类
       </a-button>
     </template>
 
-    <a-tabs v-model:active-key="activeTab" size="large" class="bots-tabs fs-tabs-animated">
+     <a-tabs v-model:active-key="activeTab" size="large" class="bots-tabs fs-tabs-animated">
       <a-tab-pane key="bots" tab="本地 Bot 库" />
       <a-tab-pane key="categories" tab="分类" />
       <a-tab-pane key="vendored" tab="远程 Bot 库" />
     </a-tabs>
 
     <fs-slide-transition :transition-key="activeTab">
-      <resource-crud
-        v-if="activeTab === 'bots'"
-        ref="botCrudRef"
-        embedded
-        title="Bot 库"
-        api-base="/api/v1/bots"
-        :columns="botColumns"
-        :filters="botFilters"
-        :default-record="defaultBotRecord"
-        :map-record="mapBotRecord"
-        :prepare-payload="prepareBotPayload"
-        :batch="botBatchConfig"
-        name-field="name"
-        detail-actions
-        duplicatable
-      >
+      <resource-crud v-if="activeTab === 'bots'" ref="botCrudRef" embedded title="Bot 库" api-base="/api/v1/bots"
+        :columns="botColumns" :filters="botFilters" :default-record="defaultBotRecord" :map-record="mapBotRecord"
+        :prepare-payload="prepareBotPayload" :batch="botBatchConfig" name-field="name" detail-actions duplicatable>
         <template #cell="{ column, record }">
           <template v-if="column.key === 'categories'">
             <div v-if="(record.categories || []).length" class="category-tags">
@@ -65,67 +41,35 @@
         <template #form="{ record, readonly }">
           <fs-form-section title="基本信息">
             <a-form-item label="名称" required>
-              <a-input
-                v-model:value="record.name"
-                :disabled="readonly"
-                placeholder="如 Googlebot"
-              />
+              <a-input v-model:value="record.name" :disabled="readonly" placeholder="如 Googlebot" />
             </a-form-item>
             <a-form-item label="分类" required>
-              <a-select
-                v-model:value="record.categories"
-                mode="multiple"
-                :disabled="readonly"
-                :options="categoryOptions"
-                placeholder="可多选，如搜索引擎 + 国内 Bot"
-              />
+              <a-select v-model:value="record.categories" mode="multiple" :disabled="readonly"
+                :options="categoryOptions" placeholder="可多选，如搜索引擎 + 国内 Bot" />
             </a-form-item>
             <a-form-item label="备注">
-              <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+              <a-textarea v-model:value="record.remark" :disabled="readonly" placeholder="可选"
+                :auto-size="{ minRows: 1, maxRows: 6 }" />
             </a-form-item>
           </fs-form-section>
 
-          <fs-form-section
-            title="UA 匹配模式"
-            description="每行一条；支持子串匹配，或以 /pattern/flags 形式填写正则"
-          >
-            <a-textarea
-              v-model:value="record._patternsText"
-              :disabled="readonly"
-              :rows="8"
-              placeholder="Googlebot&#10;/curl/[i]&#10;python-requests"
-            />
+          <fs-form-section title="UA 匹配模式" description="每行一条；支持子串匹配，或以 /pattern/flags 形式填写正则">
+            <a-textarea v-model:value="record._patternsText" :disabled="readonly" :rows="8"
+              placeholder="Googlebot&#10;/curl/[i]&#10;python-requests" />
           </fs-form-section>
 
-          <fs-form-section
-            title="DNS 反向验证"
-            description="预留能力：填写后可声明可信 Bot 的 DNS 后缀（如 .googlebot.com），首期仅保存不生效"
-          >
-            <a-input
-              v-model:value="record.verify_dns_suffix"
-              :disabled="readonly"
-              placeholder="如 .googlebot.com（即将支持）"
-            />
+          <fs-form-section title="DNS 反向验证" description="预留能力：填写后可声明可信 Bot 的 DNS 后缀（如 .googlebot.com），首期仅保存不生效">
+            <a-input v-model:value="record.verify_dns_suffix" :disabled="readonly"
+              placeholder="如 .googlebot.com（即将支持）" />
           </fs-form-section>
         </template>
       </resource-crud>
 
-      <resource-crud
-        v-else-if="activeTab === 'categories'"
-        ref="categoryCrudRef"
-        embedded
-        title="Bot 分类"
-        api-base="/api/v1/bot-categories"
-        :columns="categoryColumns"
-        :filters="categoryFilters"
-        :default-record="defaultCategoryRecord"
-        :map-record="mapCategoryRecord"
-        :prepare-payload="prepareCategoryPayload"
-        :can-delete="canDeleteCategory"
-        :batch="categoryBatchConfig"
-        name-field="label"
-        detail-actions
-      >
+      <resource-crud v-else-if="activeTab === 'categories'" ref="categoryCrudRef" embedded title="Bot 分类"
+        api-base="/api/v1/bot-categories" :columns="categoryColumns" :filters="categoryFilters"
+        :default-record="defaultCategoryRecord" :map-record="mapCategoryRecord"
+        :prepare-payload="prepareCategoryPayload" :can-delete="canDeleteCategory" :batch="categoryBatchConfig"
+        name-field="label" detail-actions>
         <template #cell="{ column, record }">
           <template v-if="column.key === 'value'">
             <code>{{ record.value }}</code>
@@ -136,25 +80,29 @@
         <template #form="{ record, readonly, mode }">
           <fs-form-section title="分类信息">
             <a-form-item v-if="mode === 'create'" label="标识" required>
-              <a-input
-                v-model:value="record.value"
-                :disabled="readonly"
-                placeholder="如 seo_tool（小写英文，创建后不可改）"
-              />
+              <a-input v-model:value="record.value" :disabled="readonly" placeholder="如 seo_tool（小写英文，创建后不可改）" />
               <p class="fs-hint">不可使用系统预留标识 other</p>
             </a-form-item>
             <a-form-item v-else label="标识">
               <a-input :value="record.value" disabled />
               <p v-if="record.value === 'other'" class="fs-hint">系统预留分类，可改显示名称，不可删除</p>
             </a-form-item>
-            <a-form-item label="显示名称" required>
-              <a-input v-model:value="record.label" :disabled="readonly" placeholder="如 SEO 工具" />
-            </a-form-item>
-            <a-form-item label="排序">
-              <a-input-number v-model:value="record.sort_order" :disabled="readonly" :min="0" class="sort-input" />
-            </a-form-item>
+            <a-row :gutter="16">
+              <a-col :span="16">
+                <a-form-item label="显示名称" required>
+                  <a-input v-model:value="record.label" :disabled="readonly" placeholder="如 SEO 工具" />
+                </a-form-item>
+              </a-col>
+              <a-col :span="8">
+                <a-form-item label="排序">
+                  <a-input-number v-model:value="record.sort_order" :disabled="readonly" :min="0" class="sort-input" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+
             <a-form-item label="备注">
-              <a-input v-model:value="record.remark" :disabled="readonly" placeholder="可选" />
+              <a-textarea v-model:value="record.remark" :disabled="readonly" placeholder="可选"
+                :auto-size="{ minRows: 1, maxRows: 6 }" />
             </a-form-item>
           </fs-form-section>
         </template>
@@ -179,12 +127,7 @@
 
         <a-spin :spinning="vendoredLoading">
           <template v-if="vendoredInfo?.installed">
-            <a-descriptions
-              class="vendored-descriptions"
-              bordered
-              size="middle"
-              :column="{ xs: 1, sm: 2, lg: 3 }"
-            >
+            <a-descriptions class="vendored-descriptions" bordered size="middle" :column="{ xs: 1, sm: 2, lg: 3 }">
               <a-descriptions-item label="安装状态">
                 <a-tag color="success">已安装</a-tag>
               </a-descriptions-item>
@@ -216,11 +159,7 @@
             </a-descriptions>
           </template>
 
-          <a-empty
-            v-else-if="!vendoredLoading"
-            class="vendored-empty"
-            description="尚未安装远程规则"
-          >
+          <a-empty v-else-if="!vendoredLoading" class="vendored-empty" description="尚未安装远程规则">
             <template #image>
               <cloud-download-outlined class="vendored-empty__icon" />
             </template>
@@ -345,7 +284,7 @@ const categoryBatchConfig: BatchConfig = {
 };
 
 const botColumns: ResourceColumn[] = [
-  { title: "名称", dataIndex: "name", width: 260,ellipsis: true,sorter: true },
+  { title: "名称", dataIndex: "name", width: 260, ellipsis: true, sorter: true },
   { title: "分类", key: "categories", width: 220, slotCell: true },
   { title: "UA 匹配模式", key: "ua_patterns", slotCell: true, ellipsis: true },
   { title: "备注", dataIndex: "remark", ellipsis: true },

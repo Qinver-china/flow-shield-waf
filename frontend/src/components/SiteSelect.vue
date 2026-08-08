@@ -4,11 +4,11 @@
     v-model:value="model"
     mode="multiple"
     allow-clear
-    placeholder="不选表示全局生效"
+    placeholder="全部站点"
     :options="selectOptions"
     :loading="loading"
     :disabled="disabled"
-    style="min-width: 280px"
+    style="min-width: 80px"
   />
   <span v-else>{{ formatSiteIds(model) }}</span>
 </template>

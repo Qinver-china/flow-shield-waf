@@ -17,7 +17,11 @@
           <a-input v-model:value="form.name" placeholder="" />
         </a-form-item>
         <a-form-item label="备注">
-          <a-input v-model:value="form.remark" placeholder="可选" />
+          <a-textarea
+            v-model:value="form.remark"
+            placeholder="可选"
+            :auto-size="{ minRows: 1, maxRows: 6 }"
+          />
         </a-form-item>
       </fs-form-section>
 
@@ -52,7 +56,7 @@
       </fs-form-section>
 
       <fs-form-section title="证书内容" description="支持粘贴 PEM 文本或上传文件">
-        <a-tabs v-model:activeKey="importMode">
+         <a-tabs v-model:activeKey="importMode">
           <a-tab-pane key="paste" tab="粘贴内容">
             <a-form-item label="证书 (PEM)" required>
               <a-textarea

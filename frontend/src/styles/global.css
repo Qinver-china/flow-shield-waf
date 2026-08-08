@@ -49,7 +49,7 @@ code,
 
 *::-webkit-scrollbar-thumb {
     border-radius: 10px;
-    background: rgba(104, 104, 104,.2);
+    background: rgba(104, 104, 104, 0.2);
 }
 
 *:hover::-webkit-scrollbar-thumb {
@@ -64,12 +64,20 @@ code,
     background: rgba(146, 146, 146, 0.1);
 }
 
-*:focus-visible{
+*:focus-visible {
     outline: none !important;
 }
 
 .flex {
     display: flex;
+}
+
+.opacity-80 {
+    opacity: 0.8;
+}
+
+.opacity-60 {
+    opacity: 0.6;
 }
 
 .justify-between {
@@ -106,11 +114,11 @@ code,
     color: var(--fs-text-muted);
 }
 
-.ant-dropdown{
+.ant-dropdown {
     min-width: 80px !important;
 }
 
-.ant-drawer .ant-drawer-close{
+.ant-drawer .ant-drawer-close {
     margin-right: -6px;
     order: 2;
 }
@@ -132,6 +140,7 @@ code,
 }
 
 /* Dropdown menus: align elevated surface with design tokens (day/night) */
+.ant-tabs-dropdown .ant-tabs-dropdown-menu,
 .ant-dropdown .ant-dropdown-menu,
 .ant-dropdown-menu-submenu .ant-dropdown-menu {
     background-color: var(--fs-bg-elevated) !important;

@@ -10,7 +10,7 @@
       </a-button>
     </template>
 
-    <a-tabs v-model:active-key="tab" size="large" class="ai-guard-tabs fs-tabs-animated">
+     <a-tabs v-model:active-key="tab" size="large" class="ai-guard-tabs fs-tabs-animated">
       <a-tab-pane key="chat" tab="AI智能助手" />
       <a-tab-pane key="policies" tab="AI防护策略" />
       <a-tab-pane key="incidents" tab="AI分析记录" />
@@ -42,25 +42,5 @@ const policiesRef = ref<InstanceType<typeof DefensePoliciesTab> | null>(null);
 <style scoped>
 .ai-guard-tabs :deep(.ant-tabs-nav) {
   margin-bottom: 0;
-}
-
-@media (max-width: 767px) {
-  .ai-guard-tabs :deep(.ant-tabs-nav-wrap) {
-    overflow: visible;
-  }
-
-  .ai-guard-tabs :deep(.ant-tabs-nav-list) {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .ai-guard-tabs :deep(.ant-tabs-nav-list::-webkit-scrollbar) {
-    display: none;
-  }
-
-  .ai-guard-tabs :deep(.ant-tabs-tab) {
-    flex-shrink: 0;
-  }
 }
 </style>

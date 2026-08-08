@@ -56,13 +56,20 @@ function shouldAttemptRefresh(url?: string) {
 function formatErrorMessage(error: any) {
   const status = error.response?.status;
   const payload = error.response?.data;
-  const msg = payload?.message || error.message;
+  let msg = payload?.message || error.message;
+  if (msg && typeof msg !== "string") {
+    try {
+      msg = JSON.stringify(msg);
+    } catch {
+      msg = String(msg);
+    }
+  }
   if (status === 422 && Array.isArray(payload?.data)) {
     const detail = payload.data
       .map((item: any) => item?.msg || JSON.stringify(item))
       .filter(Boolean)
       .join("；");
-    return detail ? `参数校验失败：${detail}` : "参数校验失败";
+    return detail ? `参数校验失败：${detail}` : msg || "参数校验失败";
   }
   return msg || "请求失败";
 }

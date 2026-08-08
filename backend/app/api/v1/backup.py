@@ -44,5 +44,5 @@ async def import_backup(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     msg = "导入完成"
     if not summary.get("engine_synced"):
-        msg = "导入完成，但引擎同步未完全成功，请检查 WAF 引擎状态"
+        msg = summary.get("engine_error") or "导入完成，但引擎同步未完全成功，请检查 WAF 引擎状态"
     return ok(summary, message=msg)

@@ -16,6 +16,18 @@ from app.constants.logging_settings import (
 from app.services.waf_settings import normalize_auto_thresholds
 
 
+def normalize_sample_rate(value: float) -> float:
+    """Accept 0～1 rate or 0～100 percentage; persist as 0～1."""
+    rate = float(value)
+    if rate < 0:
+        raise ValueError("采样率不能为负数")
+    if rate > 1:
+        if rate > 100:
+            raise ValueError("采样率需在 0～100% 之间")
+        rate = rate / 100.0
+    return max(0.0, min(1.0, rate))
+
+
 class AutoThreshold(BaseModel):
     window_sec: int = Field(ge=1, le=86400)
     max_requests: int = Field(ge=1)
@@ -25,9 +37,9 @@ class LoggingSettings(BaseModel):
     logging_control_mode: str = Field(default=DEFAULT_LOGGING_CONTROL_MODE)
     logging_enabled: bool = DEFAULT_LOGGING_ENABLED
     logging_skip_observe: bool = DEFAULT_LOGGING_SKIP_OBSERVE
-    observe_sample_rate_idle: float = Field(default=DEFAULT_OBSERVE_SAMPLE_RATE_IDLE, ge=0, le=1)
+    observe_sample_rate_idle: float = Field(default=DEFAULT_OBSERVE_SAMPLE_RATE_IDLE, ge=0, le=100)
     observe_sample_rate_active: float = Field(
-        default=DEFAULT_OBSERVE_SAMPLE_RATE_ACTIVE, ge=0, le=1
+        default=DEFAULT_OBSERVE_SAMPLE_RATE_ACTIVE, ge=0, le=100
     )
     logging_detail_on_block: bool = DEFAULT_LOGGING_DETAIL_ON_BLOCK
     logging_auto_thresholds: list[AutoThreshold] = Field(
@@ -37,9 +49,19 @@ class LoggingSettings(BaseModel):
         default=DEFAULT_LOGGING_AUTO_COOLDOWN_SEC, ge=10, le=3600
     )
     logging_auto_observe_sample_rate: float = Field(
-        default=DEFAULT_LOGGING_AUTO_OBSERVE_SAMPLE_RATE, ge=0, le=1
+        default=DEFAULT_LOGGING_AUTO_OBSERVE_SAMPLE_RATE, ge=0, le=100
     )
     log_retention_days: int = Field(default=DEFAULT_LOG_RETENTION_DAYS, ge=1, le=365)
+
+    @field_validator(
+        "observe_sample_rate_idle",
+        "observe_sample_rate_active",
+        "logging_auto_observe_sample_rate",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_sample_rates(cls, value: float) -> float:
+        return normalize_sample_rate(value)
 
     @field_validator("logging_control_mode")
     @classmethod

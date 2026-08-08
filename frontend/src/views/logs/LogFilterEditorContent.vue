@@ -113,7 +113,6 @@
         type="text"
         danger
         class="remove-btn"
-        style="padding: 0;"
         @click="filterState.removeDraftCondition(condition.id)"
       >
         <delete-outlined />
@@ -125,8 +124,8 @@
     </a-button>
 
     <div class="filter-editor-actions">
-      <a-button @click="emit('cancel')">取消</a-button>
-      <a-button type="primary" @click="emit('apply')">应用</a-button>
+      <a-button @click="emit('cancel')" size="large">取消</a-button>
+      <a-button type="primary" @click="emit('apply')" size="large">应用</a-button>
     </div>
   </div>
 </template>

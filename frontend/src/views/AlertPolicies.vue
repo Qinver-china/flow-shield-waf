@@ -103,7 +103,11 @@
             <a-input v-model:value="form.name" placeholder="例如：流量突增邮件告警" />
           </a-form-item>
           <a-form-item label="备注">
-            <a-input v-model:value="form.remark" placeholder="可选" />
+            <a-textarea
+              v-model:value="form.remark"
+              placeholder="可选"
+              :auto-size="{ minRows: 1, maxRows: 6 }"
+            />
           </a-form-item>
         </fs-form-section>
 
@@ -126,7 +130,7 @@
           </a-form-item>
 
           <a-row v-if="selectedCondition?.params?.length" :gutter="16">
-            <a-col v-for="p in selectedCondition.params" :key="p.key" :span="12">
+            <a-col v-for="p in selectedCondition.params" :key="p.key" :span="24 / selectedCondition.params.length">
               <a-form-item :label="p.label" :required="p.required !== false">
                 <a-select
                   v-if="p.kind === 'traffic_window'"
