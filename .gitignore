@@ -19,9 +19,9 @@ dist/
 .vite/
 *.log
 
-# data volumes (if bind-mounted locally)
-data/
-backup/
+# data volumes (if bind-mounted locally; keep root-only so backend/app/data seeds stay tracked)
+/data/
+/backup/
 engine/conf.d/*.conf
 !engine/conf.d/.gitkeep
 

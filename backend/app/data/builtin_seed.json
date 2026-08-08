@@ -1,0 +1,1932 @@
+{
+  "format": "flow-shield-waf-builtin-seed",
+  "version": 2,
+  "source_export": "2026-08-08T09:55:53.519620Z",
+  "data": {
+    "ip_groups": [
+      {
+        "name": "本地IP",
+        "remark": null,
+        "entries": [
+          "192.168.0.0/16",
+          "10.0.0.0/8",
+          "172.16.0.0/12",
+          "127.0.0.1"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "name": "流量突增时观察全部",
+        "site_ids": null,
+        "priority": 980,
+        "mode": "observe",
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "system.cpu",
+                  "op": "compare",
+                  "value": {
+                    "window_sec": 60,
+                    "compare": "host_cpu_gt",
+                    "threshold": 50
+                  }
+                },
+                {
+                  "field": "traffic.global",
+                  "op": "compare",
+                  "value": {
+                    "window_sec": 300,
+                    "compare": "baseline_gt",
+                    "percent": 80
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "当回源的请求量较大时，记录全部的日志。方便通过日志观察及分析攻击共性，以便制定防御策略",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "PCDN-拦截",
+        "site_ids": null,
+        "priority": 100,
+        "mode": "js_challenge",
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "field": "http.method",
+              "op": "eq",
+              "value": "GET"
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.query.count",
+                  "op": "gte",
+                  "value": "1"
+                }
+              ]
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.referer",
+                  "op": "is_empty"
+                },
+                {
+                  "field": "http.cookie_raw",
+                  "op": "is_empty"
+                }
+              ]
+            },
+            {
+              "field": "ua.family",
+              "op": "eq",
+              "value": "browser"
+            },
+            {
+              "field": "http.uri.ext",
+              "op": "not_in",
+              "value": [
+                "css",
+                "js",
+                "woff"
+              ]
+            }
+          ]
+        },
+        "remark": "有效的拦截的 PCDN 跑流量，且不影响正常浏览器请求",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "WP登录页验证",
+        "site_ids": null,
+        "priority": 100,
+        "mode": "js_challenge",
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "op": "contains",
+              "field": "http.url",
+              "value": [
+                "/wp-login.php",
+                "/user-sign"
+              ]
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "op": "lt",
+                  "field": "http.cookie.count",
+                  "value": "2"
+                },
+                {
+                  "op": "is_empty",
+                  "field": "http.referer"
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "WordPress登录页面全局JS 挑战，有效防御 PCDN 等其他恶意请求",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "PHP攻击-phpinfo探测",
+        "site_ids": null,
+        "priority": 100,
+        "mode": "block",
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "op": "contains",
+              "field": "http.url",
+              "value": [
+                "phpinfo"
+              ]
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "op": "regex",
+                  "field": "http.url",
+                  "value": "(?i)phpinfo\\s*\\("
+                },
+                {
+                  "op": "regex",
+                  "field": "http.request_uri",
+                  "value": "(?i)phpinfo\\s*\\("
+                },
+                {
+                  "op": "regex",
+                  "field": "http.body.raw",
+                  "value": "(?i)phpinfo\\s*\\("
+                },
+                {
+                  "op": "regex",
+                  "field": "http.uri.query",
+                  "value": "(?i)phpinfo\\s*\\("
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "禁止所有 phpinfo 嗅探探测",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "低误伤 XSS 黑名单",
+        "site_ids": null,
+        "priority": 100,
+        "mode": "observe",
+        "enabled": true,
+        "conditions": {
+          "logic": "or",
+          "conditions": [
+            {
+              "op": "regex",
+              "field": "http.uri.query",
+              "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+            },
+            {
+              "op": "regex",
+              "field": "http.cookie_raw",
+              "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "op": "regex",
+                  "arg": "comment",
+                  "field": "http.body.form",
+                  "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+                },
+                {
+                  "op": "regex",
+                  "arg": "message",
+                  "field": "http.body.form",
+                  "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+                },
+                {
+                  "op": "regex",
+                  "arg": "nickname",
+                  "field": "http.body.form",
+                  "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+                },
+                {
+                  "op": "regex",
+                  "arg": "comment",
+                  "field": "http.body.json",
+                  "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+                },
+                {
+                  "op": "regex",
+                  "arg": "message",
+                  "field": "http.body.json",
+                  "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+                },
+                {
+                  "op": "regex",
+                  "arg": "nickname",
+                  "field": "http.body.json",
+                  "value": "(?i)(?:<\\s*/?\\s*script\\b|<\\s*(?:iframe|object|embed|svg|math|body)\\b[^>]*(?:on[a-z]+\\s*=|src\\s*=\\s*['\\\"]?\\s*javascript\\s*:)|(?:href|src|xlink:href)\\s*=\\s*['\\\"]?\\s*javascript\\s*:|data\\s*:\\s*text/html|on(?:error|load|click|mouseover|mouseenter|focus|submit|animationstart)\\s*=|(?:document\\.(?:cookie|domain)|window\\.location|eval\\s*\\(|setTimeout\\s*\\(\\s*['\\\"]))"
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "误伤性较小的XSS防御，避免误伤真实请求，但能防住比较明显且攻击行",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "所有站点全部观察",
+        "site_ids": null,
+        "priority": 990,
+        "mode": "observe",
+        "enabled": false,
+        "conditions": {
+          "logic": "and",
+          "conditions": []
+        },
+        "remark": "记录所有站点的观察日志，方便分析。  注意：不建议长期开启，会增加日志储存压力",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": 403,
+        "block_page_html": ""
+      }
+    ],
+    "blacklist": [
+      {
+        "list_type": "black",
+        "name": "部分页面禁止Bot",
+        "site_ids": null,
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "field": "bot.category",
+              "op": "in_list",
+              "value": [
+                "search_engine",
+                "monitoring",
+                "social",
+                "scraper",
+                "malicious",
+                "other",
+                "ai_tool"
+              ]
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.url",
+                  "op": "contains",
+                  "value": [
+                    "/wp-admin/",
+                    "?golink="
+                  ]
+                },
+                {
+                  "field": "http.query.count",
+                  "op": "gte",
+                  "value": "2"
+                },
+                {
+                  "field": "http.url",
+                  "op": "contains",
+                  "value": [
+                    "/user/",
+                    "/oauth/"
+                  ]
+                },
+                {
+                  "field": "http.url",
+                  "op": "contains",
+                  "value": [
+                    "/message/"
+                  ]
+                },
+                {
+                  "field": "http.url",
+                  "op": "contains",
+                  "value": [
+                    "/user-sign"
+                  ]
+                },
+                {
+                  "field": "http.uri.ext",
+                  "op": "in_list",
+                  "value": [
+                    "php"
+                  ]
+                },
+                {
+                  "logic": "and",
+                  "conditions": [
+                    {
+                      "field": "http.url",
+                      "op": "contains",
+                      "value": [
+                        "/author/",
+                        "/tag/"
+                      ]
+                    },
+                    {
+                      "field": "http.url",
+                      "op": "contains",
+                      "value": [
+                        "post_status",
+                        "orderby",
+                        "status"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "WordPress 网站部分页面禁止任意Bot爬虫或机器抓取",
+        "expire_at": null,
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "list_type": "black",
+        "name": "WP禁止xmlrpc.php",
+        "site_ids": null,
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "op": "contains",
+                  "field": "http.url",
+                  "value": [
+                    "/xmlrpc.php"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "WordPress 禁止 xmlrpc.php 功能并拦截",
+        "expire_at": null,
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "list_type": "black",
+        "name": "敏感文件探测",
+        "site_ids": null,
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.url",
+                  "op": "contains",
+                  "value": [
+                    "config.json",
+                    "sftp.json",
+                    "www.tar.gz",
+                    "www.rar",
+                    "www.zip",
+                    "backup.gz",
+                    "wwwroot.tar",
+                    "wwwroot.zip",
+                    "env.sample",
+                    ".env",
+                    "backup.zip",
+                    "backup.rar",
+                    "backup.tgz",
+                    "backup.tar.gz",
+                    "admin.tar.gz",
+                    "test.tar.gz",
+                    "bak.zip",
+                    "bbs.tar.gz",
+                    "bak.rar",
+                    "user.tgz",
+                    "guarantee.zip",
+                    "guarantee.tar.gz",
+                    "guarantee.rar",
+                    "guarantee.tgz"
+                  ]
+                },
+                {
+                  "field": "http.uri.ext",
+                  "op": "in_list",
+                  "value": [
+                    "env",
+                    "git",
+                    "history",
+                    "bak",
+                    "backup",
+                    "sql"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "禁止探测系统敏感文件",
+        "expire_at": null,
+        "custom_block_page_enabled": true,
+        "block_page_status_code": 403,
+        "block_page_html": "<body style=\"color: #f74444;font-size: 200px;text-align: center;padding: 50px;\">403</body>"
+      },
+      {
+        "list_type": "black",
+        "name": "SQL注入[严格]",
+        "site_ids": null,
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "op": "in_list",
+              "field": "http.method",
+              "value": [
+                "POST",
+                "PUT",
+                "PATCH",
+                "GET"
+              ]
+            },
+            {
+              "op": "gt",
+              "field": "http.body.size",
+              "value": "1"
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "op": "contains",
+                  "field": "http.content_type",
+                  "value": [
+                    "application/x-www-form-urlencoded"
+                  ]
+                },
+                {
+                  "op": "contains",
+                  "field": "http.content_type",
+                  "value": [
+                    "application/json"
+                  ]
+                },
+                {
+                  "op": "contains",
+                  "field": "http.content_type",
+                  "value": [
+                    "multipart/form-data"
+                  ]
+                },
+                {
+                  "op": "contains",
+                  "field": "http.content_type",
+                  "value": [
+                    "text/plain"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "regex",
+              "field": "http.body.raw",
+              "value": "(?is)(?:\\bunion\\s+(?:all\\s+)?select\\b|(?:['\\\"`)]\\s*(?:or|and)\\s*['\\\"`]?\\d+['\\\"`]?\\s*=\\s*['\\\"`]?\\d+)|\\b(?:select|insert|update|delete|drop|alter|create|truncate|replace)\\b[\\s\\S]{0,80}\\b(?:from|where|into|set|table|database|schema|information_schema|mysql\\.user)\\b|\\b(?:sleep|benchmark|load_file|extractvalue|updatexml)\\s*\\(|(?:--|#|/\\*)[\\s\\S]{0,40}\\b(?:select|union|sleep|benchmark|drop|information_schema)\\b)"
+            }
+          ]
+        },
+        "remark": "比较严格的防SQL注入攻击，避免误伤真实请求，但能防住比较明显且攻击行",
+        "expire_at": null,
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "list_type": "black",
+        "name": "禁止海外访问",
+        "site_ids": null,
+        "enabled": false,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "field": "geo.country",
+              "op": "neq",
+              "value": "CN"
+            }
+          ]
+        },
+        "remark": "禁止所有的非中国 IP 访问。建议仅在特殊情况时酌情开启",
+        "expire_at": null,
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "list_type": "black",
+        "name": "禁止恶意Bot",
+        "site_ids": null,
+        "enabled": true,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "field": "bot.category",
+              "op": "in_list",
+              "value": [
+                "malicious"
+              ]
+            }
+          ]
+        },
+        "remark": "禁止恶意的机器探测等行为",
+        "expire_at": null,
+        "custom_block_page_enabled": false,
+        "block_page_status_code": 403,
+        "block_page_html": ""
+      }
+    ],
+    "whitelist": [
+      {
+        "list_type": "white",
+        "name": "全站全部白名单",
+        "site_ids": null,
+        "enabled": false,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "op": "exists",
+              "field": "http.url"
+            }
+          ]
+        },
+        "remark": "启用后，所有的网站则全部不经过任何防护！仅在特殊时候开启",
+        "expire_at": null,
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      }
+    ],
+    "exceptions": [
+      {
+        "name": "网站按Cookie例外",
+        "site_ids": null,
+        "scope": "all",
+        "enabled": false,
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.cookie_raw",
+                  "op": "contains",
+                  "value": [
+                    "Hm_lvt_"
+                  ]
+                },
+                {
+                  "field": "http.cookie_raw",
+                  "op": "contains",
+                  "value": [
+                    "wordpress_sec_"
+                  ]
+                },
+                {
+                  "field": "http.cookie_raw",
+                  "op": "contains",
+                  "value": [
+                    "wordpress_logged_in"
+                  ]
+                }
+              ]
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.cookie_raw",
+                  "op": "contains",
+                  "value": [
+                    "PHPSESSID="
+                  ]
+                },
+                {
+                  "field": "http.cookie_raw",
+                  "op": "contains",
+                  "value": [
+                    "fps_accelerat="
+                  ]
+                },
+                {
+                  "field": "http.cookie_raw",
+                  "op": "contains",
+                  "value": [
+                    "history_search="
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "根据 Cookie 判断真实的用户请求，常见的网站 Cookie 同时满足两项时，则不参与防护规则"
+      }
+    ],
+    "ratelimits": [
+      {
+        "name": "CC防护-动态网页[严格]",
+        "site_ids": null,
+        "priority": 100,
+        "enabled": false,
+        "keys": [
+          {
+            "arg": "",
+            "field": "ip.src"
+          }
+        ],
+        "window": 360,
+        "threshold": 10,
+        "mode": "js_challenge",
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "op": "is_empty",
+                  "field": "http.uri.ext"
+                },
+                {
+                  "op": "in_list",
+                  "field": "http.uri.ext",
+                  "value": [
+                    "html",
+                    "php"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "neq",
+              "field": "bot.category",
+              "value": "search_engine"
+            },
+            {
+              "op": "eq",
+              "field": "http.method",
+              "value": "GET"
+            }
+          ]
+        },
+        "remark": "针对于网站非静态文件的页面的严格 CC 防护策略，此规则很严格，必须配合 Cookie 防护例外使用",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "CC防护-静态文件[严格]",
+        "site_ids": null,
+        "priority": 100,
+        "enabled": false,
+        "keys": [
+          {
+            "arg": "",
+            "field": "ip.src"
+          }
+        ],
+        "window": 360,
+        "threshold": 20,
+        "mode": "block",
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "and",
+              "conditions": [
+                {
+                  "field": "http.uri.ext",
+                  "op": "exists"
+                },
+                {
+                  "field": "http.uri.ext",
+                  "op": "not_in",
+                  "value": [
+                    "html",
+                    "php"
+                  ]
+                }
+              ]
+            },
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.cookie_raw",
+                  "op": "not_contains",
+                  "value": [
+                    "PHPSESSID"
+                  ]
+                },
+                {
+                  "logic": "and",
+                  "conditions": [
+                    {
+                      "field": "http.cookie_raw",
+                      "op": "not_contains",
+                      "value": [
+                        "showed_system_notice"
+                      ]
+                    },
+                    {
+                      "field": "http.cookie_raw",
+                      "op": "not_contains",
+                      "value": [
+                        "fps_accelerat"
+                      ]
+                    },
+                    {
+                      "field": "http.cookie_raw",
+                      "op": "not_contains",
+                      "value": [
+                        "wordpress_logged"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "针对网站全部静态文件的 CC 严格防护策略，此规则很严格，必须配合 Cookie 防护例外使用",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "CC防护-部分Bot限速",
+        "site_ids": null,
+        "priority": 100,
+        "enabled": true,
+        "keys": [
+          {
+            "field": "ip.src",
+            "arg": ""
+          }
+        ],
+        "window": 60,
+        "threshold": 10,
+        "mode": "block",
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "field": "bot.category",
+              "op": "in_list",
+              "value": [
+                "malicious",
+                "scraper",
+                "monitoring"
+              ]
+            }
+          ]
+        },
+        "remark": "针对爬虫程序、探测平台、恶意 bot 等机器行为进行限速拦截",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": 403,
+        "block_page_html": ""
+      },
+      {
+        "name": "CC防护-静态文件[常规]",
+        "site_ids": null,
+        "priority": 100,
+        "enabled": true,
+        "keys": [
+          {
+            "field": "ip.src",
+            "arg": ""
+          }
+        ],
+        "window": 180,
+        "threshold": 180,
+        "mode": "block",
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "and",
+              "conditions": [
+                {
+                  "field": "http.uri.ext",
+                  "op": "exists"
+                },
+                {
+                  "field": "http.uri.ext",
+                  "op": "not_in",
+                  "value": [
+                    "html",
+                    "php"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "针对网站全部静态文件的 CC 常规防护策略",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      },
+      {
+        "name": "CC防护-动态网页[常规]",
+        "site_ids": null,
+        "priority": 100,
+        "enabled": true,
+        "keys": [
+          {
+            "field": "ip.src",
+            "arg": ""
+          }
+        ],
+        "window": 180,
+        "threshold": 90,
+        "mode": "js_challenge",
+        "conditions": {
+          "logic": "and",
+          "conditions": [
+            {
+              "logic": "or",
+              "conditions": [
+                {
+                  "field": "http.uri.ext",
+                  "op": "is_empty"
+                },
+                {
+                  "field": "http.uri.ext",
+                  "op": "in_list",
+                  "value": [
+                    "html",
+                    "php"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "remark": "针对于网站非静态文件的页面的严格 CC 防护常规策略",
+        "custom_block_page_enabled": false,
+        "block_page_status_code": null,
+        "block_page_html": null
+      }
+    ],
+    "bot_categories": [
+      {
+        "value": "other",
+        "label": "其他",
+        "sort_order": 99,
+        "is_builtin": true,
+        "remark": null
+      },
+      {
+        "value": "search_engine",
+        "label": "搜索引擎",
+        "sort_order": 10,
+        "is_builtin": true,
+        "remark": null
+      },
+      {
+        "value": "monitoring",
+        "label": "探测平台",
+        "sort_order": 20,
+        "is_builtin": true,
+        "remark": null
+      },
+      {
+        "value": "social",
+        "label": "社交平台",
+        "sort_order": 30,
+        "is_builtin": true,
+        "remark": null
+      },
+      {
+        "value": "scraper",
+        "label": "爬虫程序",
+        "sort_order": 50,
+        "is_builtin": true,
+        "remark": null
+      },
+      {
+        "value": "malicious",
+        "label": "恶意 Bot",
+        "sort_order": 60,
+        "is_builtin": true,
+        "remark": null
+      },
+      {
+        "value": "ai_tool",
+        "label": "AI工具",
+        "sort_order": 50,
+        "is_builtin": false,
+        "remark": null
+      },
+      {
+        "value": "internal",
+        "label": "内部程序",
+        "sort_order": 50,
+        "is_builtin": false,
+        "remark": "PHP函数请求等"
+      }
+    ],
+    "bots": [
+      {
+        "name": "Googlebot",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "Googlebot",
+          "Google-InspectionTool",
+          "GoogleOther",
+          "Google-Extended",
+          "Storebot-Google",
+          "AdsBot-Google"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": ".googlebot.com",
+        "is_builtin": true,
+        "remark": "Google 搜索引擎爬虫"
+      },
+      {
+        "name": "Bingbot",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "bingbot",
+          "BingPreview"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": ".search.msn.com",
+        "is_builtin": true,
+        "remark": "Microsoft Bing 爬虫"
+      },
+      {
+        "name": "Baiduspider",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "Baiduspider",
+          "BaiduSpider"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": ".baidu.com",
+        "is_builtin": true,
+        "remark": "百度搜索引擎爬虫"
+      },
+      {
+        "name": "Sogou Spider",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "Sogou web spider",
+          "Sogou inst spider",
+          "Sogou Pic Spider",
+          "sogou.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "搜狗搜索引擎爬虫"
+      },
+      {
+        "name": "360Spider",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "360Spider",
+          "HaosouSpider"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "360 搜索引擎爬虫"
+      },
+      {
+        "name": "Bytespider",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "Bytespider"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "字节跳动爬虫"
+      },
+      {
+        "name": "YandexBot",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "YandexBot",
+          "YandexRenderResourcesBot",
+          "yandex.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "俄罗斯最大搜索引擎 yandex.com"
+      },
+      {
+        "name": "facebookexternalhit",
+        "categories": [
+          "social"
+        ],
+        "ua_patterns": [
+          "facebookexternalhit",
+          "Facebot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "Facebook 链接预览"
+      },
+      {
+        "name": "Twitterbot",
+        "categories": [
+          "social"
+        ],
+        "ua_patterns": [
+          "Twitterbot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "Twitter/X 链接预览"
+      },
+      {
+        "name": "UptimeRobot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "UptimeRobot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "UptimeRobot 可用性监控"
+      },
+      {
+        "name": "curl",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "curl/"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "curl 命令行工具"
+      },
+      {
+        "name": "PythonHttp",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "python-requests",
+          "Python/",
+          "aiohttp",
+          "Scrapy",
+          "scrapy",
+          "python-urllib"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": true,
+        "remark": "Python常见Http库"
+      },
+      {
+        "name": "Claudebot",
+        "categories": [
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "claudebot",
+          "ClaudeBot",
+          "anthropic.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Anthropic Claude"
+      },
+      {
+        "name": "Amazonbot",
+        "categories": [
+          "social"
+        ],
+        "ua_patterns": [
+          "Amazonbot",
+          "amazon.com",
+          "amazonbot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Amazon亚马逊"
+      },
+      {
+        "name": "SemrushBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "SemrushBot",
+          "semrush.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "SEMrush旗下SEO数据分析平台Semrush‌"
+      },
+      {
+        "name": "Meta-ExternalAgent",
+        "categories": [
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "meta-externalagent",
+          "meta-webindexer"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Meta 公司（Facebook/Instagram 运营方）推出的‌AI 训练专用网络爬虫"
+      },
+      {
+        "name": "Applebot",
+        "categories": [
+          "social"
+        ],
+        "ua_patterns": [
+          "Applebot",
+          "apple.com/go/applebot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Apple苹果公司"
+      },
+      {
+        "name": "YisouSpider",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "YisouSpider"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "神马搜索‌-UC 浏览器与阿里巴巴"
+      },
+      {
+        "name": "YurunHttp",
+        "categories": [
+          "internal"
+        ],
+        "ua_patterns": [
+          "YurunHttp"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "子比主题常用http请求工具"
+      },
+      {
+        "name": "DotBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "DotBot",
+          "dotbot",
+          "pensiteexplorer.org"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Moz 公司‌（原 SEOmoz） SEO 分析爬虫"
+      },
+      {
+        "name": "GPTBot",
+        "categories": [
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "GPTBot",
+          "gptbot",
+          "openai.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "OpenAI ChatGPT"
+      },
+      {
+        "name": "MJ12bot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "MJ12bot",
+          "mj12bot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "英国 SEO 数据公司‌Majestic‌"
+      },
+      {
+        "name": "PetalBot",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "PetalBot",
+          "petalbot",
+          "petalsearch.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "华为自研的花瓣搜索引擎（Petal Search）专用爬虫程序"
+      },
+      {
+        "name": "FlowIQLabsBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "FlowIQLabsBot",
+          "flowiq-labs.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "flowiq-labs.com"
+      },
+      {
+        "name": "GoHttp",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "zgrab",
+          "Go-http-client"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Go 语言网络请求程序"
+      },
+      {
+        "name": "Libcurl",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "libcurl-agent",
+          "libcurl"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "C/C++ 的 libcurl 网络请求库"
+      },
+      {
+        "name": "OkHttp",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "okhttp/"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "安卓平台开源Http库"
+      },
+      {
+        "name": "JSCrawler",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "jscrawler"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Node.js 轻量级网页爬虫库"
+      },
+      {
+        "name": "WordPress",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "WordPress/",
+          "WordPress.com",
+          "wordpress.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "WordPress自带的http请求"
+      },
+      {
+        "name": "LinkHub",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "Linkhub",
+          "linkhub"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "LinkHub-开源爬虫工具"
+      },
+      {
+        "name": "Naver",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "Yeti/",
+          "naver.me"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "韩国Naver搜索引擎"
+      },
+      {
+        "name": "websiphon",
+        "categories": [
+          "monitoring",
+          "malicious"
+        ],
+        "ua_patterns": [
+          "websiphon"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "博彩系统探测"
+      },
+      {
+        "name": "AhrefsBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "AhrefsBot",
+          "ahrefs.com/robot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "新加坡 Ahrefs SEO 分析公司"
+      },
+      {
+        "name": "DataForSeoBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "DataForSeoBot",
+          "dataforseo.com/dataforseo-bot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "立陶宛DataForSEO公司的seo数据分析"
+      },
+      {
+        "name": "Buddy",
+        "categories": [
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "WorkBuddy/",
+          "CodeBuddy/"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "腾讯推出的‌AI 智能助手的爬虫工具"
+      },
+      {
+        "name": "crawl",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "crawl"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "其它默认爬虫UA"
+      },
+      {
+        "name": "Censys",
+        "categories": [
+          "malicious",
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "CensysInspect",
+          "censys.io"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Censys.io互联网主动扫描技术‌的‌网络空间探测平台"
+      },
+      {
+        "name": "lyrenth",
+        "categories": [
+          "ai_tool",
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "AIWebIndex/",
+          "lyrenth.com/bot",
+          "AI-readable"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "lyrenth.com将网页转化为 AI 能够轻松高效阅读的结构化数据工具"
+      },
+      {
+        "name": "coccocbot",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "coccocbot",
+          "coccoc.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "越南本土浏览器和搜索引擎"
+      },
+      {
+        "name": "HubSpot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "HubSpot",
+          "hubspot.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "著名营销CRM平台 HubSpot，分析SEO工具"
+      },
+      {
+        "name": "OkxCrawler",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "OKX-dolphin-crawler"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "加密货币交易所 OKX（欧易）"
+      },
+      {
+        "name": "ShapBot",
+        "categories": [
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "ShapBot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Parallel.ai 旗下的专有 AI 网页爬虫"
+      },
+      {
+        "name": "ADLinkCrawle",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "ADLinkCrawle"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "ADLink 凌华科技自动爬虫程序"
+      },
+      {
+        "name": "JavaHttp",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "Java/"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Java常见Http请求库"
+      },
+      {
+        "name": "SeznamBot",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "SeznamBot",
+          "seznambot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "捷克最大的互联网公司搜索引擎Seznam.cz "
+      },
+      {
+        "name": "SERankingBacklinksBot",
+        "categories": [
+          "other"
+        ],
+        "ua_patterns": [
+          "SERankingBacklinksBot",
+          "seranking.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "SEO分析平台SE Ranking"
+      },
+      {
+        "name": "DuckDuckBot",
+        "categories": [
+          "search_engine"
+        ],
+        "ua_patterns": [
+          "DuckDuckBot",
+          "duckduckgo.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "美国主打安全的搜索引擎 duckduckgo.com"
+      },
+      {
+        "name": "NetworkingExtension",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "NetworkingExtension/"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Apple 的 Network Extension 网络扩展框架"
+      },
+      {
+        "name": "YouBot",
+        "categories": [
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "YouBot",
+          "youbot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "You.com人工智能系统构建的 API，从网络搜索、提取和综合信息"
+      },
+      {
+        "name": "img2dataset",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "img2dataset"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "快速下载图片数据的开源项目 https://github.com/rom1504/img2dataset"
+      },
+      {
+        "name": "AliyunSecBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "AliyunSecBot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "阿里云安全团队官方运营的安全扫描与 Bot 管理爬虫‌，用于 Web 应用防火墙（WAF）的威胁探测、漏洞验证及异常流量识别"
+      },
+      {
+        "name": "HeadlessChrome",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "HeadlessChrome"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Chrome 浏览器的无界面运行模式‌，常被用作‌基于真实浏览器内核的动态网页爬虫引擎"
+      },
+      {
+        "name": "LeakIX",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "leakix.net",
+          "l9tcpid"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "专注于信息泄露与错误配置发现的 OSINT（开源情报）搜索引擎"
+      },
+      {
+        "name": "TikTokSpider",
+        "categories": [
+          "ai_tool",
+          "search_engine",
+          "social"
+        ],
+        "ua_patterns": [
+          "TikTokSpider",
+          "tiktok.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "字节跳动旗下TikTok"
+      },
+      {
+        "name": "Brightbot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "Brightbot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Bright Data 平台提供的网页抓取服务或 AI 代理工具"
+      },
+      {
+        "name": "PerplexityBot",
+        "categories": [
+          "ai_tool",
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "PerplexityBot",
+          "perplexity.ai"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Perplexity AI 开发的官方网页抓取工具"
+      },
+      {
+        "name": "DeepSeekBot",
+        "categories": [
+          "monitoring",
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "DeepSeekBot",
+          "deepseek.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "DeepSeek AI"
+      },
+      {
+        "name": "PaloAltoNetworks",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "paloaltonetworks.com"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "网络安全公司 Palo Alto Networks（派拓网络）旗下的 URL 过滤与安全威胁分析爬虫"
+      },
+      {
+        "name": "DesignMDExtractBot",
+        "categories": [
+          "ai_tool"
+        ],
+        "ua_patterns": [
+          "DesignMD-Extract-Bot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "面向AI编程助手（如Claude Code、Cursor等）的设计系统提取与逆向分析工具/Agent爬虫"
+      },
+      {
+        "name": "BitSightBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "BitSightBot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "网络安全公司 Bitsight 运行的网络安全评估与信息搜集爬虫"
+      },
+      {
+        "name": "BacklinksExtendedBot",
+        "categories": [
+          "monitoring"
+        ],
+        "ua_patterns": [
+          "BacklinksExtendedBot"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "用于分析和索引网站反向链接（Backlinks）的专业 SEO 网络爬虫"
+      },
+      {
+        "name": "IntelxBot",
+        "categories": [
+          "monitoring",
+          "malicious"
+        ],
+        "ua_patterns": [
+          "intelx.io_bot",
+          "intelx.io"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "Intelx.io 开源情报（OSINT）搜索引擎和数据存档平台，收集网络上泄露的密码、数据库、电子邮件、域名和比特币交易地址等敏感信息"
+      },
+      {
+        "name": "github-camo",
+        "categories": [
+          "scraper"
+        ],
+        "ua_patterns": [
+          "github-camo"
+        ],
+        "enabled": true,
+        "site_ids": null,
+        "verify_dns_suffix": null,
+        "is_builtin": false,
+        "remark": "安全的图片代理服务器（Image Proxy Server）程序，本质是代用户抓取远端图片资源"
+      }
+    ]
+  }
+}

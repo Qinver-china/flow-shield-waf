@@ -8,20 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis
 from app.models import BotCategory
+from app.services.bootstrap_seed import seed_section
 
 log = logging.getLogger("waf.bootstrap.bot_categories")
 
-SEED_KEY = "waf:bootstrap:bot_categories_v1"
+SEED_KEY = "waf:bootstrap:bot_categories_v2"
 
-DEFAULT_CATEGORIES: list[dict] = [
-    {"value": "search_engine", "label": "搜索引擎", "sort_order": 10},
-    {"value": "monitoring", "label": "监控探测", "sort_order": 20},
-    {"value": "social", "label": "社交平台", "sort_order": 30},
-    {"value": "seo_tool", "label": "SEO 工具", "sort_order": 40},
-    {"value": "scraper", "label": "通用爬虫", "sort_order": 50},
-    {"value": "malicious", "label": "恶意 Bot", "sort_order": 60},
-    {"value": "other", "label": "其他", "sort_order": 99},
-]
+DEFAULT_CATEGORIES = seed_section("bot_categories")
 
 
 async def seed_builtin_categories(db: AsyncSession) -> int:
@@ -39,9 +32,9 @@ async def seed_builtin_categories(db: AsyncSession) -> int:
             BotCategory(
                 value=spec["value"],
                 label=spec["label"],
-                sort_order=spec.get("sort_order", 0),
-                is_builtin=True,
-                remark=None,
+                sort_order=int(spec.get("sort_order") or 0),
+                is_builtin=bool(spec.get("is_builtin", True)),
+                remark=spec.get("remark"),
             )
         )
         created += 1
