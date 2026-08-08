@@ -83,7 +83,7 @@
             </div>
           </div>
           <div v-else class="ai-chat-welcome">
-            <welcome variant="borderless" :icon="welcomeIcon" title="你好，我是流盾 AI 助手"
+            <welcome variant="borderless" :icon="welcomeIcon" title="我是流盾 AI 助手"
               description="可帮你查询日志、分析攻击、生成防护规则与 CC 策略。建议先生成观察规则，确认无误后再拦截。" />
             <div class="ai-chat-prompt-grid">
               <prompts :items="welcomePrompts" wrap @item-click="onPromptClick" />
