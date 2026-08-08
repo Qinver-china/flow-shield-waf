@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import json
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +19,7 @@ from app.core.db import get_db
 from app.models import Certificate, Site, User
 from app.models.notification import NotificationChannel
 from app.schemas.certificate import (
+    CertificateBoundSite,
     CertificateCreate,
     CertificateDetail,
     CertificateOption,
@@ -42,17 +48,66 @@ def _parse_form_bool(value: str | bool | None) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-async def _ensure_notify_channel(db: AsyncSession, channel_id: int | None) -> None:
-    if channel_id is None:
+def _parse_form_channel_ids(value: str | list[int] | None) -> list[int]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, list):
+        return [int(v) for v in value]
+    raw = str(value).strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="通知通道参数格式无效") from exc
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=400, detail="通知通道参数格式无效")
+    try:
+        return [int(v) for v in parsed]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="通知通道参数格式无效") from exc
+
+
+def _validate_notify_settings(*, enabled: bool, channel_ids: list[int] | None) -> None:
+    if enabled and not channel_ids:
+        raise HTTPException(status_code=400, detail="启用到期前通知时请选择通知通道")
+
+
+async def _ensure_notify_channels(db: AsyncSession, channel_ids: list[int]) -> None:
+    if not channel_ids:
         return
-    channel = await db.get(NotificationChannel, channel_id)
-    if channel is None:
+    unique_ids = list(dict.fromkeys(channel_ids))
+    cnt = (
+        await db.execute(
+            select(func.count()).select_from(NotificationChannel).where(
+                NotificationChannel.id.in_(unique_ids)
+            )
+        )
+    ).scalar_one()
+    if cnt != len(unique_ids):
         raise HTTPException(status_code=400, detail="通知通道不存在")
 
 
-def _validate_notify_settings(*, enabled: bool, channel_id: int | None) -> None:
-    if enabled and not channel_id:
-        raise HTTPException(status_code=400, detail="启用到期前通知时请选择通知通道")
+async def _bound_sites_by_cert_ids(
+    db: AsyncSession, cert_ids: list[int]
+) -> dict[int, list[CertificateBoundSite]]:
+    if not cert_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(Site.id, Site.name, Site.certificate_id)
+            .where(Site.certificate_id.in_(cert_ids))
+            .order_by(Site.name.asc(), Site.id.asc())
+        )
+    ).all()
+    grouped: dict[int, list[CertificateBoundSite]] = defaultdict(list)
+    for site_id, site_name, cert_id in rows:
+        if cert_id is None:
+            continue
+        grouped[int(cert_id)].append(
+            CertificateBoundSite(id=int(site_id), name=str(site_name))
+        )
+    return grouped
 
 
 async def _create_certificate(
@@ -63,13 +118,14 @@ async def _create_certificate(
     key_content: str,
     remark: str | None,
     expiry_notify_enabled: bool = False,
-    expiry_notify_channel_id: int | None = None,
+    expiry_notify_channel_ids: list[int] | None = None,
 ) -> Certificate:
-    _validate_notify_settings(
-        enabled=expiry_notify_enabled,
-        channel_id=expiry_notify_channel_id,
-    )
-    await _ensure_notify_channel(db, expiry_notify_channel_id)
+    channel_ids = list(expiry_notify_channel_ids or [])
+    _validate_notify_settings(enabled=expiry_notify_enabled, channel_ids=channel_ids)
+    if expiry_notify_enabled:
+        await _ensure_notify_channels(db, channel_ids)
+    else:
+        channel_ids = []
 
     cert_obj, _key = certificate_store.validate_pem_pair(cert_content, key_content)
     meta = certificate_store.parse_cert_meta(cert_obj)
@@ -83,7 +139,7 @@ async def _create_certificate(
         not_after=meta["not_after"],
         remark=remark,
         expiry_notify_enabled=expiry_notify_enabled,
-        expiry_notify_channel_id=expiry_notify_channel_id if expiry_notify_enabled else None,
+        expiry_notify_channel_ids=channel_ids,
     )
     db.add(cert)
     await db.flush()
@@ -126,9 +182,16 @@ async def list_certificates(
     rows = (
         await db.execute(cond.offset(pg.offset).limit(pg.page_size))
     ).scalars().all()
+    bound_map = await _bound_sites_by_cert_ids(db, [r.id for r in rows])
+    items = []
+    for row in rows:
+        item = CertificateOut.model_validate(row).model_copy(
+            update={"bound_sites": bound_map.get(row.id, [])}
+        )
+        items.append(item.model_dump())
     return ok({
         "total": total,
-        "items": [CertificateOut.model_validate(r).model_dump() for r in rows],
+        "items": items,
         "page": pg.page,
         "page_size": pg.page_size,
     })
@@ -184,7 +247,7 @@ async def create_certificate(
             key_content=body.key_content,
             remark=body.remark,
             expiry_notify_enabled=body.expiry_notify_enabled,
-            expiry_notify_channel_id=body.expiry_notify_channel_id,
+            expiry_notify_channel_ids=body.expiry_notify_channel_ids,
         )
     except ValueError as exc:
         await db.rollback()
@@ -197,7 +260,7 @@ async def upload_certificate(
     name: str = Form(...),
     remark: str | None = Form(None),
     expiry_notify_enabled: str | None = Form(None),
-    expiry_notify_channel_id: int | None = Form(None),
+    expiry_notify_channel_ids: str | None = Form(None),
     cert_file: UploadFile = File(...),
     key_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -213,7 +276,7 @@ async def upload_certificate(
             key_content=key_content,
             remark=remark,
             expiry_notify_enabled=_parse_form_bool(expiry_notify_enabled),
-            expiry_notify_channel_id=expiry_notify_channel_id,
+            expiry_notify_channel_ids=_parse_form_channel_ids(expiry_notify_channel_ids),
         )
     except ValueError as exc:
         await db.rollback()
@@ -240,10 +303,14 @@ async def update_certificate(
         setattr(cert, k, v)
 
     enabled = bool(cert.expiry_notify_enabled)
-    channel_id = cert.expiry_notify_channel_id
-    _validate_notify_settings(enabled=enabled, channel_id=channel_id)
+    channel_ids = list(cert.expiry_notify_channel_ids or [])
+    if not enabled:
+        channel_ids = []
+        cert.expiry_notify_channel_ids = []
+    _validate_notify_settings(enabled=enabled, channel_ids=channel_ids)
     if enabled:
-        await _ensure_notify_channel(db, channel_id)
+        await _ensure_notify_channels(db, channel_ids)
+        cert.expiry_notify_channel_ids = channel_ids
 
     if cert_content is not None or key_content is not None:
         if not (cert_content and key_content):

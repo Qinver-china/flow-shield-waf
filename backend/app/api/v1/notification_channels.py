@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.db import get_db
-from app.models import User
+from app.models import Certificate, User
 from app.models.notification import AlertPolicy, NotificationChannel
 from app.schemas.common import ok
 from app.schemas.notification import (
@@ -107,6 +107,13 @@ async def delete_channel(
             raise HTTPException(
                 status_code=400,
                 detail=f"通知通道正在被预警规则「{policy.name}」引用，无法删除",
+            )
+    certs = (await db.execute(select(Certificate))).scalars().all()
+    for cert in certs:
+        if channel_id in (cert.expiry_notify_channel_ids or []):
+            raise HTTPException(
+                status_code=400,
+                detail=f"通知通道正在被证书「{cert.name}」到期前通知引用，无法删除",
             )
     await db.delete(row)
     await db.commit()

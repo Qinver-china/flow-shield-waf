@@ -21,14 +21,17 @@
         </a-form-item>
       </fs-form-section>
 
-      <fs-form-section title="到期前通知">
-        <a-form-item label="启用通知">
+      <fs-form-section
+        title="到期前通知"
+        description="到期前 7 天每日会通知一次"
+      >
+        <template #extra>
           <a-switch v-model:checked="form.expiry_notify_enabled" />
-          <p class="fs-hint is-inline">到期前 7 天每日会通知一次</p>
-        </a-form-item>
+        </template>
         <a-form-item v-if="form.expiry_notify_enabled" label="通知通道" required>
           <a-select
-            v-model:value="form.expiry_notify_channel_id"
+            v-model:value="form.expiry_notify_channel_ids"
+            mode="multiple"
             placeholder="选择已配置的通知通道"
             allow-clear
             option-filter-prop="label"
@@ -125,7 +128,7 @@ interface CertificateDetail {
   cert_content: string;
   key_content: string;
   expiry_notify_enabled?: boolean;
-  expiry_notify_channel_id?: number | null;
+  expiry_notify_channel_ids?: number[];
 }
 
 const props = withDefaults(
@@ -157,7 +160,7 @@ const form = reactive({
   cert_content: "",
   key_content: "",
   expiry_notify_enabled: false,
-  expiry_notify_channel_id: null as number | null,
+  expiry_notify_channel_ids: [] as number[],
 });
 
 const certFile = ref<File | null>(null);
@@ -179,7 +182,7 @@ function resetForm() {
   form.cert_content = "";
   form.key_content = "";
   form.expiry_notify_enabled = false;
-  form.expiry_notify_channel_id = null;
+  form.expiry_notify_channel_ids = [];
   certFile.value = null;
   keyFile.value = null;
   certFileList.value = [];
@@ -206,7 +209,7 @@ async function loadDetail(id: number) {
     form.cert_content = detail.cert_content;
     form.key_content = detail.key_content;
     form.expiry_notify_enabled = Boolean(detail.expiry_notify_enabled);
-    form.expiry_notify_channel_id = detail.expiry_notify_channel_id ?? null;
+    form.expiry_notify_channel_ids = [...(detail.expiry_notify_channel_ids || [])];
   } finally {
     detailLoading.value = false;
   }
@@ -290,9 +293,9 @@ async function resolveCertContents(): Promise<{ cert: string; key: string } | nu
 function notifyPayload() {
   return {
     expiry_notify_enabled: form.expiry_notify_enabled,
-    expiry_notify_channel_id: form.expiry_notify_enabled
-      ? form.expiry_notify_channel_id
-      : null,
+    expiry_notify_channel_ids: form.expiry_notify_enabled
+      ? [...form.expiry_notify_channel_ids]
+      : [],
   };
 }
 
@@ -301,7 +304,7 @@ async function save() {
     message.warning("请填写证书名称");
     return;
   }
-  if (form.expiry_notify_enabled && !form.expiry_notify_channel_id) {
+  if (form.expiry_notify_enabled && !form.expiry_notify_channel_ids.length) {
     message.warning("启用到期前通知时请选择通知通道");
     return;
   }
@@ -327,8 +330,8 @@ async function save() {
       fd.append("name", form.name.trim());
       if (form.remark) fd.append("remark", form.remark);
       fd.append("expiry_notify_enabled", String(notify.expiry_notify_enabled));
-      if (notify.expiry_notify_channel_id != null) {
-        fd.append("expiry_notify_channel_id", String(notify.expiry_notify_channel_id));
+      if (notify.expiry_notify_channel_ids.length) {
+        fd.append("expiry_notify_channel_ids", JSON.stringify(notify.expiry_notify_channel_ids));
       }
       fd.append("cert_file", certFile.value!);
       fd.append("key_file", keyFile.value!);

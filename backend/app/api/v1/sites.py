@@ -39,12 +39,19 @@ log = logging.getLogger("waf.api.sites")
 SITE_CARD_TRAFFIC_WINDOWS_SEC = (300, 1800, 3600, 86400)
 
 _ENGINE_RELOAD_WARN = "站点已保存，但 WAF 引擎配置重载失败，请检查引擎状态后再次保存或重启容器"
+_ENGINE_CERT_WARN = "站点已保存，但证书异常，无法重载引擎，请更新证书"
 
 
-async def _sync(db: AsyncSession) -> bool:
-    """Publish rules and regenerate nginx conf. Returns whether engine reload OK."""
+async def _sync(db: AsyncSession):
+    """Publish rules and regenerate nginx conf. Returns EngineReloadResult."""
     await rule_sync.publish(db)
     return await nginx_conf.regenerate(db)
+
+
+def _reload_warn_message(result) -> str:
+    if getattr(result, "reason", None) == "certificate":
+        return _ENGINE_CERT_WARN
+    return _ENGINE_RELOAD_WARN
 
 
 def _validate_listen(*, listen_http: bool, listen_https: bool) -> None:
@@ -284,7 +291,7 @@ async def create_site(
     reload_ok = await _sync(db)
     if not reload_ok:
         log.warning("create_site id=%s: engine reload failed after commit", site.id)
-        return ok(SiteOut.from_site(site).model_dump(), message=_ENGINE_RELOAD_WARN)
+        return ok(SiteOut.from_site(site).model_dump(), message=_reload_warn_message(reload_ok))
     return ok(SiteOut.from_site(site).model_dump())
 
 
@@ -353,7 +360,7 @@ async def update_site(
     reload_ok = await _sync(db)
     if not reload_ok:
         log.warning("update_site id=%s: engine reload failed after commit", site.id)
-        return ok(SiteOut.from_site(site).model_dump(), message=_ENGINE_RELOAD_WARN)
+        return ok(SiteOut.from_site(site).model_dump(), message=_reload_warn_message(reload_ok))
     return ok(SiteOut.from_site(site).model_dump())
 
 
@@ -371,5 +378,5 @@ async def delete_site(
     reload_ok = await _sync(db)
     if not reload_ok:
         log.warning("delete_site id=%s: engine reload failed after commit", site_id)
-        return ok(message=_ENGINE_RELOAD_WARN)
+        return ok(message=_reload_warn_message(reload_ok))
     return ok()

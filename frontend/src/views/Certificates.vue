@@ -18,13 +18,26 @@
       :pagination="pagination"
       api-base="/api/v1/certificates"
       :batch="{ allowDelete: true, enableToggle: false }"
-      :scroll="{ x: 720 }"
+      :scroll="{ x: 1100 }"
       @change="onTableChange"
       @refresh="fetchList"
     >
       <template #bodyCell="{ column, record, text }">
         <template v-if="column.key === 'not_after'">
-          <span :class="expiryClass(record.not_after)">{{ formatTime(text) }}</span>
+          <a-tooltip v-if="record.not_after" :title="formatTime(record.not_after)">
+            <span :class="expiryClass(record.not_after)">{{ formatRemainingDays(record.not_after) }}</span>
+          </a-tooltip>
+          <span v-else>-</span>
+        </template>
+        <template v-else-if="column.key === 'bound_sites'">
+          {{ formatBoundSites(record.bound_sites) }}
+        </template>
+        <template v-else-if="column.key === 'expiry_notify'">
+          <template v-if="!record.expiry_notify_enabled">关闭</template>
+          <template v-else>
+            <div>已开启</div>
+            <div class="notify-channel">{{ formatNotifyChannels(record.expiry_notify_channel_ids) }}</div>
+          </template>
         </template>
         <template v-else-if="column.key === '__actions'">
           <a @click="openUpdate(record)">更新证书</a>
@@ -59,6 +72,11 @@ import { certificateExpiryFilterOptions } from "@/constants/resourceList";
 import { formatDateTime, parseUtc } from "@/utils/datetime";
 import type { ResourceFilterField } from "@/types/resourceList";
 
+interface CertificateBoundSite {
+  id: number;
+  name: string;
+}
+
 interface CertificateRow {
   id: number;
   name: string;
@@ -66,6 +84,16 @@ interface CertificateRow {
   not_before: string | null;
   not_after: string | null;
   remark: string | null;
+  expiry_notify_enabled?: boolean;
+  expiry_notify_channel_ids?: number[];
+  bound_sites?: CertificateBoundSite[];
+}
+
+interface NotificationChannelItem {
+  id: number;
+  name: string;
+  channel_type: string;
+  enabled: boolean;
 }
 
 const listFilters: ResourceFilterField[] = [
@@ -88,19 +116,31 @@ const columns = computed(() => [
   },
   { title: "域名", dataIndex: "domains", ellipsis: true },
   {
+    title: "已绑定站点",
+    key: "bound_sites",
+    ellipsis: true,
+    width: 180,
+  },
+  {
     title: "到期时间",
     key: "not_after",
     dataIndex: "not_after",
-    width: 180,
+    width: 120,
     sorter: true,
     sortOrder:
       sortField.value === "not_after" ? (sortOrder.value === "asc" ? "ascend" : "descend") : undefined,
+  },
+  {
+    title: "到期前通知",
+    key: "expiry_notify",
+    width: 200,
   },
   { title: "备注", dataIndex: "remark", ellipsis: true },
   { title: "操作", key: "__actions", width: 180 },
 ]);
 
 const rows = ref<CertificateRow[]>([]);
+const channels = ref<NotificationChannelItem[]>([]);
 const loading = ref(false);
 const modalOpen = ref(false);
 const editingId = ref<number | null>(null);
@@ -122,12 +162,45 @@ function formatTime(value: string | null) {
   return formatDateTime(value);
 }
 
+function formatRemainingDays(notAfter: string | null) {
+  if (!notAfter) return "-";
+  const ms = parseUtc(notAfter).valueOf() - Date.now();
+  const dayMs = 24 * 3600 * 1000;
+  if (ms < 0) {
+    const overdue = Math.max(1, Math.ceil(-ms / dayMs));
+    return `已过期 ${overdue} 天`;
+  }
+  const remaining = Math.max(0, Math.ceil(ms / dayMs));
+  return `剩余 ${remaining} 天`;
+}
+
+function formatNotifyChannels(channelIds: number[] | null | undefined) {
+  if (!channelIds?.length) return "未选择通道";
+  return channelIds
+    .map((id) => channels.value.find((item) => item.id === id)?.name || `#${id}`)
+    .join("、");
+}
+
+function formatBoundSites(sites: CertificateBoundSite[] | null | undefined) {
+  if (!sites?.length) return "-";
+  return sites.map((site) => site.name).join("、");
+}
+
 function expiryClass(notAfter: string | null) {
   if (!notAfter) return "";
   const diff = parseUtc(notAfter).valueOf() - Date.now();
   if (diff < 0) return "expired";
   if (diff < 30 * 24 * 3600 * 1000) return "soon";
   return "";
+}
+
+async function loadChannels() {
+  try {
+    const resp = await api.get<NotificationChannelItem[]>("/api/v1/notification-channels");
+    channels.value = resp.data || [];
+  } catch {
+    channels.value = [];
+  }
 }
 
 async function fetchList() {
@@ -198,7 +271,10 @@ async function remove(id: number) {
   fetchList();
 }
 
-onMounted(fetchList);
+onMounted(async () => {
+  await loadChannels();
+  await fetchList();
+});
 </script>
 
 <style scoped>
@@ -210,5 +286,10 @@ onMounted(fetchList);
 }
 .soon {
   color: #f59e0b;
+}
+.notify-channel {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--fs-text-muted, #64748b);
 }
 </style>

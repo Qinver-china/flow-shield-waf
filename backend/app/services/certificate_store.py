@@ -50,9 +50,12 @@ def validate_pem_pair(cert_pem: str, key_pem: str) -> tuple[x509.Certificate, ob
         raise ValueError("私钥内容无效，需为 PEM 格式（含 BEGIN PRIVATE KEY）")
 
     try:
-        cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
+        chain = x509.load_pem_x509_certificates(cert_pem.encode())
     except Exception as exc:  # noqa: BLE001
-        raise ValueError("无法解析证书 PEM 内容") from exc
+        raise ValueError("无法解析证书 PEM 内容（证书链可能不完整或已损坏）") from exc
+    if not chain:
+        raise ValueError("无法解析证书 PEM 内容")
+    cert = chain[0]
 
     try:
         key = load_pem_private_key(key_pem.encode(), password=None, backend=default_backend())

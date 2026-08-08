@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CertificateCreate(BaseModel):
@@ -9,11 +9,11 @@ class CertificateCreate(BaseModel):
     key_content: str = Field(min_length=1)
     remark: str | None = None
     expiry_notify_enabled: bool = False
-    expiry_notify_channel_id: int | None = None
+    expiry_notify_channel_ids: list[int] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _require_channel_when_enabled(self) -> "CertificateCreate":
-        if self.expiry_notify_enabled and not self.expiry_notify_channel_id:
+        if self.expiry_notify_enabled and not self.expiry_notify_channel_ids:
             raise ValueError("启用到期前通知时请选择通知通道")
         return self
 
@@ -24,7 +24,12 @@ class CertificateUpdate(BaseModel):
     key_content: str | None = None
     remark: str | None = None
     expiry_notify_enabled: bool | None = None
-    expiry_notify_channel_id: int | None = None
+    expiry_notify_channel_ids: list[int] | None = None
+
+
+class CertificateBoundSite(BaseModel):
+    id: int
+    name: str
 
 
 class CertificateOut(BaseModel):
@@ -39,9 +44,20 @@ class CertificateOut(BaseModel):
     not_after: datetime | None = None
     remark: str | None = None
     expiry_notify_enabled: bool = False
-    expiry_notify_channel_id: int | None = None
+    expiry_notify_channel_ids: list[int] = Field(default_factory=list)
+    bound_sites: list[CertificateBoundSite] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("expiry_notify_channel_ids", mode="before")
+    @classmethod
+    def _coerce_channel_ids(cls, value: object) -> list:
+        return list(value or [])
+
+    @field_validator("bound_sites", mode="before")
+    @classmethod
+    def _coerce_bound_sites(cls, value: object) -> list:
+        return list(value or [])
 
 
 class CertificateDetail(CertificateOut):

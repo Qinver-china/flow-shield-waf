@@ -34,13 +34,13 @@ def days_until_expiry(
 def should_notify_today(
     *,
     enabled: bool,
-    channel_id: int | None,
+    channel_ids: list[int] | None,
     not_after: datetime | None,
     last_notified_on: str | None,
     now_utc: datetime,
     timezone_name: str,
 ) -> bool:
-    if not enabled or not channel_id or not_after is None:
+    if not enabled or not channel_ids or not_after is None:
         return False
     now_local = local_datetime(now_utc, timezone_name)
     if now_local.hour < NOTIFY_LOCAL_HOUR:
@@ -69,7 +69,6 @@ async def run_certificate_expiry_checks(db: AsyncSession) -> int:
         await db.execute(
             select(Certificate).where(
                 Certificate.expiry_notify_enabled.is_(True),
-                Certificate.expiry_notify_channel_id.is_not(None),
                 Certificate.not_after.is_not(None),
             )
         )
@@ -77,9 +76,10 @@ async def run_certificate_expiry_checks(db: AsyncSession) -> int:
 
     sent = 0
     for cert in rows:
+        channel_ids = [int(cid) for cid in (cert.expiry_notify_channel_ids or []) if cid is not None]
         if not should_notify_today(
             enabled=bool(cert.expiry_notify_enabled),
-            channel_id=cert.expiry_notify_channel_id,
+            channel_ids=channel_ids,
             not_after=cert.not_after,
             last_notified_on=cert.expiry_last_notified_on,
             now_utc=now_utc,
@@ -87,10 +87,17 @@ async def run_certificate_expiry_checks(db: AsyncSession) -> int:
         ):
             continue
 
-        channel = await db.get(NotificationChannel, cert.expiry_notify_channel_id)
-        if channel is None or not channel.enabled:
+        channels = (
+            await db.execute(
+                select(NotificationChannel).where(
+                    NotificationChannel.id.in_(channel_ids),
+                    NotificationChannel.enabled.is_(True),
+                )
+            )
+        ).scalars().all()
+        if not channels:
             log.warning(
-                "cert expiry notify skipped id=%s: channel missing or disabled",
+                "cert expiry notify skipped id=%s: no enabled channels",
                 cert.id,
             )
             continue
@@ -110,25 +117,36 @@ async def run_certificate_expiry_checks(db: AsyncSession) -> int:
             days_left=days_left,
             timezone_name=timezone_name,
         )
-        try:
-            await send_via_channel(
-                channel,
-                subject=subject,
-                body=plain,
-                html_body=html_body,
-            )
-        except Exception:  # noqa: BLE001
-            log.exception("cert expiry notify failed id=%s channel=%s", cert.id, channel.id)
+
+        any_ok = False
+        for channel in channels:
+            try:
+                await send_via_channel(
+                    channel,
+                    subject=subject,
+                    body=plain,
+                    html_body=html_body,
+                )
+                any_ok = True
+                sent += 1
+            except Exception:  # noqa: BLE001
+                log.exception(
+                    "cert expiry notify failed id=%s channel=%s",
+                    cert.id,
+                    channel.id,
+                )
+
+        if not any_ok:
             continue
 
         cert.expiry_last_notified_on = today
-        sent += 1
         log.info(
-            "cert expiry notified id=%s name=%s days_left=%s date=%s",
+            "cert expiry notified id=%s name=%s days_left=%s date=%s channels=%s",
             cert.id,
             cert.name,
             days_left,
             today,
+            [c.id for c in channels],
         )
 
     if sent:

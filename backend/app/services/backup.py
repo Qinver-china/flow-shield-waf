@@ -370,6 +370,21 @@ async def _find_one(db: AsyncSession, model, *clauses):
     return (await db.execute(select(model).where(*clauses))).scalar_one_or_none()
 
 
+def _certificate_channel_ids(item: dict[str, Any]) -> list[int]:
+    raw = item.get("expiry_notify_channel_ids")
+    if raw is None and item.get("expiry_notify_channel_id") is not None:
+        raw = [item.get("expiry_notify_channel_id")]
+    if not raw:
+        return []
+    out: list[int] = []
+    for value in raw:
+        try:
+            out.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 async def _import_certificates(
     db: AsyncSession, items: list[dict[str, Any]]
 ) -> dict[int, int]:
@@ -399,8 +414,8 @@ async def _import_certificates(
             existing.remark = item.get("remark")
             if "expiry_notify_enabled" in item:
                 existing.expiry_notify_enabled = bool(item.get("expiry_notify_enabled"))
-            if "expiry_notify_channel_id" in item:
-                existing.expiry_notify_channel_id = item.get("expiry_notify_channel_id")
+            if "expiry_notify_channel_ids" in item or "expiry_notify_channel_id" in item:
+                existing.expiry_notify_channel_ids = _certificate_channel_ids(item)
             paths = certificate_store.write_cert_files(existing.id, cert_pem, key_pem)
             existing.cert_path, existing.key_path = paths
             await db.flush()
@@ -416,7 +431,7 @@ async def _import_certificates(
                 not_after=meta["not_after"],
                 remark=item.get("remark"),
                 expiry_notify_enabled=bool(item.get("expiry_notify_enabled")),
-                expiry_notify_channel_id=item.get("expiry_notify_channel_id"),
+                expiry_notify_channel_ids=_certificate_channel_ids(item),
             )
             db.add(cert)
             await db.flush()
@@ -908,7 +923,7 @@ async def apply_import(
 
     if "sites" in selected or "certificates" in selected:
         try:
-            reload_ok = await nginx_conf.regenerate(db) and reload_ok
+            reload_ok = bool(await nginx_conf.regenerate(db)) and reload_ok
         except Exception as exc:  # noqa: BLE001
             log.exception("nginx regenerate after import failed: %s", exc)
             reload_ok = False

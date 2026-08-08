@@ -224,13 +224,55 @@ async def _ensure_certificate_expiry_notify(conn) -> None:
             )
         )
         log.info("schema patch applied: certificate.expiry_notify_enabled")
-    if not await _column_exists(conn, "certificate", "expiry_notify_channel_id"):
-        await conn.execute(
-            text("ALTER TABLE certificate ADD COLUMN expiry_notify_channel_id INTEGER NULL")
-        )
-        log.info("schema patch applied: certificate.expiry_notify_channel_id")
     if not await _column_exists(conn, "certificate", "expiry_last_notified_on"):
         await conn.execute(
             text("ALTER TABLE certificate ADD COLUMN expiry_last_notified_on VARCHAR(10) NULL")
         )
         log.info("schema patch applied: certificate.expiry_last_notified_on")
+    await _ensure_certificate_expiry_notify_channel_ids(conn)
+
+
+async def _ensure_certificate_expiry_notify_channel_ids(conn) -> None:
+    """Migrate certificate.expiry_notify_channel_id -> expiry_notify_channel_ids (JSON)."""
+    has_ids = await _column_exists(conn, "certificate", "expiry_notify_channel_ids")
+    has_id = await _column_exists(conn, "certificate", "expiry_notify_channel_id")
+    if not has_ids:
+        await conn.execute(
+            text("ALTER TABLE certificate ADD COLUMN expiry_notify_channel_ids JSON")
+        )
+        log.info("schema patch applied: certificate.expiry_notify_channel_ids")
+        has_ids = True
+    if has_ids and has_id:
+        await conn.execute(
+            text(
+                "UPDATE certificate "
+                "SET expiry_notify_channel_ids = json_array(expiry_notify_channel_id) "
+                "WHERE (expiry_notify_channel_ids IS NULL OR expiry_notify_channel_ids = '' "
+                "OR expiry_notify_channel_ids = 'null' OR expiry_notify_channel_ids = '[]') "
+                "AND expiry_notify_channel_id IS NOT NULL"
+            )
+        )
+        await conn.execute(
+            text(
+                "UPDATE certificate "
+                "SET expiry_notify_channel_ids = json_array() "
+                "WHERE expiry_notify_channel_ids IS NULL OR expiry_notify_channel_ids = '' "
+                "OR expiry_notify_channel_ids = 'null'"
+            )
+        )
+        try:
+            await conn.execute(
+                text("ALTER TABLE certificate DROP COLUMN expiry_notify_channel_id")
+            )
+            log.info("schema patch applied: dropped certificate.expiry_notify_channel_id")
+        except Exception:  # noqa: BLE001
+            log.warning("could not drop legacy column certificate.expiry_notify_channel_id")
+    elif has_ids:
+        await conn.execute(
+            text(
+                "UPDATE certificate "
+                "SET expiry_notify_channel_ids = json_array() "
+                "WHERE expiry_notify_channel_ids IS NULL OR expiry_notify_channel_ids = '' "
+                "OR expiry_notify_channel_ids = 'null'"
+            )
+        )

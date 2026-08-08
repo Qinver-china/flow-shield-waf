@@ -23,7 +23,7 @@ def test_should_notify_within_window_once_per_day():
     not_after = datetime(2026, 8, 10, 15, 59, 59)
     assert should_notify_today(
         enabled=True,
-        channel_id=1,
+        channel_ids=[1, 2],
         not_after=not_after,
         last_notified_on=None,
         now_utc=now,
@@ -31,7 +31,7 @@ def test_should_notify_within_window_once_per_day():
     )
     assert not should_notify_today(
         enabled=True,
-        channel_id=1,
+        channel_ids=[1, 2],
         not_after=not_after,
         last_notified_on="2026-08-07",
         now_utc=now,
@@ -44,7 +44,7 @@ def test_should_not_notify_before_local_10():
     not_after = datetime(2026, 8, 10, 15, 59, 59)
     assert not should_notify_today(
         enabled=True,
-        channel_id=1,
+        channel_ids=[1],
         not_after=not_after,
         last_notified_on=None,
         now_utc=now,
@@ -65,7 +65,7 @@ def test_should_not_notify_outside_window():
     )
     assert not should_notify_today(
         enabled=True,
-        channel_id=1,
+        channel_ids=[1],
         not_after=not_after,
         last_notified_on=None,
         now_utc=now,
@@ -78,7 +78,20 @@ def test_should_not_notify_after_expired():
     not_after = datetime(2026, 8, 6, 15, 59, 59)
     assert not should_notify_today(
         enabled=True,
-        channel_id=1,
+        channel_ids=[1],
+        not_after=not_after,
+        last_notified_on=None,
+        now_utc=now,
+        timezone_name="Asia/Shanghai",
+    )
+
+
+def test_should_not_notify_without_channels():
+    now = datetime(2026, 8, 7, 2, 30, 0)
+    not_after = datetime(2026, 8, 10, 15, 59, 59)
+    assert not should_notify_today(
+        enabled=True,
+        channel_ids=[],
         not_after=not_after,
         last_notified_on=None,
         now_utc=now,
