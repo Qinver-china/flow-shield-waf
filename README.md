@@ -31,25 +31,25 @@
 
 ## 流盾核心优势
 
-### 1. 极快
+### 1. 极致性能，亚毫秒级
 
 引擎基于 **Lua** 构建，配合 **Redis** 做规则与计数：单个请求跑完全部防护流程，通常 **不到 1 毫秒**。防护要挡得住，也要尽量不拖慢真实用户。
 
-### 2. 超级丰富的规则策略
+### 2. AI 驱动自行防护
+
+遇到棘手攻击时，可调用 AI 辅助生成更精准的策略；也支持 **AI 自动防护**：条件触发后，后台自动分析近期日志、提炼攻击特征并创建规则，尽量做到无人值守持续防守。
+
+### 3. 超级丰富的规则策略
 
 不止常见的 URL、IP、请求头、地域……还覆盖 Cookie、Bot 管理等 **30+ 匹配项**，支持包含 / 排除 / 等于 / 不等于 / 正则等多种条件。把攻击特征拆得更细，策略才能既精准、又好用。
 
-### 3. 丰富的日志筛选
+### 4. 丰富的日志筛选
 
 这一点深受腾讯 EdgeOne 启发：**从日志里找攻击共性，才是防御最关键的一步。** 当攻击手法不断变化，流盾提供多维度排行与分析，帮你更快锁定「这批请求长什么样」，再反哺成更完善的规则。
 
-### 4. 功能完善
+### 5. 功能完善
 
 黑名单、白名单、防护例外、速率防护、自定义规则之外，还有总览统计、站点管理、证书管理、**Bot 库**、IP 组，以及 AI 能力——把日常防护真正需要的能力收进同一块面板，而不是东拼西凑。
-
-### 5. AI 驱动自行防护
-
-遇到棘手攻击时，可调用 AI 辅助生成更精准的策略；也支持 **AI 自动防护**：条件触发后，后台自动分析近期日志、提炼攻击特征并创建规则，尽量做到无人值守持续防守。
 
 ---
 
@@ -123,6 +123,7 @@
 
 ```
 flow-shield-waf/
+├── install.sh              # 一键安装 / 更新（官网与 GitHub 双链接）
 ├── docker-compose.yml      # redis + clickhouse + app（SQLite 在 app 卷内）
 ├── .env.example            # 环境变量模板（部署前必改）
 ├── engine/                 # OpenResty WAF 引擎（Lua）
@@ -133,7 +134,7 @@ flow-shield-waf/
 │   ├── app/                # 应用镜像（后端 + Worker + 引擎 + 面板）
 │   ├── clickhouse/         # ClickHouse 初始化 SQL
 │   ├── geoip/              # MaxMind .mmdb（已附带，见 deploy/geoip/README.md）
-│   ├── baota/              # 宝塔一键部署
+│   ├── baota/              # 宝塔部署说明
 │   └── smoke_test.sh       # 集成回归脚本
 ├── scripts/
 │   ├── fresh-start.sh      # 清空数据卷并重建（开发/测试用）
@@ -145,13 +146,31 @@ flow-shield-waf/
 
 ## 安装部署
 
+详细文档见官网：[https://fswaf.top/guide/quick-start](https://fswaf.top/guide/quick-start)
+
+### 一键安装 / 更新（推荐）
+
+在**打算存放项目的目录**执行（脚本会先确认当前路径；已安装时自动走更新流程）：
+
+```bash
+# 推荐链接
+curl -fsSL https://fswaf.top/install.sh | bash
+
+# 备用链接（GitHub）
+curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/install.sh | bash
+```
+
+脚本会检测 Linux / 宝塔 / macOS（需 Docker Desktop）、安装缺失的 Docker·Compose·Git（macOS 的 Docker 需手动安装）、处理 80/443（可自动调整 Nginx listen）、克隆代码并**本地构建**。首次安装只需输入管理员账号和密码，其余 `.env` 密钥自动随机生成。
+
 ### 环境要求
 
 - Docker 20.10+ 与 Docker Compose v2
 - 服务器放行端口：`80`、`443`（WAF 对外）、`9000`（管理面板，可改）
 - 建议内存 ≥ 2 GB（含 ClickHouse）
 
-### 第一步：获取代码并配置环境变量
+### 手动安装
+
+#### 1. 获取代码并配置环境变量
 
 ```bash
 # 克隆仓库（私有仓库需先在服务器配置 GitHub 访问：HTTPS Token 或 SSH 密钥）
@@ -181,7 +200,7 @@ CORS_ORIGINS=https://your-panel.example.com  # 限制面板跨域来源
 
 > 若使用示例中的默认密钥且未设置 `WAF_ALLOW_INSECURE_DEFAULTS=true`，后端将拒绝启动。本地调试可临时设 `WAF_ALLOW_INSECURE_DEFAULTS=true`。
 
-### 第二步：检查端口
+#### 2. 检查端口
 
 流盾对外提供网站访问时，需要占用服务器的 **80**（HTTP）和 **443**（HTTPS）端口。启动前先确认这两个端口空闲，否则容器起不来或无法对外服务。
 
@@ -203,9 +222,9 @@ netstat -tlnp | grep -E ':80 |:443 '
 
 如果端口已被占用，按下面列表排查处理：
 
-#### (a) 方案 1：本机已安装 Nginx
+##### (a) 方案 1：本机已安装 Nginx
 
-若服务器上已经装了 Nginx，并由它托管多个网站，通常会占用 80 / 443。需要把 **Nginx 下所有网站** 的监听端口都改成其他端口（例如 `8080` / `8443`），把 80 / 443 留给流盾。
+若服务器上已经装了 Nginx，并由它托管多个网站，通常会占用 80 / 443。需要把 **Nginx 下所有网站** 的监听端口都改成其他端口（例如 `8080` / `4343`），把 80 / 443 留给流盾。
 
 常见改法：
 
@@ -221,7 +240,7 @@ nginx -t && systemctl reload nginx
 
 > 用宝塔面板时，端口协调方式见下方 [端口与宝塔共存](#端口与宝塔共存) 及 [`deploy/baota/README.md`](deploy/baota/README.md)。
 
-### 第三步：构建并启动
+#### 3. 构建并启动
 
 ```bash
 docker compose up -d --build
@@ -250,7 +269,7 @@ docker compose ps
 | engine | :80 / :443 | OpenResty WAF 拦截与回源 |
 | panel | :9000 | 管理面板静态资源 + API 反代 |
 
-### 第四步：登录面板并添加站点
+#### 4. 登录面板并添加站点
 
 1. 打开管理面板：`http://<服务器IP>:9000`
 2. 使用 `.env` 中的 `WAF_ADMIN_USER` / `WAF_ADMIN_PASSWORD` 登录
@@ -258,7 +277,7 @@ docker compose ps
 4. 若启用 HTTPS，先在**证书管理**上传证书，再在站点中选择
 5. 将域名 DNS 解析到本服务器，流量即经 WAF 防护后回源
 
-### 第五步：验证（可选）
+#### 5. 验证（可选）
 
 ```bash
 # 检查面板与引擎健康
@@ -276,7 +295,7 @@ python3 scripts/stress_test.py --url http://127.0.0.1 --host your.site.com
 
 流盾 WAF 引擎需占用 `80` / `443` 对外服务。若宝塔 Nginx 已占用这两个端口：
 
-- **推荐**：宝塔 Nginx 改听高位端口（如 `8080`/`8443`），站点的源站填 `http://127.0.0.1:8080`
+- **推荐**：宝塔 Nginx 改听高位端口（如 `8080`/`4343`），站点的源站填 `http://127.0.0.1:8080`
 - 对外仅由流盾 WAF 承接 80/443
 
 详见 [`deploy/baota/README.md`](deploy/baota/README.md)。
@@ -449,10 +468,11 @@ curl -fsS http://127.0.0.1/waf-health
 - 规则与限速策略通过 Redis 热同步，更新期间代理可能短暂抖动约 10–30 秒
 - 更新后不要在生产环境修改 `JWT_SECRET`、`WAF_CHALLENGE_SECRET`，否则会导致登录与挑战失效
 
-宝塔环境可使用：
+宝塔或任意环境可再次执行一键脚本：
 
 ```bash
-bash deploy/baota/upgrade.sh
+bash install.sh
+# 或：curl -fsSL https://fswaf.top/install.sh | bash
 ```
 
 完整说明、回滚与检查清单见 [`docs/upgrade.md`](docs/upgrade.md)。

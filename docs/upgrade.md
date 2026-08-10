@@ -4,6 +4,25 @@
 
 ---
 
+## 一键更新（推荐）
+
+```bash
+# 推荐
+curl -fsSL https://fswaf.top/install.sh | bash
+# 备用
+curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/install.sh | bash
+```
+
+或在项目根目录：
+
+```bash
+bash install.sh
+```
+
+脚本会备份 `.env`、拉取代码、补齐新增环境变量并本地重建。官网说明：[升级与备份](https://fswaf.top/guide/upgrade-backup)。
+
+---
+
 ## 更新会影响什么
 
 | 变更类型 | 是否需要重建镜像 | 是否丢数据 | 业务影响 |
@@ -18,7 +37,7 @@
 
 ---
 
-## 标准更新流程（推荐）
+## 标准更新流程（手动）
 
 在服务器项目根目录执行：
 
@@ -167,10 +186,10 @@ git pull origin main
 docker compose up -d --build
 ```
 
-也可使用快捷脚本（若已提供）：
+也可再次执行根目录 `install.sh`（或官网一键命令）：
 
 ```bash
-bash deploy/baota/upgrade.sh
+bash install.sh
 ```
 
 ---
