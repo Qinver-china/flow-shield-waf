@@ -20,7 +20,7 @@
       <div class="sider-footer">
         <a class="sider-footer-link" :href="changelogUrl" target="_blank" rel="noopener noreferrer">
           <tag-outlined />
-          <span>v{{ appVersion }}</span>
+          <span>V{{ appVersion }}</span>
         </a>
         <a class="sider-footer-link" :href="docsUrl" target="_blank" rel="noopener noreferrer">
           <book-outlined />
@@ -52,7 +52,7 @@
         <div class="sider-footer">
           <a class="sider-footer-link" :href="changelogUrl" target="_blank" rel="noopener noreferrer">
             <tag-outlined />
-            <span>v{{ appVersion }}</span>
+            <span>V{{ appVersion }}</span>
           </a>
           <a class="sider-footer-link" :href="docsUrl" target="_blank" rel="noopener noreferrer">
             <book-outlined />
@@ -275,41 +275,35 @@ onMounted(() => {
   background: color-mix(in srgb, var(--fs-color-primary) 5%, transparent);
 }
 
-.app-nav-menu,
-.nav-drawer :deep(.app-nav-menu) {
+/* 直接挂在 .app-nav-menu：抽屉 teleport 后 .nav-drawer 拿不到 scoped 属性 */
+.app-nav-menu {
   background: transparent !important;
   border-inline-end: none !important;
   --ant-menu-item-height: 36px;
   --ant-menu-item-margin-block: 2px;
 }
 
-.app-sider :deep(.app-nav-menu .ant-menu-item),
-.app-sider :deep(.app-nav-menu .ant-menu-submenu-title),
-.nav-drawer :deep(.app-nav-menu .ant-menu-item),
-.nav-drawer :deep(.app-nav-menu .ant-menu-submenu-title) {
+.app-nav-menu :deep(.ant-menu-item),
+.app-nav-menu :deep(.ant-menu-submenu-title) {
   color: var(--fs-text-secondary);
-  height: 36px;
-  line-height: 36px;
-  margin-block: 2px;
+  height: 36px !important;
+  line-height: 36px !important;
+  margin-block: 2px !important;
 }
 
-.app-sider :deep(.app-nav-menu .ant-menu-item-group-title),
-.nav-drawer :deep(.app-nav-menu .ant-menu-item-group-title) {
+.app-nav-menu :deep(.ant-menu-item-group-title) {
   color: var(--fs-text-muted);
   padding: 8px 16px 4px;
   line-height: 1.4;
   font-size: 12px;
 }
 
-.app-sider :deep(.app-nav-menu .ant-menu-item:not(.ant-menu-item-selected):hover),
-.app-sider :deep(.app-nav-menu .ant-menu-submenu-title:hover),
-.nav-drawer :deep(.app-nav-menu .ant-menu-item:not(.ant-menu-item-selected):hover),
-.nav-drawer :deep(.app-nav-menu .ant-menu-submenu-title:hover) {
+.app-nav-menu :deep(.ant-menu-item:not(.ant-menu-item-selected):hover),
+.app-nav-menu :deep(.ant-menu-submenu-title:hover) {
   background: color-mix(in srgb, var(--fs-color-primary) 10%, transparent) !important;
 }
 
-.app-sider :deep(.app-nav-menu .ant-menu-item-selected),
-.nav-drawer :deep(.app-nav-menu .ant-menu-item-selected) {
+.app-nav-menu :deep(.ant-menu-item-selected) {
   color: #fff !important;
   background: var(--fs-color-primary) !important;
 }
