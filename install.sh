@@ -1304,8 +1304,7 @@ WAF_ADMIN_PASSWORD=${FSWAF_ADMIN_PASSWORD}
 WAF_CHALLENGE_SECRET=${challenge}
 ENABLE_DOCS=false
 CORS_ORIGINS=*
-# 默认管理员密码为 admin888，需允许启动；登录后请立即修改账号密码
-WAF_ALLOW_INSECURE_DEFAULTS=true
+# 默认管理员为 admin / admin888，登录后请立即修改账号密码
 
 PANEL_PORT=${panel_port}
 

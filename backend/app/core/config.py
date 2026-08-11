@@ -1,21 +1,9 @@
 """Application settings loaded from environment variables."""
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-_INSECURE_JWT_SECRETS = frozenset({
-    "change_me",
-    "please_change_this_to_a_long_random_secret",
-})
-_INSECURE_CHALLENGE_SECRETS = frozenset({
-    "change_me_challenge",
-    "please_change_this_challenge_secret",
-    "waf_default_secret",
-})
-_INSECURE_ADMIN_PASSWORDS = frozenset({"admin888"})
 
 
 class Settings(BaseSettings):
@@ -32,7 +20,7 @@ class Settings(BaseSettings):
     redis_max_connections: int = 64
 
     # auth
-    jwt_secret: str = "change_me"
+    jwt_secret: str = "FlowShield_JWT_ChangeMe_ToYourOwnSecret_32b"
     jwt_algorithm: str = "HS256"
     jwt_access_ttl_min: int = 120
     jwt_refresh_ttl_days: int = 7
@@ -42,8 +30,7 @@ class Settings(BaseSettings):
     waf_admin_password: str = "admin888"
 
     # waf
-    waf_challenge_secret: str = "change_me_challenge"
-    waf_allow_insecure_defaults: bool = False
+    waf_challenge_secret: str = "FlowShield_Challenge_ChangeMe_Secret32"
     enable_docs: bool = True
     cors_origins: str = "*"
 
@@ -117,22 +104,6 @@ class Settings(BaseSettings):
         if not raw or raw == "*":
             return ["*"]
         return [part.strip() for part in raw.split(",") if part.strip()]
-
-    def validate_production_secrets(self) -> None:
-        if self.waf_allow_insecure_defaults:
-            return
-        problems: list[str] = []
-        if self.jwt_secret in _INSECURE_JWT_SECRETS or len(self.jwt_secret) < 16:
-            problems.append("JWT_SECRET 仍为默认值或过短，请设置至少 16 位的随机串")
-        if self.waf_challenge_secret in _INSECURE_CHALLENGE_SECRETS or len(self.waf_challenge_secret) < 16:
-            problems.append("WAF_CHALLENGE_SECRET 仍为默认值或过短，请设置至少 16 位的随机串")
-        if self.waf_admin_password in _INSECURE_ADMIN_PASSWORDS:
-            problems.append("WAF_ADMIN_PASSWORD 仍为默认值 admin888，请修改")
-        if problems:
-            msg = "启动被拒绝：检测到不安全默认配置。\n" + "\n".join(f"  - {p}" for p in problems)
-            msg += "\n开发环境可设置 WAF_ALLOW_INSECURE_DEFAULTS=true 临时放行。"
-            print(msg, file=sys.stderr)
-            raise SystemExit(1)
 
 
 @lru_cache

@@ -12,7 +12,7 @@
 
 | 检查项 | 通过标准 |
 |--------|----------|
-| 默认凭据启动 | 未设置 `WAF_ALLOW_INSECURE_DEFAULTS=true` 时拒绝启动 |
+| 默认凭据 | `.env` / 面板登录后尽快改为自有密钥与管理员密码 |
 | Challenge 密钥 | 引擎无 `waf_default_secret` 回退 |
 | 登录限速 | 连续错误登录触发 429 |
 | Refresh 禁用用户 | 返回 401 |

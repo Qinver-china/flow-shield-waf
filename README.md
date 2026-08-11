@@ -98,7 +98,6 @@
 
 ### 生产级安全基线
 
-- 启动时校验 JWT、挑战密钥、管理员密码，拒绝不安全默认值
 - 登录接口 Redis 限速，Refresh Token 查库校验用户状态
 - 黑名单、全站例外、非观察限速**禁止空条件**，避免误拦整站
 - 引擎启动与后端解耦：后端暂时不可用时不阻断 WAF 代理服务
@@ -125,7 +124,7 @@
 flow-shield-waf/
 ├── install.sh              # 一键安装 / 更新（官网与 GitHub 双链接）
 ├── docker-compose.yml      # redis + clickhouse + app（SQLite 在 app 卷内）
-├── .env.example            # 环境变量模板（部署前必改）
+├── .env.example            # 环境变量模板（复制即可启动，建议改密钥）
 ├── engine/                 # OpenResty WAF 引擎（Lua）
 ├── backend/                # FastAPI 管理后端 + Worker
 ├── frontend/               # Vue 3 管理面板
@@ -177,28 +176,25 @@ curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/i
 git clone https://github.com/Qinver-china/flow-shield-waf.git
 cd flow-shield-waf
 
-cp .env.example .env
+cp .env.example .env  #仅首次安装拷贝
 ```
 
-编辑 `.env`，**务必修改**以下项：
+编辑 `.env`，**推荐修改**以下项（示例已预置可用长度密钥，不改也能启动，但生产务必换成你自己的）：
 
 | 变量 | 说明 |
 |------|------|
 | `DB_PATH` | SQLite 配置库路径（Docker 默认 `/data/waf.db`） |
 | `REDIS_PASSWORD` | Redis 密码 |
-| `JWT_SECRET` | JWT 签名密钥（≥ 16 位随机串） |
-| `WAF_CHALLENGE_SECRET` | 挑战 Cookie HMAC 密钥（≥ 16 位随机串） |
+| `JWT_SECRET` | JWT 签名密钥（建议长随机串） |
+| `WAF_CHALLENGE_SECRET` | 挑战 Cookie HMAC 密钥（建议长随机串） |
 | `WAF_ADMIN_USER` / `WAF_ADMIN_PASSWORD` | 初始管理员（首次启动自动创建） |
 
 生产环境建议同时设置：
 
 ```bash
-WAF_ALLOW_INSECURE_DEFAULTS=false   # 拒绝默认密钥（默认已是 false）
 ENABLE_DOCS=false                   # 关闭 OpenAPI 文档
 CORS_ORIGINS=https://your-panel.example.com  # 限制面板跨域来源
 ```
-
-> 若使用示例中的默认密钥且未设置 `WAF_ALLOW_INSECURE_DEFAULTS=true`，后端将拒绝启动。本地调试可临时设 `WAF_ALLOW_INSECURE_DEFAULTS=true`。
 
 #### 2. 检查端口
 

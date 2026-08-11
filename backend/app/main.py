@@ -95,7 +95,6 @@ async def _bootstrap() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     setup_logging()
-    settings.validate_production_secrets()
     await _bootstrap()
     stop = asyncio.Event()
     sync_task = asyncio.create_task(run_config_sync_retry(stop))

@@ -81,7 +81,6 @@ diff .env.example .env || true
 
 | 变量 | 说明 |
 |------|------|
-| `WAF_ALLOW_INSECURE_DEFAULTS` | 是否允许默认密钥（生产保持 `false`） |
 | `CORS_ORIGINS` | 面板跨域来源 |
 | `CLICKHOUSE_*` | 日志库连接（Compose 内通常用默认值即可） |
 

@@ -30,8 +30,8 @@ cd /www/wwwroot
 git clone https://github.com/Qinver-china/flow-shield-waf.git
 cd flow-shield-waf
 
-cp .env.example .env
-vi .env   # 必改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET、WAF_ADMIN_PASSWORD
+cp .env.example .env #仅首次安装拷贝
+vi .env   # 推荐修改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET、WAF_ADMIN_PASSWORD
 ```
 
 ### 2. 检查端口
