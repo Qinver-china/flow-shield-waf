@@ -1,58 +1,65 @@
 <template>
   <a-layout class="app-layout">
-    <a-layout-sider v-if="!isMobile" v-model:collapsed="collapsed" collapsible :trigger="null" class="app-sider"
-      :width="160" :collapsed-width="72">
-      <div class="logo" :class="{ collapsed }">
-        <app-logo variant="sidebar" :collapsed="collapsed" />
+    <a-layout-sider v-if="!isMobile" class="app-sider" :width="160">
+      <div class="logo">
+        <app-logo variant="sidebar" />
       </div>
       <div class="sider-menu-wrap">
         <a-menu mode="inline" class="app-nav-menu" :selected-keys="[selectedKey]" :open-keys="openKeys" @click="onMenu"
           @open-change="onOpenChange">
           <template v-for="group in menuGroups" :key="group.key">
-            <a-menu-item-group v-if="!collapsed" :title="group.label">
+            <a-menu-item-group :title="group.label">
               <a-menu-item v-for="item in group.items" :key="item.path">
                 <component :is="item.icon" />
                 <span>{{ item.label }}</span>
               </a-menu-item>
             </a-menu-item-group>
-            <template v-else>
-              <a-menu-item v-for="item in group.items" :key="item.path">
-                <component :is="item.icon" />
-                <span>{{ item.label }}</span>
-              </a-menu-item>
-            </template>
           </template>
         </a-menu>
       </div>
       <div class="sider-footer">
-        <a-tooltip :title="collapsed ? '展开菜单' : '收起菜单'">
-          <a-button type="text" class="fs-header-icon-btn sider-collapse-btn" :aria-label="collapsed ? '展开菜单' : '收起菜单'"
-            @click="collapsed = !collapsed">
-            <menu-unfold-outlined v-if="collapsed" />
-            <menu-fold-outlined v-else />
-            <span v-if="!collapsed">收起菜单</span>
-          </a-button>
-        </a-tooltip>
+        <a class="sider-footer-link" :href="changelogUrl" target="_blank" rel="noopener noreferrer">
+          <tag-outlined />
+          <span>v{{ appVersion }}</span>
+        </a>
+        <a class="sider-footer-link" :href="docsUrl" target="_blank" rel="noopener noreferrer">
+          <book-outlined />
+          <span>教程文档</span>
+        </a>
       </div>
     </a-layout-sider>
 
     <a-drawer v-if="isMobile" v-model:open="drawerOpen" placement="left" :width="200" :closable="false"
       class="nav-drawer" :body-style="{ padding: 0, background: 'transparent' }">
-      <div class="drawer-head">
-        <div class="logo">
-          <app-logo variant="sidebar" />
+      <div class="drawer-body">
+        <div class="drawer-head">
+          <div class="logo">
+            <app-logo variant="sidebar" />
+          </div>
+        </div>
+        <div class="drawer-menu-wrap">
+          <a-menu mode="inline" class="app-nav-menu" :selected-keys="[selectedKey]" @click="onMenu">
+            <template v-for="group in menuGroups" :key="group.key">
+              <a-menu-item-group :title="group.label">
+                <a-menu-item v-for="item in group.items" :key="item.path">
+                  <component :is="item.icon" />
+                  <span>{{ item.label }}</span>
+                </a-menu-item>
+              </a-menu-item-group>
+            </template>
+          </a-menu>
+        </div>
+        <div class="sider-footer">
+          <a class="sider-footer-link" :href="changelogUrl" target="_blank" rel="noopener noreferrer">
+            <tag-outlined />
+            <span>v{{ appVersion }}</span>
+          </a>
+          <a class="sider-footer-link" :href="docsUrl" target="_blank" rel="noopener noreferrer">
+            <book-outlined />
+            <span>教程文档</span>
+          </a>
         </div>
       </div>
-      <a-menu mode="inline" class="app-nav-menu" :selected-keys="[selectedKey]" @click="onMenu">
-        <template v-for="group in menuGroups" :key="group.key">
-          <a-menu-item-group :title="group.label">
-            <a-menu-item v-for="item in group.items" :key="item.path">
-              <component :is="item.icon" />
-              <span>{{ item.label }}</span>
-            </a-menu-item>
-          </a-menu-item-group>
-        </template>
-      </a-menu>
     </a-drawer>
 
     <a-layout class="app-main">
@@ -102,21 +109,20 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   BellOutlined,
+  BookOutlined,
   CheckCircleOutlined,
-  CloseOutlined,
   ClusterOutlined,
   DashboardOutlined,
   DisconnectOutlined,
   FileSearchOutlined,
   GlobalOutlined,
   MenuOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
   SettingOutlined,
   StopOutlined,
+  TagOutlined,
   UserOutlined,
 } from "@ant-design/icons-vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
@@ -125,10 +131,12 @@ import FloatingAiChat from "@/components/ai-chat/FloatingAiChat.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
 import { useAuthStore } from "@/stores/auth";
 import { useAppSettingsStore } from "@/stores/appSettings";
+import { version as appVersion } from "../../package.json";
 
-const collapsed = ref(false);
 const drawerOpen = ref(false);
 const openKeys = ref<string[]>(["overview", "assets", "policy", "observe", "system"]);
+const changelogUrl = "https://fswaf.top/changelog";
+const docsUrl = "https://fswaf.top/guide/dashboard";
 
 const route = useRoute();
 const router = useRouter();
@@ -228,7 +236,8 @@ onMounted(() => {
   min-height: 0;
 }
 
-.sider-menu-wrap {
+.sider-menu-wrap,
+.drawer-menu-wrap {
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
@@ -237,31 +246,41 @@ onMounted(() => {
 
 .sider-footer {
   display: flex;
+  flex-direction: column;
   flex-shrink: 0;
-  padding: 6px 10px 10px 4px;
+  gap: 0;
+  padding: 4px 10px 8px;
 }
 
-.sider-collapse-btn {
-  flex-shrink: 0;
-  justify-content:flex-start;
-  width: 100%;
-  height: auto;
-  padding: 8px;
-  padding-left: 24px;
-}
-.ant-layout-sider-collapsed .sider-collapse-btn {
-  padding-left: 8px;
-  justify-content:center;
+.sider-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 13px;
+  padding: 5px 18px;
+  border-radius: var(--fs-radius-sm, 4px);
+  color:
+    color-mix(in srgb, var(--fs-text-secondary) 80%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color .15s ease, background .15s ease;
 }
 
-.app-sider :deep(.ant-layout-sider-trigger) {
-  display: none;
+.sider-footer-link :deep(.anticon) {
+  font-size: 12px;
+}
+
+.sider-footer-link:hover {
+  color: var(--fs-color-primary);
+  background: color-mix(in srgb, var(--fs-color-primary) 5%, transparent);
 }
 
 .app-nav-menu,
 .nav-drawer :deep(.app-nav-menu) {
   background: transparent !important;
   border-inline-end: none !important;
+  --ant-menu-item-height: 36px;
+  --ant-menu-item-margin-block: 2px;
 }
 
 .app-sider :deep(.app-nav-menu .ant-menu-item),
@@ -269,19 +288,24 @@ onMounted(() => {
 .nav-drawer :deep(.app-nav-menu .ant-menu-item),
 .nav-drawer :deep(.app-nav-menu .ant-menu-submenu-title) {
   color: var(--fs-text-secondary);
+  height: 36px;
+  line-height: 36px;
+  margin-block: 2px;
 }
 
 .app-sider :deep(.app-nav-menu .ant-menu-item-group-title),
 .nav-drawer :deep(.app-nav-menu .ant-menu-item-group-title) {
   color: var(--fs-text-muted);
+  padding: 8px 16px 4px;
+  line-height: 1.4;
+  font-size: 12px;
 }
 
 .app-sider :deep(.app-nav-menu .ant-menu-item:not(.ant-menu-item-selected):hover),
 .app-sider :deep(.app-nav-menu .ant-menu-submenu-title:hover),
 .nav-drawer :deep(.app-nav-menu .ant-menu-item:not(.ant-menu-item-selected):hover),
 .nav-drawer :deep(.app-nav-menu .ant-menu-submenu-title:hover) {
-  color: var(--fs-text-primary) !important;
-  background: var(--fs-bg-muted) !important;
+  background: color-mix(in srgb, var(--fs-color-primary) 10%, transparent) !important;
 }
 
 .app-sider :deep(.app-nav-menu .ant-menu-item-selected),
@@ -297,11 +321,6 @@ onMounted(() => {
   margin: 12px 6px;
   border-radius: var(--fs-radius-md);
   background: transparent;
-}
-
-.logo.collapsed {
-  justify-content: center;
-  padding: 8px 6px;
 }
 
 .app-main {
@@ -366,6 +385,13 @@ onMounted(() => {
   margin: 0;
   padding: 16px;
   min-height: calc(100vh - 56px);
+}
+
+.drawer-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .drawer-head {
