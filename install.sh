@@ -1658,8 +1658,7 @@ compose() {
 build_and_start() {
   sanitize_docker_registry_mirrors || true
   info "拉取依赖镜像并本地构建启动（首次安装可能较久，约10-20分钟）..."
-  # plain：避免默认 TTY 进度把并行的 FROM openresty 拉镜像误显示成卡在 frontend-build
-  if ! BUILDKIT_PROGRESS=plain compose up -d --build; then
+  if ! compose up -d --build; then
     print_docker_pull_hint
     die "docker compose up 失败"
   fi
