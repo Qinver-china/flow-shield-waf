@@ -12,6 +12,9 @@ FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.top"
 FSWAF_REPO_URL="${FSWAF_REPO_URL:-https://github.com/Qinver-china/flow-shield-waf.git}"
+# 国内访问 GitHub 失败/超时时的临时镜像（拉完会恢复官方 origin）
+FSWAF_REPO_MIRROR_URL="${FSWAF_REPO_MIRROR_URL:-https://ghproxy.net/https://github.com/Qinver-china/flow-shield-waf.git}"
+FSWAF_GIT_TIMEOUT_S="${FSWAF_GIT_TIMEOUT_S:-90}"
 FSWAF_REPO_DIR_NAME="flow-shield-waf"
 FSWAF_CONTAINER="flowshield-waf-app"
 FSWAF_COMPOSE_NAME="flowshield-waf"
@@ -1225,6 +1228,117 @@ try_auto_free_ports() {
 # 获取代码 / 生成 .env
 # ---------------------------------------------------------------------------
 
+# 带超时执行 git（超时退出码 124）；无 timeout/gtimeout 时用后台轮询兜底
+git_cmd_with_timeout() {
+  local secs="${FSWAF_GIT_TIMEOUT_S}"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+    return $?
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$secs" "$@"
+    return $?
+  fi
+  "$@" &
+  local pid=$!
+  local elapsed=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( elapsed >= secs )); then
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 124
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  wait "$pid"
+}
+
+# 官方源失败/超时后，临时改用镜像再试一次；成功后恢复官方 origin
+git_clone_with_mirror_fallback() {
+  local dest="$1"
+  local rc=0
+
+  set +e
+  git_cmd_with_timeout git clone --depth 1 "$FSWAF_REPO_URL" "$dest"
+  rc=$?
+  set -e
+  if [[ $rc -eq 0 ]]; then
+    return 0
+  fi
+
+  warn "官方源克隆失败或超时（退出码 ${rc}），改用临时镜像重试..."
+  if [[ "$dest" == "." ]]; then
+    rm -rf .git 2>/dev/null || true
+  else
+    rm -rf "$dest"
+  fi
+
+  set +e
+  git_cmd_with_timeout git clone --depth 1 "$FSWAF_REPO_MIRROR_URL" "$dest"
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 ]]; then
+    return "$rc"
+  fi
+
+  if [[ "$dest" == "." ]]; then
+    git remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
+  else
+    git -C "$dest" remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
+  fi
+  ok "已通过镜像克隆成功（origin 已恢复为官方地址）"
+  return 0
+}
+
+git_pull_with_mirror_fallback() {
+  local rc=0 orig_url=""
+
+  info "拉取最新代码..."
+  set +e
+  git_cmd_with_timeout git pull --ff-only origin main
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    git_cmd_with_timeout git pull --ff-only
+    rc=$?
+  fi
+  set -e
+  if [[ $rc -eq 0 ]]; then
+    return 0
+  fi
+
+  warn "官方源拉取失败或超时（退出码 ${rc}），改用临时镜像重试..."
+  orig_url="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ -z "$orig_url" ]]; then
+    warn "无法读取 origin URL，跳过镜像重试"
+    warn "git pull 未完全成功，将继续尝试用当前代码构建"
+    return 1
+  fi
+  if [[ "$orig_url" == "$FSWAF_REPO_MIRROR_URL" || "$orig_url" == *ghproxy* ]]; then
+    warn "当前 origin 已是镜像地址，git pull 仍失败"
+    warn "git pull 未完全成功，将继续尝试用当前代码构建"
+    return 1
+  fi
+
+  git remote set-url origin "$FSWAF_REPO_MIRROR_URL"
+  set +e
+  git_cmd_with_timeout git pull --ff-only origin main
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    git_cmd_with_timeout git pull --ff-only
+    rc=$?
+  fi
+  set -e
+  git remote set-url origin "$orig_url" 2>/dev/null || git remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
+
+  if [[ $rc -eq 0 ]]; then
+    ok "已通过镜像拉取成功（origin 已恢复为官方地址）"
+    return 0
+  fi
+  warn "git pull 未完全成功，将继续尝试用当前代码构建"
+  return 1
+}
+
 ensure_repo() {
   if [[ -n "$INSTALL_DIR" && -d "$INSTALL_DIR" ]]; then
     cd "$INSTALL_DIR"
@@ -1247,12 +1361,12 @@ ensure_repo() {
   ensure_dir_for_user "$(pwd)"
   info "克隆仓库到当前目录：${FSWAF_REPO_URL}"
   if dir_is_empty "."; then
-    git clone --depth 1 "$FSWAF_REPO_URL" . || die "git clone 失败（请确认目录可写：$(pwd)）"
+    git_clone_with_mirror_fallback . || die "git clone 失败（请确认目录可写：$(pwd)）"
   elif [[ "$FORCE_NONEMPTY_INSTALL" -eq 1 ]]; then
     warn "非空目录强制拉取：先克隆到临时目录，再合并到当前目录"
     local tmp
     tmp="$(mktemp -d)"
-    git clone --depth 1 "$FSWAF_REPO_URL" "$tmp/repo" || die "git clone 失败"
+    git_clone_with_mirror_fallback "$tmp/repo" || die "git clone 失败"
     # 合并：优先保留仓库文件；同名已存在则备份后覆盖
     local f base
     shopt -s dotglob nullglob
@@ -1447,8 +1561,7 @@ run_update() {
   ok "已备份 .env"
 
   if [[ -d .git ]]; then
-    info "拉取最新代码..."
-    git pull --ff-only origin main || git pull --ff-only || warn "git pull 未完全成功，将继续尝试用当前代码构建"
+    git_pull_with_mirror_fallback || true
   else
     warn "当前目录不是 git 仓库，跳过 pull（若用压缩包部署请自行覆盖代码并保留 .env）"
   fi
