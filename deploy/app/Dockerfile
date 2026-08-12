@@ -16,8 +16,8 @@ COPY frontend/ ./
 RUN echo "==> [frontend] npm run build（Vite 打包）..." \
     && npm run build \
     && echo "==> [frontend] 构建完成。" \
-    && echo "==> 下一步：拉取/准备 OpenResty 基础镜像（openresty/openresty:…-alpine-fat）。"
-
+    && echo "==> 下一步：拉取/准备 OpenResty 基础镜像（openresty/openresty:…-alpine-fat）。" 
+    
 # ---- 2) 应用运行镜像（基于已有 OpenResty 引擎镜像，避免重复装系统包）----
 FROM openresty/openresty:1.25.3.1-2-alpine-fat
 
