@@ -5,12 +5,18 @@
 # ---- 1) 构建前端 ----
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-# 本 stage 单独设 development，避免宿主机 NODE_ENV=production 跳过 vite 等 devDependencies
+# vite 在 devDependencies：固定 development + --include=dev，避免 production 语义跳过构建工具。
+# package.json 分层安装以利用缓存；.dockerignore 必须排除 frontend/node_modules，
+# 否则后续 COPY 可能用空目录覆盖本层依赖（表现为 vite: not found）。
 ENV NODE_ENV=development
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN echo "==> [frontend] npm ci（安装依赖，含 vite）..." \
+    && npm ci --include=dev
 COPY frontend/ ./
-RUN npm run build
+RUN echo "==> [frontend] npm run build（Vite 打包）..." \
+    && npm run build \
+    && echo "==> [frontend] 构建完成。" \
+    && echo "==> 下一步：拉取/准备 OpenResty 基础镜像（openresty/openresty:…-alpine-fat）。"
 
 # ---- 2) 应用运行镜像（基于已有 OpenResty 引擎镜像，避免重复装系统包）----
 FROM openresty/openresty:1.25.3.1-2-alpine-fat
@@ -33,6 +39,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
 
 RUN set -eux; \
+    echo "==> [runtime] OpenResty 基础镜像已就绪，开始安装系统依赖 (apk)..."; \
     if [ -n "${ALPINE_MIRROR}" ]; then \
       sed -i "s#https\\?://dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
       sed -i "s#https\\?://[^/]*/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \

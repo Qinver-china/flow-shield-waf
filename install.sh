@@ -1634,12 +1634,7 @@ sanitize_docker_registry_mirrors() {
 
 print_docker_pull_hint() {
   echo
-  err "依赖镜像拉取/构建失败。"
-  echo "  若日志含 docker.mirrors.ustc.edu.cn / no such host / registry-mirrors："
-  echo "    1) 编辑 sudo vi /etc/docker/daemon.json，删除失效的 registry-mirrors"
-  echo "    2) sudo systemctl restart docker"
-  echo "    3) 重新执行本安装脚本，或：docker compose up -d --build"
-  echo "  国内直连 Docker Hub 仍慢/失败时，可换成当前可用的加速地址后再试。"
+  err "依赖镜像拉取/构建失败。建议更换Docker可用的加速源后，再重新执行安装命令(文档：${FSWAF_SITE}/guide/faq-deploy)"
 }
 
 # ---------------------------------------------------------------------------
@@ -1653,7 +1648,8 @@ compose() {
 build_and_start() {
   sanitize_docker_registry_mirrors || true
   info "拉取依赖镜像并本地构建启动（首次安装可能较久，约10-20分钟）..."
-  if ! compose up -d --build; then
+  # plain：避免默认 TTY 进度把并行的 FROM openresty 拉镜像误显示成卡在 frontend-build
+  if ! BUILDKIT_PROGRESS=plain compose up -d --build; then
     print_docker_pull_hint
     die "docker compose up 失败"
   fi
