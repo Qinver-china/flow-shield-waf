@@ -1291,19 +1291,33 @@ git_clone_with_mirror_fallback() {
   return 0
 }
 
+git_force_sync_main() {
+  # fetch 后强制对齐 origin/main：覆盖已跟踪文件的本地改动；.env 等 ignore/未跟踪文件保留
+  local rc=0
+  set +e
+  git_cmd_with_timeout git fetch --depth 1 origin main
+  rc=$?
+  set -e
+  [[ $rc -eq 0 ]] || return "$rc"
+  git checkout -f main >/dev/null 2>&1 || git checkout -B main origin/main >/dev/null 2>&1 || true
+  git reset --hard origin/main
+}
+
 git_pull_with_mirror_fallback() {
-  local rc=0 orig_url=""
+  local rc=0 orig_url="" dirty=""
 
   info "拉取最新代码..."
-  set +e
-  git_cmd_with_timeout git pull --ff-only origin main
-  rc=$?
-  if [[ $rc -ne 0 ]]; then
-    git_cmd_with_timeout git pull --ff-only
-    rc=$?
+  dirty="$(git status --porcelain --untracked-files=no 2>/dev/null || true)"
+  if [[ -n "$dirty" ]]; then
+    warn "检测到本地代码有改动，一键更新将强制覆盖为远程 main（保留 .env 等未被 git 跟踪的文件）"
   fi
+
+  set +e
+  git_force_sync_main
+  rc=$?
   set -e
   if [[ $rc -eq 0 ]]; then
+    ok "代码已更新到最新"
     return 0
   fi
 
@@ -1311,23 +1325,19 @@ git_pull_with_mirror_fallback() {
   orig_url="$(git remote get-url origin 2>/dev/null || true)"
   if [[ -z "$orig_url" ]]; then
     warn "无法读取 origin URL，跳过镜像重试"
-    warn "git pull 未完全成功，将继续尝试用当前代码构建"
+    warn "git 拉取未完全成功，将继续尝试用当前代码构建"
     return 1
   fi
   if [[ "$orig_url" == "$FSWAF_REPO_MIRROR_URL" || "$orig_url" == *ghproxy* ]]; then
-    warn "当前 origin 已是镜像地址，git pull 仍失败"
-    warn "git pull 未完全成功，将继续尝试用当前代码构建"
+    warn "当前 origin 已是镜像地址，git 拉取仍失败"
+    warn "git 拉取未完全成功，将继续尝试用当前代码构建"
     return 1
   fi
 
   git remote set-url origin "$FSWAF_REPO_MIRROR_URL"
   set +e
-  git_cmd_with_timeout git pull --ff-only origin main
+  git_force_sync_main
   rc=$?
-  if [[ $rc -ne 0 ]]; then
-    git_cmd_with_timeout git pull --ff-only
-    rc=$?
-  fi
   set -e
   git remote set-url origin "$orig_url" 2>/dev/null || git remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
 
@@ -1335,7 +1345,7 @@ git_pull_with_mirror_fallback() {
     ok "已通过镜像拉取成功（origin 已恢复为官方地址）"
     return 0
   fi
-  warn "git pull 未完全成功，将继续尝试用当前代码构建"
+  warn "git 拉取未完全成功，将继续尝试用当前代码构建"
   return 1
 }
 

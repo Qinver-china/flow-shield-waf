@@ -15,6 +15,7 @@
 
 ### 修复
 
+- 一键更新改为 `git fetch` + `reset --hard`，强制对齐远程 main，避免本地改动（如 Dockerfile）导致 pull 失败
 - 回源不再对普通请求固定发送 `Connection: upgrade`（仅 WebSocket 升级时使用）；避免部分源站 Nginx（如宝塔）提前断开连接，导致 502「无法连接到源站」
 - 引擎补齐 `Connection` map，与上述回源头逻辑一致
 - 移除不安全默认密钥启动拦截，示例环境可直接启动（生产仍应尽快改密）
