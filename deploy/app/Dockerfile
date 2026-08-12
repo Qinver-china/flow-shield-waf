@@ -16,8 +16,8 @@ COPY frontend/ ./
 RUN echo "==> [frontend] npm run build（Vite 打包）..." \
     && npm run build \
     && echo "==> [frontend] 构建完成。" \
-    && echo "==> 下一步：拉取/准备 OpenResty 基础镜像（openresty/openresty:…-alpine-fat）。" 
-    
+    && echo "==> 拉取 OpenResty 基础镜像（首次拉取约3–10分钟。如耗时过久，请检查服务器网络状态，或更换网络更好的 Docker 加速源）" 
+
 # ---- 2) 应用运行镜像（基于已有 OpenResty 引擎镜像，避免重复装系统包）----
 FROM openresty/openresty:1.25.3.1-2-alpine-fat
 
@@ -39,7 +39,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
 
 RUN set -eux; \
-    echo "==> [runtime] OpenResty 基础镜像已就绪，开始安装系统依赖 (apk)..."; \
+    echo "==> [runtime] OpenResty 基础镜像已就绪，开始安装系统依赖 (首次安装约3至10分钟，如果耗时太久，请检查服务器的网络连接)"; \
     if [ -n "${ALPINE_MIRROR}" ]; then \
       sed -i "s#https\\?://dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
       sed -i "s#https\\?://[^/]*/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
