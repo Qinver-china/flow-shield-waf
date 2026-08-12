@@ -7,7 +7,7 @@
 # 官网：https://fswaf.top
 set -euo pipefail
 
-FSWAF_VERSION="1.0.0"
+FSWAF_VERSION="1.0.1"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.top"
@@ -1457,6 +1457,192 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Docker Hub 镜像加速（registry-mirrors）兼容
+# ---------------------------------------------------------------------------
+
+# 2024-06 起多数高校/厂商公开 Docker Hub 缓存已停服或仅校内可用；
+# 若 daemon.json 仍指向它们，pull 会报 lookup ... no such host / 403。
+is_known_dead_docker_mirror_host() {
+  local host="$1"
+  case "$host" in
+  docker.mirrors.ustc.edu.cn | hub-mirror.c.163.com | mirror.baidubce.com | \
+    docker.mirrors.sjtug.sjtu.edu.cn | docker.nju.edu.cn | registry.docker-cn.com | \
+    dockerhub.azk8s.cn | mirror.ccs.tencentyun.com)
+    return 0
+    ;;
+  *) return 1 ;;
+  esac
+}
+
+docker_mirror_host_from_url() {
+  local url="$1"
+  url="${url#https://}"
+  url="${url#http://}"
+  url="${url%%/*}"
+  url="${url%%:*}"
+  printf '%s\n' "$url"
+}
+
+# 列出当前生效的 Registry Mirrors（来自 dockerd）
+list_docker_registry_mirrors() {
+  run_docker info 2>/dev/null | awk '
+    /^ Registry Mirrors:/ { flag=1; next }
+    flag && /^[[:space:]]+https?:\/\// { gsub(/^[[:space:]]+/, ""); print; next }
+    flag { exit }
+  '
+}
+
+docker_mirror_host_resolvable() {
+  local host="$1"
+  [[ -n "$host" ]] || return 1
+  if command -v getent >/dev/null 2>&1; then
+    getent ahosts "$host" >/dev/null 2>&1 && return 0
+    getent hosts "$host" >/dev/null 2>&1 && return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import socket,sys; socket.getaddrinfo(sys.argv[1],443)" "$host" >/dev/null 2>&1 && return 0
+  fi
+  # 无解析工具时不误判为不可达
+  return 0
+}
+
+# 从 /etc/docker/daemon.json 去掉指定镜像 URL（保留其它配置）；成功返回 0
+strip_docker_registry_mirrors_from_daemon_json() {
+  local daemon_json="/etc/docker/daemon.json"
+  local tmp bak raw
+  [[ -f "$daemon_json" ]] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+
+  tmp="$(mktemp)"
+  bak="${daemon_json}.bak.flowshield.$(date +%Y%m%d%H%M%S)"
+  # "$@" = 要移除的完整 mirror URL 列表；用 sudo cat 读配置，避免 sudo+heredoc 吞 stdin
+  raw="$(need_sudo cat "$daemon_json")" || {
+    rm -f "$tmp"
+    return 1
+  }
+  if ! printf '%s\n' "$raw" | python3 -c '
+import json, sys
+remove = set(sys.argv[1:])
+data = json.load(sys.stdin)
+mirrors = data.get("registry-mirrors") or []
+if not isinstance(mirrors, list):
+    mirrors = []
+kept = [m for m in mirrors if m not in remove]
+if kept:
+    data["registry-mirrors"] = kept
+else:
+    data.pop("registry-mirrors", None)
+json.dump(data, sys.stdout, ensure_ascii=False, indent=2)
+sys.stdout.write("\n")
+' "$@" >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+
+  need_sudo cp "$daemon_json" "$bak" || {
+    rm -f "$tmp"
+    return 1
+  }
+  # install 保证 /etc 下文件属主为 root，避免 mv 把用户属主带进 /etc
+  if ! need_sudo install -m 644 "$tmp" "$daemon_json"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+  info "已备份原配置：$bak"
+  return 0
+}
+
+reload_docker_after_daemon_json() {
+  if command -v systemctl >/dev/null 2>&1; then
+    need_sudo systemctl restart docker || return 1
+    wait_docker_ready 120 || true
+    return 0
+  fi
+  need_sudo service docker restart 2>/dev/null || return 1
+  wait_docker_ready 120 || true
+  return 0
+}
+
+# 检测失效 registry-mirrors；Linux 上可自动剔除并重启 dockerd
+sanitize_docker_registry_mirrors() {
+  local mirrors=()
+  local bad=()
+  local m host
+  local line
+
+  [[ "$HAVE_DOCKER" -eq 1 ]] || probe_docker_access || return 0
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    mirrors+=("$line")
+  done < <(list_docker_registry_mirrors)
+
+  ((${#mirrors[@]})) || return 0
+
+  for m in "${mirrors[@]}"; do
+    host="$(docker_mirror_host_from_url "$m")"
+    if is_known_dead_docker_mirror_host "$host"; then
+      bad+=("$m")
+      continue
+    fi
+    if ! docker_mirror_host_resolvable "$host"; then
+      bad+=("$m")
+    fi
+  done
+
+  ((${#bad[@]})) || return 0
+
+  echo
+  warn "检测到 Docker 配置了不可用的镜像加速源（registry-mirrors）："
+  for m in "${bad[@]}"; do
+    echo "  - $m"
+  done
+  warn "常见于已下线的中科大/网易等源；继续拉取会报 lookup ... no such host。"
+
+  if [[ "$OS_FAMILY" != "linux" ]]; then
+    warn "请在 Docker Desktop → Settings → Docker Engine 中删除上述地址后 Apply & Restart。"
+    return 0
+  fi
+
+  if [[ ! -f /etc/docker/daemon.json ]]; then
+    warn "未找到 /etc/docker/daemon.json，请手动清理 registry-mirrors 后执行：sudo systemctl restart docker"
+    return 0
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "系统无 python3，无法自动改写 daemon.json。请手动删除上述镜像源后：sudo systemctl restart docker"
+    return 0
+  fi
+
+  if ! confirm "是否自动从 daemon.json 移除失效镜像源并重启 Docker？" "Y"; then
+    warn "已跳过自动修复。若稍后 pull 失败，请手动编辑 /etc/docker/daemon.json"
+    return 0
+  fi
+
+  if strip_docker_registry_mirrors_from_daemon_json "${bad[@]}"; then
+    info "正在重启 Docker 使配置生效..."
+    if reload_docker_after_daemon_json; then
+      ok "已移除失效镜像加速源"
+    else
+      warn "daemon.json 已更新，但 Docker 重启失败，请手动：sudo systemctl restart docker"
+    fi
+  else
+    warn "自动改写 daemon.json 失败，请手动删除失效 registry-mirrors 后重启 Docker"
+  fi
+}
+
+print_docker_pull_hint() {
+  echo
+  err "依赖镜像拉取/构建失败。"
+  echo "  若日志含 docker.mirrors.ustc.edu.cn / no such host / registry-mirrors："
+  echo "    1) 编辑 sudo vi /etc/docker/daemon.json，删除失效的 registry-mirrors"
+  echo "    2) sudo systemctl restart docker"
+  echo "    3) 重新执行本安装脚本，或：docker compose up -d --build"
+  echo "  国内直连 Docker Hub 仍慢/失败时，可换成当前可用的加速地址后再试。"
+}
+
+# ---------------------------------------------------------------------------
 # 构建启动 / 健康检查
 # ---------------------------------------------------------------------------
 
@@ -1465,8 +1651,12 @@ compose() {
 }
 
 build_and_start() {
+  sanitize_docker_registry_mirrors || true
   info "拉取依赖镜像并本地构建启动（首次安装可能较久，约10-20分钟）..."
-  compose up -d --build
+  if ! compose up -d --build; then
+    print_docker_pull_hint
+    die "docker compose up 失败"
+  fi
   ok "容器已启动"
 }
 
