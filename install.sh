@@ -14,7 +14,7 @@ FSWAF_SITE="https://fswaf.top"
 FSWAF_REPO_URL="${FSWAF_REPO_URL:-https://github.com/Qinver-china/flow-shield-waf.git}"
 # 国内访问 GitHub 失败/超时时的临时镜像（拉完会恢复官方 origin）
 FSWAF_REPO_MIRROR_URL="${FSWAF_REPO_MIRROR_URL:-https://ghproxy.net/https://github.com/Qinver-china/flow-shield-waf.git}"
-FSWAF_GIT_TIMEOUT_S="${FSWAF_GIT_TIMEOUT_S:-90}"
+FSWAF_GIT_TIMEOUT_S="${FSWAF_GIT_TIMEOUT_S:-600}"
 FSWAF_REPO_DIR_NAME="flow-shield-waf"
 FSWAF_CONTAINER="flowshield-waf-app"
 FSWAF_COMPOSE_NAME="flowshield-waf"
