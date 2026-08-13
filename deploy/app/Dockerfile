@@ -25,6 +25,8 @@ ENV NODE_ENV=development \
     NPM_CONFIG_PRODUCTION=false \
     NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
 
+RUN printf '==> [frontend-build] NPM_CONFIG_REGISTRY=%s\n' "${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}"
+
 # 先只复制 lockfile：未变更时跳过 npm ci，复用 node_modules 缓存。
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --include=dev
@@ -52,6 +54,8 @@ FROM openresty/openresty:1.25.3.1-2-alpine-fat
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
 ARG ALPINE_MIRROR=
+ARG NGINX_MIRROR=
+ARG CARGO_REGISTRY=
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -60,6 +64,12 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_PROGRESS_BAR=off \
     PIP_INDEX_URL=${PIP_INDEX_URL} \
     PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
+
+RUN printf '==> [runtime] ALPINE_MIRROR=%s PIP_INDEX_URL=%s NGINX_MIRROR=%s CARGO_REGISTRY=%s\n' \
+    "${ALPINE_MIRROR:-official}" \
+    "${PIP_INDEX_URL}" \
+    "${NGINX_MIRROR:-https://nginx.org/download}" \
+    "${CARGO_REGISTRY:-crates.io}"
 
 # ---- 3. 系统依赖 ----
 RUN if [ -n "${ALPINE_MIRROR}" ]; then \
@@ -83,9 +93,13 @@ RUN /usr/local/openresty/nginx/sbin/nginx -v 2>&1 \
     > /tmp/openresty_ver
 RUN cut -d. -f1-3 /tmp/openresty_ver > /tmp/nginx_build_version
 RUN test -s /tmp/nginx_build_version
-RUN curl -fsSL --retry 5 --retry-delay 2 \
-    -o "/tmp/nginx-$(cat /tmp/nginx_build_version).tar.gz" \
-    "https://nginx.org/download/nginx-$(cat /tmp/nginx_build_version).tar.gz"
+RUN nginx_ver="$(cat /tmp/nginx_build_version)"; \
+    if [ -n "${NGINX_MIRROR}" ]; then \
+      nginx_url="${NGINX_MIRROR}/nginx-${nginx_ver}.tar.gz"; \
+    else \
+      nginx_url="https://nginx.org/download/nginx-${nginx_ver}.tar.gz"; \
+    fi; \
+    curl -fsSL --retry 5 --retry-delay 2 -o "/tmp/nginx-${nginx_ver}.tar.gz" "${nginx_url}"
 RUN tar xzf "/tmp/nginx-$(cat /tmp/nginx_build_version).tar.gz" -C /tmp
 RUN cd "/tmp/nginx-$(cat /tmp/nginx_build_version)" \
     && ./configure --with-compat --add-dynamic-module=/tmp/ngx_http_geoip2_module
@@ -106,6 +120,15 @@ RUN apk add --no-cache --virtual .py-build-deps \
         python3-dev gcc musl-dev jpeg-dev zlib-dev rust cargo
 RUN python3 -m venv /opt/venv
 RUN /opt/venv/bin/pip install --upgrade pip
+RUN if [ -n "${CARGO_REGISTRY}" ]; then \
+      mkdir -p /root/.cargo; \
+      printf '%s\n' \
+        '[source.crates-io]' \
+        'replace-with = "cn"' \
+        '[source.cn]' \
+        "registry = \"${CARGO_REGISTRY}\"" \
+        > /root/.cargo/config.toml; \
+    fi
 RUN --mount=type=cache,target=/root/.cache/pip \
     MAKEFLAGS="-j1" CARGO_BUILD_JOBS=1 \
     /opt/venv/bin/pip install --prefer-binary --quiet -r requirements-base.txt

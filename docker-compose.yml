@@ -83,6 +83,8 @@ services:
         PIP_TRUSTED_HOST: ${FSWAF_PIP_TRUSTED_HOST:-}
         ALPINE_MIRROR: ${FSWAF_ALPINE_MIRROR:-}
         NPM_CONFIG_REGISTRY: ${FSWAF_NPM_REGISTRY:-}
+        NGINX_MIRROR: ${FSWAF_NGINX_MIRROR:-}
+        CARGO_REGISTRY: ${FSWAF_CARGO_REGISTRY:-}
     image: flowshield-waf-app:latest
     container_name: flowshield-waf-app
     restart: unless-stopped

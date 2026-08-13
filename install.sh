@@ -15,11 +15,12 @@ FSWAF_REPO_URL="${FSWAF_REPO_URL:-https://github.com/Qinver-china/flow-shield-wa
 # 国内访问 GitHub 失败/超时时按顺序尝试的临时镜像（拉完会恢复官方 origin）。
 # 可用 FSWAF_REPO_MIRROR_URLS 覆盖整表（空格分隔）；FSWAF_REPO_MIRROR_URL 会插到最前（兼容旧用法）。
 FSWAF_GIT_TIMEOUT_S="${FSWAF_GIT_TIMEOUT_S:-600}"
-FSWAF_GIT_PROBE_TIMEOUT_S="${FSWAF_GIT_PROBE_TIMEOUT_S:-20}"
+FSWAF_GIT_PROBE_TIMEOUT_S="${FSWAF_GIT_PROBE_TIMEOUT_S:-30}"
 _FSWAF_DEFAULT_MIRRORS=(
-  "https://gh-proxy.com/https://github.com/Qinver-china/flow-shield-waf.git"
-  "https://gh.llkk.cc/https://github.com/Qinver-china/flow-shield-waf.git"
   "https://ghproxy.net/https://github.com/Qinver-china/flow-shield-waf.git"
+  "https://gh-proxy.com/https://github.com/Qinver-china/flow-shield-waf.git"
+  "https://gitclone.com/github.com/Qinver-china/flow-shield-waf.git"
+  "https://gh.llkk.cc/https://github.com/Qinver-china/flow-shield-waf.git"
 )
 if [[ -n "${FSWAF_REPO_MIRROR_URLS:-}" ]]; then
   # shellcheck disable=SC2206
@@ -50,8 +51,10 @@ _FSWAF_CN_DOCKER_MIRRORS=(
 )
 FSWAF_CN_PIP_INDEX_URL="${FSWAF_CN_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
 FSWAF_CN_PIP_TRUSTED_HOST="${FSWAF_CN_PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}"
-FSWAF_CN_ALPINE_MIRROR="${FSWAF_CN_ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}"
+FSWAF_CN_ALPINE_MIRROR="${FSWAF_CN_ALPINE_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/alpine}"
 FSWAF_CN_NPM_REGISTRY="${FSWAF_CN_NPM_REGISTRY:-https://registry.npmmirror.com}"
+FSWAF_CN_NGINX_MIRROR="${FSWAF_CN_NGINX_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/nginx}"
+FSWAF_CN_CARGO_REGISTRY="${FSWAF_CN_CARGO_REGISTRY:-sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/}"
 # 可由 FSWAF_CN_DOCKER_MIRRORS 覆盖整表（空格分隔）
 if [[ -n "${FSWAF_CN_DOCKER_MIRRORS:-}" ]]; then
   # shellcheck disable=SC2206
@@ -317,6 +320,7 @@ handle_nonempty_install_dir() {
       ;;
     2)
       pick_install_directory
+      detect_mode_and_dir
       return 0
       ;;
     *)
@@ -478,11 +482,12 @@ run_docker() {
 
 _compose_passthrough_env_args() {
   COMPOSE_PASSTHROUGH_ENV=()
-  [[ -n "${BUILDKIT_PROGRESS:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "BUILDKIT_PROGRESS=${BUILDKIT_PROGRESS}" )
   [[ -n "${FSWAF_PIP_INDEX_URL:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_PIP_INDEX_URL=${FSWAF_PIP_INDEX_URL}" )
   [[ -n "${FSWAF_PIP_TRUSTED_HOST:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_PIP_TRUSTED_HOST=${FSWAF_PIP_TRUSTED_HOST}" )
   [[ -n "${FSWAF_ALPINE_MIRROR:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_ALPINE_MIRROR=${FSWAF_ALPINE_MIRROR}" )
   [[ -n "${FSWAF_NPM_REGISTRY:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_NPM_REGISTRY=${FSWAF_NPM_REGISTRY}" )
+  [[ -n "${FSWAF_NGINX_MIRROR:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_NGINX_MIRROR=${FSWAF_NGINX_MIRROR}" )
+  [[ -n "${FSWAF_CARGO_REGISTRY:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_CARGO_REGISTRY=${FSWAF_CARGO_REGISTRY}" )
 }
 
 run_compose() {
@@ -648,9 +653,13 @@ confirm_install_panel() {
 
   # 首次安装 + 非空目录：强制继续 / 重新选择
   handle_nonempty_install_dir
-  # 若重选了目录，刷新面板路径展示后再确认
-  if [[ "$MODE" != "update" ]]; then
+  # 若重选了目录，刷新模式与路径后再确认
+  if [[ "$MODE" == "update" && -n "$INSTALL_DIR" ]]; then
+    path_value="$INSTALL_DIR"
+    prompt="请确认在此路径下更新"
+  else
     path_value="$(planned_install_root)"
+    prompt="请确认在此路径下安装"
   fi
 
   if ! confirm "$prompt" "Y"; then
@@ -690,9 +699,14 @@ confirm_install_panel() {
   fi
 }
 
-# 安装路径确认后询问是否启用国内加速（仅当次构建/拉取生效，不写入 .env）
+# 路径确认且模式判定完成后询问（仅当次构建/拉取生效，不写入 .env）
 prompt_cn_mirror_choice() {
   local ans
+
+  if [[ "${FSWAF_CN_MIRROR_ASKED:-}" == "1" ]]; then
+    return 0
+  fi
+  FSWAF_CN_MIRROR_ASKED=1
 
   if [[ "${FSWAF_ASSUME_YES:-}" == "1" ]]; then
     if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
@@ -1684,7 +1698,7 @@ merge_missing_env_from_example() {
 clear_cn_mirror_env_file() {
   local key file=".env"
   [[ -f "$file" ]] || return 0
-  for key in FSWAF_PIP_INDEX_URL FSWAF_PIP_TRUSTED_HOST FSWAF_ALPINE_MIRROR FSWAF_NPM_REGISTRY; do
+  for key in FSWAF_PIP_INDEX_URL FSWAF_PIP_TRUSTED_HOST FSWAF_ALPINE_MIRROR FSWAF_NPM_REGISTRY FSWAF_NGINX_MIRROR FSWAF_CARGO_REGISTRY; do
     if sed --version >/dev/null 2>&1; then
       sed -i "/^${key}=/d" "$file"
     else
@@ -1699,7 +1713,8 @@ clear_cn_mirror_env_file() {
 }
 
 unset_cn_build_env() {
-  unset FSWAF_PIP_INDEX_URL FSWAF_PIP_TRUSTED_HOST FSWAF_ALPINE_MIRROR FSWAF_NPM_REGISTRY
+  unset FSWAF_PIP_INDEX_URL FSWAF_PIP_TRUSTED_HOST FSWAF_ALPINE_MIRROR FSWAF_NPM_REGISTRY \
+    FSWAF_NGINX_MIRROR FSWAF_CARGO_REGISTRY
 }
 
 # 构建前按是否启用国内加速设置或清除镜像环境变量；不写入 .env
@@ -1717,6 +1732,8 @@ export_cn_build_env() {
   export FSWAF_PIP_TRUSTED_HOST="${FSWAF_CN_PIP_TRUSTED_HOST}"
   export FSWAF_ALPINE_MIRROR="${FSWAF_CN_ALPINE_MIRROR}"
   export FSWAF_NPM_REGISTRY="${FSWAF_CN_NPM_REGISTRY}"
+  export FSWAF_NGINX_MIRROR="${FSWAF_CN_NGINX_MIRROR}"
+  export FSWAF_CARGO_REGISTRY="${FSWAF_CN_CARGO_REGISTRY}"
 }
 
 write_meta() {
@@ -2058,9 +2075,7 @@ build_and_start() {
   sanitize_docker_registry_mirrors || true
   prepare_build_mirror_env
   info "拉取依赖镜像并本地构建启动（首次安装可能较久，约10-20分钟）..."
-  # plain：BuildKit + Compose 均用纯文本进度；须 export 以便 sudo/sg 子进程可见
-  export BUILDKIT_PROGRESS=plain
-  if ! compose up -d --build --progress plain; then
+  if ! compose up -d --build; then
     print_docker_pull_hint
     die "docker compose up 失败"
   fi
@@ -2469,8 +2484,10 @@ main() {
 
   ensure_dependencies
 
-  # 依赖装好后重新判定一次（例如刚装好 docker 才能看到容器）
+  # 依赖装好后重新判定一次（例如刚装好 docker 才能看到容器；重选目录后也可能变为更新）
   detect_mode_and_dir
+  # Docker Hub 加速需 dockerd 已就绪，询问本身已在确认路径后完成
+  prompt_cn_mirror_choice
 
   if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
     apply_china_mirror_settings
