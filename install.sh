@@ -2152,31 +2152,78 @@ _write_local_panel_account() {
   return 0
 }
 
+# 宝塔 API 白名单看到的是容器源 IP，不是固定的 docker0 网关 172.17.0.1。
+# 收集：本机回环、app 容器 IP/网关、同网络其它容器、访问 host.docker.internal 的源地址、docker0 网关。
+_baota_api_allow_ips() {
+  local inspected src docker0 nets nid addrs token
+  local -a raw=()
+  raw+=("127.0.0.1")
+  raw+=("172.17.0.1")
+
+  inspected="$(run_docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{.Gateway}} {{end}} {{.NetworkSettings.IPAddress}} {{.NetworkSettings.Gateway}}' "$FSWAF_CONTAINER" 2>/dev/null || true)"
+  if [[ -n "$inspected" ]]; then
+    # shellcheck disable=SC2206
+    raw+=($inspected)
+  fi
+
+  nets="$(run_docker inspect -f '{{range .NetworkSettings.Networks}}{{.NetworkID}} {{end}}' "$FSWAF_CONTAINER" 2>/dev/null || true)"
+  for nid in $nets; do
+    [[ -n "$nid" ]] || continue
+    addrs="$(run_docker network inspect -f '{{range .Containers}}{{.IPv4Address}} {{end}}' "$nid" 2>/dev/null || true)"
+    for token in $addrs; do
+      token="${token%%/*}"
+      [[ -n "$token" ]] && raw+=("$token")
+    done
+    addrs="$(run_docker network inspect -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}' "$nid" 2>/dev/null || true)"
+    if [[ -n "$addrs" ]]; then
+      # shellcheck disable=SC2206
+      raw+=($addrs)
+    fi
+  done
+
+  src="$(run_docker exec "$FSWAF_CONTAINER" /opt/venv/bin/python -c 'import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(2);s.connect(("host.docker.internal",9));print(s.getsockname()[0]);s.close()' 2>/dev/null || true)"
+  src="$(printf '%s' "$src" | tr -d '\r' | awk 'NF{line=$0} END{print line}')"
+  [[ -n "$src" ]] && raw+=("$src")
+
+  docker0="$(run_docker network inspect bridge -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}' 2>/dev/null || true)"
+  if [[ -n "$docker0" ]]; then
+    # shellcheck disable=SC2206
+    raw+=($docker0)
+  fi
+
+  printf '%s\n' "${raw[@]}" | awk '/^([0-9]{1,3}\.){3}[0-9]{1,3}$/ && $0 != "0.0.0.0" && !seen[$0]++'
+}
+
 _bootstrap_baota_account() {
   local panel_root="/www/server/panel"
-  local port entrance ssl_flag scheme url api_file extra key plaintext merged
+  local port ssl_flag scheme url api_file extra key plaintext merged ip_line
+  local -a allow_ips=()
   [[ -d "$panel_root" ]] || return 1
   port="$(_read_trim_file "${panel_root}/data/port.pl" || true)"
   [[ -n "$port" ]] || return 1
-  entrance="$(_read_trim_file "${panel_root}/data/admin_path.pl" || true)"
-  case "$entrance" in
-  "" | "/") entrance="" ;;
-  /*) ;;
-  *) entrance="/${entrance}" ;;
-  esac
   ssl_flag="$(_read_trim_file "${panel_root}/data/ssl.pl" || true)"
   scheme="http"
   case "$(printf '%s' "$ssl_flag" | tr '[:upper:]' '[:lower:]')" in
   true | 1 | yes | on) scheme="https" ;;
   esac
-  url="${scheme}://host.docker.internal:${port}${entrance}"
+  url="${scheme}://host.docker.internal:${port}"
   api_file="${panel_root}/config/api.json"
   extra=""
   key=""
   plaintext="$(openssl rand -hex 16 2>/dev/null || tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
-  if [[ -d "$(dirname "$api_file")" ]] && merged="$(_host_python - "$api_file" "$plaintext" <<'PY'
+  while IFS= read -r ip_line; do
+    [[ -n "$ip_line" ]] && allow_ips+=("$ip_line")
+  done < <(_baota_api_allow_ips)
+  if [[ ${#allow_ips[@]} -eq 0 ]]; then
+    allow_ips=(127.0.0.1 172.17.0.1)
+  fi
+  info "宝塔 API 白名单将合并：${allow_ips[*]}"
+  if [[ -d "$(dirname "$api_file")" ]] && merged="$(_host_python - "$api_file" "$plaintext" "${allow_ips[@]}" <<'PY'
 import hashlib, json, sys
 path, secret = sys.argv[1], sys.argv[2]
+allow = [a.strip() for a in sys.argv[3:] if a.strip()]
+if not allow:
+    allow = ["127.0.0.1", "172.17.0.1"]
 try:
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
@@ -2193,7 +2240,7 @@ elif isinstance(limit, list):
     ips = [str(x).strip() for x in limit if str(x).strip()]
 else:
     ips = []
-for ip in ("127.0.0.1", "172.17.0.1"):
+for ip in allow:
     if ip not in ips:
         ips.append(ip)
 data["open"] = True

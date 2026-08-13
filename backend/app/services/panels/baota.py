@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -22,9 +23,17 @@ def baota_request_token(api_key: str, request_time: str, *, prehashed: bool) -> 
     return _md5(request_time + inner)
 
 
+def baota_panel_origin(panel_url: str) -> str:
+    """BaoTa API is scheme+host+port only; the UI security entrance is not part of the API."""
+    parsed = urlparse(panel_url or "")
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return (panel_url or "").rstrip("/")
+
+
 def join_panel_url(base: str, path: str) -> str:
-    """Keep BaoTa security entrance; do not drop it like urljoin('/x', '/data')."""
-    root = (base or "").rstrip("/")
+    """Join an API path onto the BaoTa origin, dropping any security-entrance suffix."""
+    root = baota_panel_origin(base)
     raw = path or "/"
     if "?" in raw:
         path_only, _, query = raw.partition("?")
@@ -88,7 +97,7 @@ class BaotaAdapter:
         verify_tls: bool = False,
         extra: dict[str, Any] | None = None,
     ) -> None:
-        self.panel_url = panel_url.rstrip("/")
+        self.panel_url = baota_panel_origin(panel_url)
         self.api_key = api_key or ""
         self.verify_tls = verify_tls
         extra = extra or {}

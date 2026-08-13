@@ -77,8 +77,11 @@
           <a-form-item label="面板地址" required>
             <a-input
               v-model:value="form.panel_url"
-              placeholder="http://172.17.0.1:8888/"
+              :placeholder="form.provider === 'baota' ? 'http://172.17.0.1:8888' : 'http://172.17.0.1:10086'"
             />
+            <div v-if="form.provider === 'baota'" class="hint">
+              填写协议、域名/IP 和端口即可，不必带安全入口
+            </div>
           </a-form-item>
           <a-form-item :label="form.id ? 'API 密钥（留空表示不修改）' : 'API 密钥'">
             <a-input-password

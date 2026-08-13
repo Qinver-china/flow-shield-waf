@@ -10,6 +10,7 @@ from app.cli.bootstrap_local_panel import upsert_local_panel
 from app.models.panel_connection import PanelConnection
 from app.services.panels.baota import (
     BaotaAdapter,
+    baota_panel_origin,
     baota_request_token,
     join_panel_url,
     prepare_baota_api_json,
@@ -79,10 +80,15 @@ def test_baota_request_token_prehashed():
     )
 
 
-def test_join_panel_url_keeps_entrance():
+def test_join_panel_url_drops_entrance():
+    assert baota_panel_origin("https://host.docker.internal:8888/safe") == "https://host.docker.internal:8888"
     assert (
         join_panel_url("https://host.docker.internal:8888/safe", "/data?action=getData")
-        == "https://host.docker.internal:8888/safe/data?action=getData"
+        == "https://host.docker.internal:8888/data?action=getData"
+    )
+    assert (
+        join_panel_url("https://host.docker.internal:8888", "/data?action=getData")
+        == "https://host.docker.internal:8888/data?action=getData"
     )
 
 
@@ -130,7 +136,8 @@ async def test_baota_list_sites_http_mock():
     ]
 
     def handler(method, url, **_kwargs):
-        assert "/safe/data" in url
+        assert url.startswith("https://host.docker.internal:8888/data")
+        assert "/safe/" not in url
         return responses.pop(0)
 
     adapter = BaotaAdapter(
@@ -138,6 +145,7 @@ async def test_baota_list_sites_http_mock():
         api_key="secret",
         extra={"baota_token_prehashed": True},
     )
+    assert adapter.panel_url == "https://host.docker.internal:8888"
     with patch("app.services.panels.baota.httpx.AsyncClient", return_value=FakeAsyncClient(handler)):
         sites = await adapter.list_sites()
     assert len(sites) == 1

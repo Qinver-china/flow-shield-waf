@@ -264,7 +264,7 @@ async def _import_one_site(
             record = Site(
                 name=site.name[:128],
                 origin_host=origin_host,
-                origin_protocol="http",
+                origin_protocol="follow",
                 origin_http_port=http_port,
                 origin_https_port=https_port,
                 listen_http=True,
