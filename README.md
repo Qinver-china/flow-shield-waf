@@ -355,10 +355,10 @@ docker compose up -d --build   # 或已部署时：docker compose restart app
 | 选项 | 适用场景 |
 |------|----------|
 | 直连 IP（默认） | 客户端直连 WAF，无 CDN |
+| X-Forwarded-For（第一个） | 大多数 CDN 都是这个 |
 | CF-Connecting-IP | Cloudflare |
 | True-Client-IP | Akamai 等 |
 | X-Real-IP / X-Client-IP | 通用反向代理 |
-| X-Forwarded-For（第一个/最后一个） | 多层代理链 |
 
 该设置影响规则中的 `ip.src`、限速键、挑战校验、防护日志与 GeoIP。对于 `X-Real-IP`、`CF-Connecting-IP` 等单值头，引擎还会在站点 Nginx 配置中启用 `real_ip` 模块，使 GeoIP2 与 `$remote_addr` 同步为真实客户端地址。
 

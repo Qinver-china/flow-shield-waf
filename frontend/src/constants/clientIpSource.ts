@@ -14,7 +14,7 @@ export const CLIENT_IP_SOURCE_OPTIONS: ClientIpSourceOption[] = [
   {
     value: "xff_first",
     label: "X-Forwarded-For（第一个 IP）",
-    desc: "取 X-Forwarded-For 链最左侧 IP，常见于多层代理。",
+    desc: "取 X-Forwarded-For 链最左侧 IP，大多数 CDN 都是这个。",
   },
   {
     value: "xff_last",
