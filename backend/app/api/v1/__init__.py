@@ -15,6 +15,7 @@ from app.api.v1 import (
     logs,
     meta,
     notification_channels,
+    panel_connections,
     ratelimit,
     rules,
     settings,
@@ -36,6 +37,11 @@ api_router.include_router(
 )
 api_router.include_router(alert_policies.router, prefix="/alert-policies", tags=["alert-policies"])
 api_router.include_router(ai_guard.router, prefix="/ai-guard", tags=["ai-guard"])
+api_router.include_router(
+    panel_connections.router,
+    prefix="/panel-connections",
+    tags=["panel-connections"],
+)
 api_router.include_router(certificates.router, prefix="/certificates", tags=["certificates"])
 api_router.include_router(sites.router, prefix="/sites", tags=["sites"])
 api_router.include_router(rules.router, prefix="/rules", tags=["rules"])

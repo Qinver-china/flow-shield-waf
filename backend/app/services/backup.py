@@ -21,6 +21,7 @@ from app.models import (
     IpGroup,
     IpList,
     NotificationChannel,
+    PanelConnection,
     RateLimit,
     Rule,
     Site,
@@ -72,7 +73,7 @@ SECTION_DEFS: dict[str, dict[str, Any]] = {
     },
     "system_settings": {
         "label": "系统设置",
-        "bags": ("waf_settings", "notification_channels", "alert_policies"),
+        "bags": ("waf_settings", "notification_channels", "alert_policies", "panel_connections"),
     },
 }
 
@@ -168,6 +169,17 @@ _AI_POLICY_FIELDS = (
 )
 
 _CHANNEL_FIELDS = ("name", "channel_type", "enabled", "config", "remark")
+_PANEL_CONNECTION_FIELDS = (
+    "name",
+    "provider",
+    "panel_url",
+    "api_key",
+    "same_server",
+    "verify_tls",
+    "enabled",
+    "remark",
+    "extra",
+)
 
 _ALERT_FIELDS = (
     "name",
@@ -351,6 +363,10 @@ async def build_export(db: AsyncSession, sections: list[str] | None = None) -> d
             await db.execute(select(AlertPolicy).order_by(AlertPolicy.id))
         ).scalars().all()
         data["alert_policies"] = [_serialize_row(r) for r in alerts]
+        panels = (
+            await db.execute(select(PanelConnection).order_by(PanelConnection.id))
+        ).scalars().all()
+        data["panel_connections"] = [_serialize_row(r) for r in panels]
 
     return {
         "format": FORMAT_NAME,
@@ -662,6 +678,31 @@ async def _import_channels(
     return id_map
 
 
+async def _import_panel_connections(db: AsyncSession, items: list[dict[str, Any]]) -> int:
+    count = 0
+    for item in items:
+        name = (item.get("name") or "").strip()
+        if not name:
+            continue
+        existing = await _find_one(db, PanelConnection, PanelConnection.name == name)
+        if existing:
+            _apply_fields(existing, item, _PANEL_CONNECTION_FIELDS)
+            if not isinstance(existing.extra, dict):
+                existing.extra = {}
+        else:
+            row = PanelConnection(
+                name=name,
+                provider=item.get("provider") or "baota",
+            )
+            _apply_fields(row, item, _PANEL_CONNECTION_FIELDS)
+            if not isinstance(row.extra, dict):
+                row.extra = {}
+            db.add(row)
+        count += 1
+    await db.flush()
+    return count
+
+
 async def _import_alert_policies(
     db: AsyncSession, items: list[dict[str, Any]], channel_map: dict[int, int]
 ) -> int:
@@ -894,6 +935,9 @@ async def apply_import(
         )
         summary["counts"]["waf_settings"] = int(
             await _import_waf_settings(db, data.get("waf_settings"))
+        )
+        summary["counts"]["panel_connections"] = await _import_panel_connections(
+            db, data.get("panel_connections") or []
         )
     else:
         for row in (await db.execute(select(NotificationChannel))).scalars().all():

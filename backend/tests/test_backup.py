@@ -23,6 +23,9 @@ def test_section_catalog_covers_expected_keys():
     labels = {item["key"]: item["label"] for item in section_catalog()}
     assert labels["ai_config"] == "AI 配置"
     assert labels["ai_policies"] == "AI 防护策略"
+    from app.services.backup import SECTION_DEFS
+
+    assert "panel_connections" in SECTION_DEFS["system_settings"]["bags"]
 
 
 def test_normalize_sections_default_and_filter():

@@ -68,5 +68,10 @@ defineProps<{
   .page-shell-title {
     font-size: 18px;
   }
+
+  .page-shell-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
 }
 </style>

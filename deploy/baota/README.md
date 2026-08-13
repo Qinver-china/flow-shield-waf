@@ -54,6 +54,8 @@ docker compose up -d --build
 
 将启动 **3 个容器**：`redis`、`clickhouse`、`app`。
 
+一键脚本在健康检查通过后会检测本机宝塔 / 1Panel，并写入「同服务器」面板账号（失败不影响安装）。随后可在管理面板用「从其他面板导入」批量接入站点与证书。详见官网 [系统设置 · 面板集成](https://fswaf.top/guide/settings) 与 [接入第一个站点](https://fswaf.top/guide/first-site)。
+
 ## 三、访问
 
 - 管理面板：`http://<服务器IP>:9000`，用 `.env` 中账号登录。

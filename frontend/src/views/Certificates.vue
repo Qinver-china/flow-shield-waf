@@ -2,6 +2,7 @@
   <page-shell title="证书管理" description="导入与管理 SSL/TLS 证书，供站点 HTTPS 使用">
     <template #actions>
       <a-button type="primary" @click="openCreate">导入证书</a-button>
+      <a-button @click="panelImportOpen = true">从其他面板导入</a-button>
     </template>
 
     <list-filter-bar
@@ -57,6 +58,11 @@
       :certificate-id="editingId"
       @saved="fetchList"
     />
+    <panel-import-drawer
+      v-model:open="panelImportOpen"
+      kind="certificates"
+      @imported="fetchList"
+    />
   </page-shell>
 </template>
 
@@ -65,6 +71,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { message } from "ant-design-vue";
 import { api } from "@/api";
 import CertificateFormDrawer from "@/components/CertificateFormDrawer.vue";
+import PanelImportDrawer from "@/components/PanelImportDrawer.vue";
 import FsDataTable from "@/components/FsDataTable.vue";
 import ListFilterBar from "@/components/ListFilterBar.vue";
 import PageShell from "@/components/PageShell.vue";
@@ -95,6 +102,8 @@ interface NotificationChannelItem {
   channel_type: string;
   enabled: boolean;
 }
+
+const panelImportOpen = ref(false);
 
 const listFilters: ResourceFilterField[] = [
   { key: "q", label: "搜索", type: "search", placeholder: "名称 / 域名 / 备注" },

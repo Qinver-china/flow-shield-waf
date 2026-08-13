@@ -7,14 +7,31 @@
 # 官网：https://fswaf.top
 set -euo pipefail
 
-FSWAF_VERSION="1.0.1"
+FSWAF_VERSION="1.0.2"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.top"
 FSWAF_REPO_URL="${FSWAF_REPO_URL:-https://github.com/Qinver-china/flow-shield-waf.git}"
-# 国内访问 GitHub 失败/超时时的临时镜像（拉完会恢复官方 origin）
-FSWAF_REPO_MIRROR_URL="${FSWAF_REPO_MIRROR_URL:-https://ghproxy.net/https://github.com/Qinver-china/flow-shield-waf.git}"
+# 国内访问 GitHub 失败/超时时按顺序尝试的临时镜像（拉完会恢复官方 origin）。
+# 可用 FSWAF_REPO_MIRROR_URLS 覆盖整表（空格分隔）；FSWAF_REPO_MIRROR_URL 会插到最前（兼容旧用法）。
 FSWAF_GIT_TIMEOUT_S="${FSWAF_GIT_TIMEOUT_S:-600}"
+FSWAF_GIT_PROBE_TIMEOUT_S="${FSWAF_GIT_PROBE_TIMEOUT_S:-20}"
+_FSWAF_DEFAULT_MIRRORS=(
+  "https://gh-proxy.com/https://github.com/Qinver-china/flow-shield-waf.git"
+  "https://gh.llkk.cc/https://github.com/Qinver-china/flow-shield-waf.git"
+  "https://ghproxy.net/https://github.com/Qinver-china/flow-shield-waf.git"
+)
+if [[ -n "${FSWAF_REPO_MIRROR_URLS:-}" ]]; then
+  # shellcheck disable=SC2206
+  FSWAF_REPO_MIRROR_LIST=(${FSWAF_REPO_MIRROR_URLS})
+else
+  FSWAF_REPO_MIRROR_LIST=("${_FSWAF_DEFAULT_MIRRORS[@]}")
+  if [[ -n "${FSWAF_REPO_MIRROR_URL:-}" ]]; then
+    FSWAF_REPO_MIRROR_LIST=("${FSWAF_REPO_MIRROR_URL}" "${FSWAF_REPO_MIRROR_LIST[@]}")
+  fi
+fi
+# 兼容旧逻辑里对单一镜像变量的读取
+FSWAF_REPO_MIRROR_URL="${FSWAF_REPO_MIRROR_URL:-${FSWAF_REPO_MIRROR_LIST[0]}}"
 FSWAF_REPO_DIR_NAME="flow-shield-waf"
 FSWAF_CONTAINER="flowshield-waf-app"
 FSWAF_COMPOSE_NAME="flowshield-waf"
@@ -1228,9 +1245,10 @@ try_auto_free_ports() {
 # 获取代码 / 生成 .env
 # ---------------------------------------------------------------------------
 
-# 带超时执行 git（超时退出码 124）；无 timeout/gtimeout 时用后台轮询兜底
-git_cmd_with_timeout() {
-  local secs="${FSWAF_GIT_TIMEOUT_S}"
+# 带超时执行命令（超时退出码 124）；无 timeout/gtimeout 时用后台轮询兜底
+_git_cmd_with_secs() {
+  local secs="$1"
+  shift
   if command -v timeout >/dev/null 2>&1; then
     timeout "$secs" "$@"
     return $?
@@ -1254,10 +1272,43 @@ git_cmd_with_timeout() {
   wait "$pid"
 }
 
-# 官方源失败/超时后，临时改用镜像再试一次；成功后恢复官方 origin
+git_cmd_with_timeout() {
+  _git_cmd_with_secs "${FSWAF_GIT_TIMEOUT_S}" "$@"
+}
+
+git_mirror_host() {
+  printf '%s\n' "$1" | sed -E 's#https://([^/]+)/.*#\1#'
+}
+
+git_restore_official_origin() {
+  local dest="${1:-}"
+  if [[ "$dest" == "." || -z "$dest" ]]; then
+    git remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
+  else
+    git -C "$dest" remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
+  fi
+}
+
+git_clean_clone_dest() {
+  local dest="$1"
+  if [[ "$dest" == "." ]]; then
+    rm -rf .git 2>/dev/null || true
+  else
+    rm -rf "$dest"
+  fi
+}
+
+# 短超时探测 git 智能 HTTP 是否可达，避免死镜像拖满克隆超时
+git_probe_url() {
+  local url="$1"
+  GIT_TERMINAL_PROMPT=0 _git_cmd_with_secs "${FSWAF_GIT_PROBE_TIMEOUT_S}" \
+    git ls-remote --heads "$url" >/dev/null 2>&1
+}
+
+# 官方源失败/超时后，按顺序尝试国内镜像；成功后恢复官方 origin
 git_clone_with_mirror_fallback() {
   local dest="$1"
-  local rc=0
+  local rc=0 mirror="" host=""
 
   set +e
   git_cmd_with_timeout git clone --depth 1 "$FSWAF_REPO_URL" "$dest"
@@ -1267,28 +1318,28 @@ git_clone_with_mirror_fallback() {
     return 0
   fi
 
-  warn "官方源克隆失败或超时（退出码 ${rc}），改用临时镜像重试..."
-  if [[ "$dest" == "." ]]; then
-    rm -rf .git 2>/dev/null || true
-  else
-    rm -rf "$dest"
-  fi
-
-  set +e
-  git_cmd_with_timeout git clone --depth 1 "$FSWAF_REPO_MIRROR_URL" "$dest"
-  rc=$?
-  set -e
-  if [[ $rc -ne 0 ]]; then
-    return "$rc"
-  fi
-
-  if [[ "$dest" == "." ]]; then
-    git remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
-  else
-    git -C "$dest" remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
-  fi
-  ok "已通过镜像克隆成功（origin 已恢复为官方地址）"
-  return 0
+  warn "官方源克隆失败或超时（退出码 ${rc}），将依次尝试国内镜像..."
+  for mirror in "${FSWAF_REPO_MIRROR_LIST[@]}"; do
+    host="$(git_mirror_host "$mirror")"
+    info "探测镜像：${host}"
+    if ! git_probe_url "$mirror"; then
+      warn "镜像不可达，跳过：${host}"
+      continue
+    fi
+    git_clean_clone_dest "$dest"
+    info "克隆镜像：${host}"
+    set +e
+    git_cmd_with_timeout git clone --depth 1 "$mirror" "$dest"
+    rc=$?
+    set -e
+    if [[ $rc -eq 0 ]]; then
+      git_restore_official_origin "$dest"
+      ok "已通过镜像 ${host} 克隆成功（origin 已恢复为官方地址）"
+      return 0
+    fi
+    warn "镜像克隆失败（退出码 ${rc}）：${host}"
+  done
+  return "$rc"
 }
 
 git_force_sync_main() {
@@ -1321,30 +1372,36 @@ git_pull_with_mirror_fallback() {
     return 0
   fi
 
-  warn "官方源拉取失败或超时（退出码 ${rc}），改用临时镜像重试..."
+  warn "官方源拉取失败或超时（退出码 ${rc}），将依次尝试国内镜像..."
   orig_url="$(git remote get-url origin 2>/dev/null || true)"
   if [[ -z "$orig_url" ]]; then
     warn "无法读取 origin URL，跳过镜像重试"
     warn "git 拉取未完全成功，将继续尝试用当前代码构建"
     return 1
   fi
-  if [[ "$orig_url" == "$FSWAF_REPO_MIRROR_URL" || "$orig_url" == *ghproxy* ]]; then
-    warn "当前 origin 已是镜像地址，git 拉取仍失败"
-    warn "git 拉取未完全成功，将继续尝试用当前代码构建"
-    return 1
-  fi
 
-  git remote set-url origin "$FSWAF_REPO_MIRROR_URL"
-  set +e
-  git_force_sync_main
-  rc=$?
-  set -e
-  git remote set-url origin "$orig_url" 2>/dev/null || git remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
-
-  if [[ $rc -eq 0 ]]; then
-    ok "已通过镜像拉取成功（origin 已恢复为官方地址）"
-    return 0
-  fi
+  local mirror="" host=""
+  for mirror in "${FSWAF_REPO_MIRROR_LIST[@]}"; do
+    [[ "$mirror" == "$orig_url" ]] && continue
+    host="$(git_mirror_host "$mirror")"
+    info "探测镜像：${host}"
+    if ! git_probe_url "$mirror"; then
+      warn "镜像不可达，跳过：${host}"
+      continue
+    fi
+    info "拉取镜像：${host}"
+    git remote set-url origin "$mirror"
+    set +e
+    git_force_sync_main
+    rc=$?
+    set -e
+    git remote set-url origin "$orig_url" 2>/dev/null || git remote set-url origin "$FSWAF_REPO_URL" 2>/dev/null || true
+    if [[ $rc -eq 0 ]]; then
+      ok "已通过镜像 ${host} 拉取成功（origin 已恢复为官方地址）"
+      return 0
+    fi
+    warn "镜像拉取失败（退出码 ${rc}）：${host}"
+  done
   warn "git 拉取未完全成功，将继续尝试用当前代码构建"
   return 1
 }
@@ -1371,7 +1428,7 @@ ensure_repo() {
   ensure_dir_for_user "$(pwd)"
   info "克隆仓库到当前目录：${FSWAF_REPO_URL}"
   if dir_is_empty "."; then
-    git_clone_with_mirror_fallback . || die "git clone 失败（请确认目录可写：$(pwd)）"
+    git_clone_with_mirror_fallback . || die "git clone 失败"
   elif [[ "$FORCE_NONEMPTY_INSTALL" -eq 1 ]]; then
     warn "非空目录强制拉取：先克隆到临时目录，再合并到当前目录"
     local tmp
@@ -1684,6 +1741,229 @@ wait_healthy() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# 本机宝塔 / 1Panel：健康检查后写入 same_server 账号（失败不阻断安装）
+# ---------------------------------------------------------------------------
+
+_read_trim_file() {
+  local f="$1"
+  [[ -f "$f" ]] || return 1
+  tr -d '\r' <"$f" | head -n 1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+_host_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$@"
+  elif command -v python >/dev/null 2>&1; then
+    python "$@"
+  else
+    return 1
+  fi
+}
+
+_write_local_panel_account() {
+  local provider="$1" name="$2" panel_url="$3" api_key="${4:-}" extra="${5:-}" remark="${6:-}"
+  local out
+  if ! out="$(
+    run_docker exec \
+      -e "PANEL_PROVIDER=${provider}" \
+      -e "PANEL_NAME=${name}" \
+      -e "PANEL_URL=${panel_url}" \
+      -e "PANEL_API_KEY=${api_key}" \
+      -e "PANEL_SAME_SERVER=1" \
+      -e "PANEL_VERIFY_TLS=0" \
+      -e "PANEL_EXTRA=${extra}" \
+      -e "PANEL_REMARK=${remark}" \
+      "$FSWAF_CONTAINER" \
+      /opt/venv/bin/python -m app.cli.bootstrap_local_panel
+  )"; then
+    warn "写入「${name}」失败：${out}"
+    return 1
+  fi
+  if echo "$out" | grep -q '^skipped '; then
+    info "已存在同服务器 ${provider} 账号，跳过覆盖"
+  else
+    ok "已写入面板账号：${name}"
+  fi
+  if echo "$out" | grep -q 'missing_api_key'; then
+    warn "「${name}」未检测到 API 密钥。请在 1Panel 开启 API 接口后，到流盾「系统设置 → 面板集成」补全密钥"
+  fi
+  return 0
+}
+
+_bootstrap_baota_account() {
+  local panel_root="/www/server/panel"
+  local port entrance ssl_flag scheme url api_file extra key plaintext merged
+  [[ -d "$panel_root" ]] || return 1
+  port="$(_read_trim_file "${panel_root}/data/port.pl" || true)"
+  [[ -n "$port" ]] || return 1
+  entrance="$(_read_trim_file "${panel_root}/data/admin_path.pl" || true)"
+  case "$entrance" in
+  "" | "/") entrance="" ;;
+  /*) ;;
+  *) entrance="/${entrance}" ;;
+  esac
+  ssl_flag="$(_read_trim_file "${panel_root}/data/ssl.pl" || true)"
+  scheme="http"
+  case "$(printf '%s' "$ssl_flag" | tr '[:upper:]' '[:lower:]')" in
+  true | 1 | yes | on) scheme="https" ;;
+  esac
+  url="${scheme}://host.docker.internal:${port}${entrance}"
+  api_file="${panel_root}/config/api.json"
+  extra=""
+  key=""
+  plaintext="$(openssl rand -hex 16 2>/dev/null || tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+  if [[ -d "$(dirname "$api_file")" ]] && merged="$(_host_python - "$api_file" "$plaintext" <<'PY'
+import hashlib, json, sys
+path, secret = sys.argv[1], sys.argv[2]
+try:
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    if not isinstance(data, dict):
+        data = {}
+except Exception:
+    data = {}
+token = str(data.get("token") or "").strip()
+opened = data.get("open") in (True, "true", "True", 1, "1")
+limit = data.get("limit_addr") or []
+if isinstance(limit, str):
+    ips = [p.strip() for p in limit.replace(",", " ").split() if p.strip()]
+elif isinstance(limit, list):
+    ips = [str(x).strip() for x in limit if str(x).strip()]
+else:
+    ips = []
+for ip in ("127.0.0.1", "172.17.0.1"):
+    if ip not in ips:
+        ips.append(ip)
+data["open"] = True
+data["limit_addr"] = ips
+if opened and token:
+    key, prehashed = token, "1"
+else:
+    data["token"] = hashlib.md5(secret.encode("utf-8")).hexdigest()
+    key, prehashed = secret, "0"
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, ensure_ascii=False, indent=4)
+print(key)
+print(prehashed)
+PY
+  )"; then
+    key="$(printf '%s\n' "$merged" | sed -n '1p')"
+    if [[ "$(printf '%s\n' "$merged" | sed -n '2p')" == "1" ]]; then
+      extra='{"baota_token_prehashed":true}'
+    fi
+  else
+    warn "未能更新宝塔 API 配置（缺少 python 或无法写 api.json），将仅写入面板地址"
+  fi
+  _write_local_panel_account "baota" "本机宝塔" "$url" "$key" "$extra" "由一键安装自动检测"
+}
+
+_onepanel_bin() {
+  if command -v 1pctl >/dev/null 2>&1; then
+    command -v 1pctl
+  elif [[ -x /usr/bin/1pctl ]]; then
+    printf '%s\n' /usr/bin/1pctl
+  elif [[ -x /usr/local/bin/1pctl ]]; then
+    printf '%s\n' /usr/local/bin/1pctl
+  else
+    return 1
+  fi
+}
+
+_bootstrap_onepanel_account() {
+  local bin db_path url key port entrance scheme ssl_raw info
+  bin="$(_onepanel_bin)" || return 1
+  db_path=""
+  if [[ -f /opt/1panel/db/core.db ]]; then
+    db_path="/opt/1panel/db/core.db"
+  elif [[ -f /opt/1panel/db/1Panel.db ]]; then
+    db_path="/opt/1panel/db/1Panel.db"
+  else
+    local base
+    base="$(grep -E '^BASE_DIR=' "$bin" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "\"'" | tr -d '\r' || true)"
+    [[ -n "$base" ]] || base="/opt"
+    if [[ -f "${base}/1panel/db/core.db" ]]; then
+      db_path="${base}/1panel/db/core.db"
+    elif [[ -f "${base}/1panel/db/1Panel.db" ]]; then
+      db_path="${base}/1panel/db/1Panel.db"
+    fi
+  fi
+  port=""
+  entrance=""
+  scheme="http"
+  key=""
+  if [[ -n "$db_path" ]] && info="$(_host_python - "$db_path" <<'PY'
+import json, sqlite3, sys
+path = sys.argv[1]
+con = sqlite3.connect(path)
+cur = con.cursor()
+rows = []
+for sql in ("SELECT key, value FROM settings", "SELECT param, value FROM settings"):
+    try:
+        rows = cur.execute(sql).fetchall()
+        if rows:
+            break
+    except Exception:
+        continue
+data = {str(k): ("" if v is None else str(v)) for k, v in rows}
+lower = {k.lower(): v for k, v in data.items()}
+
+def pick(*names):
+    for name in names:
+        if name.lower() in lower:
+            return lower[name.lower()]
+    return ""
+
+port = pick("ServerPort", "server_port") or "10086"
+entrance = pick("SecurityEntrance", "security_entrance")
+ssl = pick("SSL", "ssl").lower()
+api_status = pick("ApiInterfaceStatus", "api_interface_status").lower()
+api_key = pick("ApiKey", "api_key")
+if api_status not in {"enable", "enabled", "true", "1"}:
+    api_key = ""
+print(json.dumps({"port": port, "entrance": entrance, "ssl": ssl, "api_key": api_key}, ensure_ascii=False))
+PY
+  )"; then
+    port="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("port") or "")' "$info" 2>/dev/null || true)"
+    entrance="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("entrance") or "")' "$info" 2>/dev/null || true)"
+    ssl_raw="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("ssl") or "")' "$info" 2>/dev/null || true)"
+    key="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("api_key") or "")' "$info" 2>/dev/null || true)"
+    case "$ssl_raw" in
+    enable | enabled | true | 1 | on) scheme="https" ;;
+    esac
+  fi
+  if [[ -z "$port" ]]; then
+    local ui
+    ui="$("$bin" user-info 2>/dev/null || true)"
+    port="$(printf '%s\n' "$ui" | awk -F': *' 'BEGIN{IGNORECASE=1} $1 ~ /^(port|端口)$/ {gsub(/[[:space:]]/,"",$2); print $2; exit}')"
+    entrance="$(printf '%s\n' "$ui" | awk -F': *' 'BEGIN{IGNORECASE=1} $1 ~ /^(entrance|安全入口)$/ {gsub(/[[:space:]]/,"",$2); print $2; exit}')"
+  fi
+  [[ -n "$port" ]] || port="10086"
+  case "$entrance" in
+  "" | "/") entrance="" ;;
+  /*) ;;
+  *) entrance="/${entrance}" ;;
+  esac
+  url="${scheme}://host.docker.internal:${port}${entrance}"
+  _write_local_panel_account "onepanel" "本机 1Panel" "$url" "$key" "" "由一键安装自动检测"
+}
+
+bootstrap_host_panels() {
+  info "检测本机宝塔 / 1Panel..."
+  local found=0
+  if [[ -d /www/server/panel && -f /www/server/panel/data/port.pl ]]; then
+    found=1
+    _bootstrap_baota_account || warn "写入本机宝塔账号失败（不影响安装）"
+  fi
+  if _onepanel_bin >/dev/null 2>&1; then
+    found=1
+    _bootstrap_onepanel_account || warn "写入本机 1Panel 账号失败（不影响安装）"
+  fi
+  if [[ "$found" -eq 0 ]]; then
+    info "未检测到宝塔或 1Panel，跳过面板账号写入"
+  fi
+}
+
 print_success() {
   local kind="${1:-install}" # install | update
   local title panel_port host_hint admin_user admin_pass panel_url
@@ -1764,6 +2044,7 @@ run_update() {
   merge_missing_env_from_example
   build_and_start
   wait_healthy
+  bootstrap_host_panels || warn "检测本机面板失败（不影响安装）"
   write_meta
   print_success update
 }
@@ -1785,6 +2066,7 @@ run_install() {
   write_meta
   build_and_start
   wait_healthy
+  bootstrap_host_panels || warn "检测本机面板失败（不影响安装）"
   print_success install
 }
 

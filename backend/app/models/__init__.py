@@ -15,6 +15,7 @@ from app.models.rate_limit import RateLimit
 from app.models.rule import Rule
 from app.models.site import Site
 from app.models.notification import AlertPolicy, NotificationChannel
+from app.models.panel_connection import PanelConnection
 from app.models.traffic_intel import TrafficBaseline
 from app.models.traffic_live_backup import TrafficLiveBackup
 from app.models.user import User
@@ -36,6 +37,7 @@ __all__ = [
     "TrafficBaseline",
     "TrafficLiveBackup",
     "NotificationChannel",
+    "PanelConnection",
     "AlertPolicy",
     "AiGuardSetting",
     "AiGuardPolicy",

@@ -1,5 +1,5 @@
 <template>
-  <page-shell title="系统设置" description="按模块管理账户、防护挑战、日志采样、通知、调试与配置备份">
+  <page-shell title="系统设置" description="按模块管理账户、防护挑战、日志采样、通知、面板集成、调试与配置备份">
      <a-tabs v-model:activeKey="activeTab" size="large" class="settings-tabs fs-tabs-animated">
       <a-tab-pane key="account" tab="账户安全" />
       <a-tab-pane key="display" tab="显示设置" />
@@ -7,6 +7,7 @@
       <a-tab-pane key="response-pages" tab="响应页面" />
       <a-tab-pane key="logging" tab="日志采样" />
       <a-tab-pane key="notify" tab="通知通道" />
+      <a-tab-pane key="panels" tab="面板集成" />
       <a-tab-pane key="debug" tab="调试模式" />
       <a-tab-pane key="backup" tab="导出/导入" />
     </a-tabs>
@@ -384,6 +385,9 @@
       <template v-if="activeTab === 'notify'">
 <notification-channels-card class="settings-panel notify-panel" />
       </template>
+      <template v-if="activeTab === 'panels'">
+<panel-connections-card class="settings-panel notify-panel" />
+      </template>
       <template v-if="activeTab === 'debug'">
 <a-card class="settings-panel" :bordered="false">
           <a-form layout="vertical" class="section-form wide">
@@ -543,12 +547,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import { InboxOutlined } from "@ant-design/icons-vue";
 import http, { api } from "@/api";
 import { useAuthStore } from "@/stores/auth";
 import { trafficWindowLabels } from "@/views/logs/constants";
 import NotificationChannelsCard from "@/components/NotificationChannelsCard.vue";
+import PanelConnectionsCard from "@/components/PanelConnectionsCard.vue";
 import FsSlideTransition from "@/components/FsSlideTransition.vue";
 import PageShell from "@/components/PageShell.vue";
 import PageTemplateHints, { type TemplateVariable } from "@/components/PageTemplateHints.vue";
@@ -557,7 +563,27 @@ import type { TimezoneOption } from "@/stores/appSettings";
 
 const auth = useAuthStore();
 const appSettings = useAppSettingsStore();
-const activeTab = ref("account");
+const route = useRoute();
+const router = useRouter();
+const SETTINGS_TABS = new Set([
+  "account",
+  "display",
+  "challenge",
+  "response-pages",
+  "logging",
+  "notify",
+  "panels",
+  "debug",
+  "backup",
+]);
+
+function tabFromQuery() {
+  const raw = route.query.tab;
+  const tab = Array.isArray(raw) ? raw[0] : raw;
+  return typeof tab === "string" && SETTINGS_TABS.has(tab) ? tab : "account";
+}
+
+const activeTab = ref(tabFromQuery());
 
 interface BackupSectionOption {
   key: string;
@@ -1151,7 +1177,17 @@ async function saveDisplay() {
 watch(activeTab, (tab) => {
   if (tab === "logging") startTrafficTimer();
   else stopTrafficTimer();
+  if (route.query.tab === tab) return;
+  router.replace({ query: { ...route.query, tab } });
 });
+
+watch(
+  () => route.query.tab,
+  () => {
+    const next = tabFromQuery();
+    if (next !== activeTab.value) activeTab.value = next;
+  },
+);
 
 onMounted(async () => {
   await loadAccount();

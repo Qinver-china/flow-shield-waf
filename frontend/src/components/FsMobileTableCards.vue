@@ -223,6 +223,7 @@ function showTotal(total: number) {
   color: var(--fs-text-primary);
   word-break: break-word;
   line-height: 1.5;
+  text-align: right;
 }
 
 .mobile-card-actions {

@@ -28,6 +28,7 @@ from app.schemas.certificate import (
 )
 from app.schemas.common import ok
 from app.services import certificate_store, nginx_conf
+from app.services.certificate_ops import persist_new_certificate
 
 router = APIRouter()
 
@@ -127,31 +128,16 @@ async def _create_certificate(
     else:
         channel_ids = []
 
-    cert_obj, _key = certificate_store.validate_pem_pair(cert_content, key_content)
-    meta = certificate_store.parse_cert_meta(cert_obj)
-
-    cert = Certificate(
-        name=name.strip(),
-        domains=meta["domains"],
-        cert_path="",
-        key_path="",
-        not_before=meta["not_before"],
-        not_after=meta["not_after"],
+    return await persist_new_certificate(
+        db,
+        name=name,
+        cert_content=cert_content,
+        key_content=key_content,
         remark=remark,
         expiry_notify_enabled=expiry_notify_enabled,
         expiry_notify_channel_ids=channel_ids,
+        commit=True,
     )
-    db.add(cert)
-    await db.flush()
-
-    cert_path, key_path = certificate_store.write_cert_files(
-        cert.id, cert_content, key_content
-    )
-    cert.cert_path = cert_path
-    cert.key_path = key_path
-    await db.commit()
-    await db.refresh(cert)
-    return cert
 
 
 @router.get("")

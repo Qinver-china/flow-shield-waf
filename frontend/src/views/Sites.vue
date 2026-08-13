@@ -2,6 +2,7 @@
   <page-shell title="站点管理" description="配置防护域名、回源地址、HTTPS 证书与自定义拦截页">
     <template #actions>
       <a-button type="primary" @click="crudRef?.openCreate()">新增站点</a-button>
+      <a-button @click="panelImportOpen = true">从其他面板导入</a-button>
     </template>
     <resource-crud ref="crudRef" embedded title="站点管理" api-base="/api/v1/sites" :columns="columns" :filters="filters"
       :default-record="defaultRecord" :prepare-payload="preparePayload" :batch="batchConfig" name-field="name"
@@ -171,6 +172,11 @@
     </resource-crud>
 
     <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100" @saved="onCertImported" />
+    <panel-import-drawer
+      v-model:open="panelImportOpen"
+      kind="sites"
+      @imported="onPanelImported"
+    />
   </page-shell>
 </template>
 
@@ -183,6 +189,7 @@ import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import OriginHostInput from "@/components/OriginHostInput.vue";
 import CertificateFormDrawer, { type CertificateSaved } from "@/components/CertificateFormDrawer.vue";
+import PanelImportDrawer from "@/components/PanelImportDrawer.vue";
 import SiteCard, { type SiteCardMetrics } from "@/components/SiteCard.vue";
 import { enabledFilterOptions } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
@@ -217,6 +224,7 @@ const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const certOptions = ref<CertOption[]>([]);
 const certDrawerOpen = ref(false);
 const certSelectRecord = ref<Record<string, any> | null>(null);
+const panelImportOpen = ref(false);
 const metricsLoading = ref(false);
 const metricsMap = reactive<Record<string, SiteCardMetrics>>({});
 let metricsTimer: ReturnType<typeof setInterval> | null = null;
@@ -328,6 +336,12 @@ async function onCertImported(cert: CertificateSaved) {
   if (target) {
     target.certificate_id = cert.id;
   }
+}
+
+function onPanelImported() {
+  invalidateSiteOptions();
+  crudRef.value?.fetchList();
+  void loadCertOptions();
 }
 
 async function loadMetrics() {

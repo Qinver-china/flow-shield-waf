@@ -66,3 +66,21 @@
 | --- | --- | --- |
 | GET | `/dashboard/overview` | 概览卡片数据 |
 | GET | `/dashboard/stats` | 趋势/分布图表数据 |
+
+## 面板账号 `/panel-connections`
+
+外部宝塔 / 1Panel 账号。列表不回显完整 API 密钥；备份「系统设置」分区会包含该表（含密钥明文）。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/panel-connections` | 账号列表 |
+| POST | `/panel-connections` | 新建 |
+| POST | `/panel-connections/test` | 未保存账号测连 |
+| GET/PUT/DELETE | `/panel-connections/{id}` | 详情 / 更新 / 删除；更新时密钥留空表示不改 |
+| POST | `/panel-connections/{id}/test` | 已保存账号测连 |
+| GET | `/panel-connections/{id}/sites` | 预览可导入站点（不含私钥） |
+| POST | `/panel-connections/{id}/sites/import` | 按 key 批量导入站点与已部署证书 |
+| GET | `/panel-connections/{id}/certificates` | 预览可导入证书（不含私钥） |
+| POST | `/panel-connections/{id}/certificates/import` | 按 key 批量导入证书 |
+
+`provider` 为 `baota` 或 `onepanel`。同服务器账号导入时回源默认 `host.docker.internal`，80/443 纠正为 8080/4343。

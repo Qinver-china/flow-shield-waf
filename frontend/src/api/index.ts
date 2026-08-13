@@ -130,10 +130,10 @@ export interface PageData<T = any> {
 
 /** Second argument is the query dict itself — do not nest `{ params: {...} }`. */
 export const api = {
-  get: <T = any>(url: string, params?: Record<string, unknown>) =>
-    http.get(url, { params }) as unknown as Promise<ApiResp<T>>,
-  post: <T = any>(url: string, data?: any) =>
-    http.post(url, data) as unknown as Promise<ApiResp<T>>,
+  get: <T = any>(url: string, params?: Record<string, unknown>, config?: { timeout?: number }) =>
+    http.get(url, { params, ...config }) as unknown as Promise<ApiResp<T>>,
+  post: <T = any>(url: string, data?: any, config?: { timeout?: number }) =>
+    http.post(url, data, config) as unknown as Promise<ApiResp<T>>,
   put: <T = any>(url: string, data?: any) =>
     http.put(url, data) as unknown as Promise<ApiResp<T>>,
   del: <T = any>(url: string) => http.delete(url) as unknown as Promise<ApiResp<T>>,

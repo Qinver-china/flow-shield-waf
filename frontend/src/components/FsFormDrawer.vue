@@ -32,7 +32,7 @@
         <slot v-if="mode === 'view'" name="view-actions" />
         <template v-else>
           <a-button @click="onCancel">{{ cancelText }}</a-button>
-          <a-button type="primary" :loading="confirmLoading" @click="emit('ok')">{{ okText }}</a-button>
+          <a-button v-if="!hideOk" type="primary" :loading="confirmLoading" @click="emit('ok')">{{ okText }}</a-button>
         </template>
       </div>
     </template>
@@ -57,6 +57,7 @@ const props = withDefaults(
     confirmLoading?: boolean;
     okText?: string;
     cancelText?: string;
+    hideOk?: boolean;
     jsonContent?: string;
     jsonTitle?: string;
     destroyOnClose?: boolean;
@@ -68,6 +69,7 @@ const props = withDefaults(
     loading: false,
     okText: "保存",
     cancelText: "取消",
+    hideOk: false,
     destroyOnClose: true,
     jsonTitle: "JSON 数据",
   },
