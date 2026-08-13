@@ -78,10 +78,11 @@ services:
       # Linux 宿主机若构建时 apk/npm 拉包失败（容器桥接网络出网问题），取消下行注释：
       # network: host
       args:
-        # 海外构建可改为 https://pypi.org/simple 并清空 PIP_TRUSTED_HOST
-        PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
-        PIP_TRUSTED_HOST: pypi.tuna.tsinghua.edu.cn
-        # 可选：国内 apk 慢时传入 ALPINE_MIRROR: https://mirrors.aliyun.com/alpine
+        # 默认海外 PyPI；install.sh --cn 时通过环境变量注入国内源
+        PIP_INDEX_URL: ${FSWAF_PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${FSWAF_PIP_TRUSTED_HOST:-}
+        ALPINE_MIRROR: ${FSWAF_ALPINE_MIRROR:-}
+        NPM_CONFIG_REGISTRY: ${FSWAF_NPM_REGISTRY:-}
     image: flowshield-waf-app:latest
     container_name: flowshield-waf-app
     restart: unless-stopped

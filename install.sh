@@ -41,6 +41,25 @@ FSWAF_DEFAULT_HTTPS_ALT=4343
 FSWAF_DEFAULT_ADMIN_USER="admin"
 FSWAF_DEFAULT_ADMIN_PASSWORD="admin888"
 
+# 国内加速（安装确认后交互选择）：Docker Hub / apk / pip / npm / Git 优先走国内源
+FSWAF_CN_MIRROR="${FSWAF_CN_MIRROR:-0}"
+_FSWAF_CN_DOCKER_MIRRORS=(
+  "https://docker.1ms.run"
+  "https://docker.1panel.live"
+  "https://docker.xuanyuan.me"
+)
+FSWAF_CN_PIP_INDEX_URL="${FSWAF_CN_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+FSWAF_CN_PIP_TRUSTED_HOST="${FSWAF_CN_PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}"
+FSWAF_CN_ALPINE_MIRROR="${FSWAF_CN_ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}"
+FSWAF_CN_NPM_REGISTRY="${FSWAF_CN_NPM_REGISTRY:-https://registry.npmmirror.com}"
+# 可由 FSWAF_CN_DOCKER_MIRRORS 覆盖整表（空格分隔）
+if [[ -n "${FSWAF_CN_DOCKER_MIRRORS:-}" ]]; then
+  # shellcheck disable=SC2206
+  _FSWAF_CN_DOCKER_MIRROR_LIST=(${FSWAF_CN_DOCKER_MIRRORS})
+else
+  _FSWAF_CN_DOCKER_MIRROR_LIST=("${_FSWAF_CN_DOCKER_MIRRORS[@]}")
+fi
+
 # ---------------------------------------------------------------------------
 # 输出
 # ---------------------------------------------------------------------------
@@ -457,13 +476,40 @@ run_docker() {
   esac
 }
 
+_compose_passthrough_env_args() {
+  COMPOSE_PASSTHROUGH_ENV=()
+  [[ -n "${BUILDKIT_PROGRESS:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "BUILDKIT_PROGRESS=${BUILDKIT_PROGRESS}" )
+  [[ -n "${FSWAF_PIP_INDEX_URL:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_PIP_INDEX_URL=${FSWAF_PIP_INDEX_URL}" )
+  [[ -n "${FSWAF_PIP_TRUSTED_HOST:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_PIP_TRUSTED_HOST=${FSWAF_PIP_TRUSTED_HOST}" )
+  [[ -n "${FSWAF_ALPINE_MIRROR:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_ALPINE_MIRROR=${FSWAF_ALPINE_MIRROR}" )
+  [[ -n "${FSWAF_NPM_REGISTRY:-}" ]] && COMPOSE_PASSTHROUGH_ENV+=( "FSWAF_NPM_REGISTRY=${FSWAF_NPM_REGISTRY}" )
+}
+
 run_compose() {
+  local sg_cmd env_prefix="" arg
+  _compose_passthrough_env_args
   case "${DOCKER_ACCESS}" in
   sg)
-    sg docker -c "$(printf '%q ' "${COMPOSE_CMD[@]}" "$@")"
+    sg_cmd="$(printf '%q ' "${COMPOSE_CMD[@]}" "$@")"
+    if ((${#COMPOSE_PASSTHROUGH_ENV[@]} > 0)); then
+      env_prefix=""
+      local key val
+      for arg in "${COMPOSE_PASSTHROUGH_ENV[@]}"; do
+        key="${arg%%=*}"
+        val="${arg#*=}"
+        env_prefix+=" ${key}=${val@Q}"
+      done
+      sg docker -c "${env_prefix# } ${sg_cmd}"
+    else
+      sg docker -c "$sg_cmd"
+    fi
     ;;
   sudo)
-    need_sudo "${COMPOSE_CMD[@]}" "$@"
+    if ((${#COMPOSE_PASSTHROUGH_ENV[@]} > 0)); then
+      need_sudo env "${COMPOSE_PASSTHROUGH_ENV[@]}" "${COMPOSE_CMD[@]}" "$@"
+    else
+      need_sudo "${COMPOSE_CMD[@]}" "$@"
+    fi
     ;;
   *)
     "${COMPOSE_CMD[@]}" "$@"
@@ -612,6 +658,8 @@ confirm_install_panel() {
     exit 0
   fi
 
+  prompt_cn_mirror_choice
+
   # 首次安装且端口未通过：询问是否自动清理（不再二次确认依赖安装）
   if [[ "$MODE" == "install" && "$PORTS_OK" -ne 1 ]]; then
     echo
@@ -640,6 +688,54 @@ confirm_install_panel() {
       exit 1
     fi
   fi
+}
+
+# 安装路径确认后询问是否启用国内加速（仅当次构建/拉取生效，不写入 .env）
+prompt_cn_mirror_choice() {
+  local ans
+
+  if [[ "${FSWAF_ASSUME_YES:-}" == "1" ]]; then
+    if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
+      export FSWAF_CN_MIRROR=1
+      ok "国内加速：是（由 FSWAF_CN_MIRROR=1 指定）"
+    else
+      FSWAF_CN_MIRROR=0
+      ok "国内加速：否（非交互模式默认海外直连）"
+    fi
+    return 0
+  fi
+
+  echo
+  ui_line t
+  ui_row "${c_bold}网络加速${c_reset}"
+  ui_line m
+  ui_row "拉取镜像与构建应用时需访问 Docker Hub、PyPI、npm 等外网资源。"
+  ui_row "服务器在${c_bold}国内${c_reset}建议启用国内加速；在${c_bold}海外${c_reset}请选直连。"
+  ui_line b
+  echo
+
+  while true; do
+    read_tty "是否启用国内加速？国内服务器请输入 Y，海外服务器请输入 N： " ans
+    case "$ans" in
+    Y | y)
+      FSWAF_CN_MIRROR=1
+      export FSWAF_CN_MIRROR=1
+      ok "已启用国内加速"
+      return 0
+      ;;
+    N | n)
+      FSWAF_CN_MIRROR=0
+      ok "已选择海外直连（未启用国内加速）"
+      return 0
+      ;;
+    "")
+      warn "请输入 Y 或 N"
+      ;;
+    *)
+      warn "请输入 Y 或 N"
+      ;;
+    esac
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -1306,9 +1402,50 @@ git_probe_url() {
 }
 
 # 官方源失败/超时后，按顺序尝试国内镜像；成功后恢复官方 origin
+git_clone_mirrors_first() {
+  local dest="$1"
+  local rc=0 mirror="" host=""
+
+  info "国内加速：优先从 Git 镜像克隆..."
+  for mirror in "${FSWAF_REPO_MIRROR_LIST[@]}"; do
+    host="$(git_mirror_host "$mirror")"
+    info "探测镜像：${host}"
+    if ! git_probe_url "$mirror"; then
+      warn "镜像不可达，跳过：${host}"
+      continue
+    fi
+    git_clean_clone_dest "$dest"
+    info "克隆镜像：${host}"
+    set +e
+    git_cmd_with_timeout git clone --depth 1 "$mirror" "$dest"
+    rc=$?
+    set -e
+    if [[ $rc -eq 0 ]]; then
+      git_restore_official_origin "$dest"
+      ok "已通过镜像 ${host} 克隆成功（origin 已恢复为官方地址）"
+      return 0
+    fi
+    warn "镜像克隆失败（退出码 ${rc}）：${host}"
+  done
+
+  warn "国内 Git 镜像均未成功，尝试官方 GitHub..."
+  git_clean_clone_dest "$dest"
+  set +e
+  git_cmd_with_timeout git clone --depth 1 "$FSWAF_REPO_URL" "$dest"
+  rc=$?
+  set -e
+  [[ $rc -eq 0 ]] || return "$rc"
+  return 0
+}
+
 git_clone_with_mirror_fallback() {
   local dest="$1"
   local rc=0 mirror="" host=""
+
+  if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
+    git_clone_mirrors_first "$dest"
+    return $?
+  fi
 
   set +e
   git_cmd_with_timeout git clone --depth 1 "$FSWAF_REPO_URL" "$dest"
@@ -1361,6 +1498,35 @@ git_pull_with_mirror_fallback() {
   dirty="$(git status --porcelain --untracked-files=no 2>/dev/null || true)"
   if [[ -n "$dirty" ]]; then
     warn "检测到本地代码有改动，一键更新将强制覆盖为远程 main（保留 .env 等未被 git 跟踪的文件）"
+  fi
+
+  if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
+    info "国内加速：优先从 Git 镜像拉取..."
+    orig_url="$(git remote get-url origin 2>/dev/null || true)"
+    if [[ -n "$orig_url" ]]; then
+      for mirror in "${FSWAF_REPO_MIRROR_LIST[@]}"; do
+        [[ "$mirror" == "$orig_url" ]] && continue
+        host="$(git_mirror_host "$mirror")"
+        info "探测镜像：${host}"
+        if ! git_probe_url "$mirror"; then
+          warn "镜像不可达，跳过：${host}"
+          continue
+        fi
+        info "拉取镜像：${host}"
+        git remote set-url origin "$mirror"
+        set +e
+        git_force_sync_main
+        rc=$?
+        set -e
+        git remote set-url origin "$orig_url" 2>/dev/null || git_restore_official_origin "." || true
+        if [[ $rc -eq 0 ]]; then
+          ok "已通过镜像 ${host} 拉取成功（origin 已恢复为官方地址）"
+          return 0
+        fi
+        warn "镜像拉取失败（退出码 ${rc}）：${host}"
+      done
+      warn "国内 Git 镜像均未成功，尝试官方 GitHub..."
+    fi
   fi
 
   set +e
@@ -1514,12 +1680,55 @@ merge_missing_env_from_example() {
   done <.env.example
 }
 
+# 从 .env 移除构建期国内镜像变量（避免 Compose 自动读取 .env 后长期生效）
+clear_cn_mirror_env_file() {
+  local key file=".env"
+  [[ -f "$file" ]] || return 0
+  for key in FSWAF_PIP_INDEX_URL FSWAF_PIP_TRUSTED_HOST FSWAF_ALPINE_MIRROR FSWAF_NPM_REGISTRY; do
+    if sed --version >/dev/null 2>&1; then
+      sed -i "/^${key}=/d" "$file"
+    else
+      sed -i '' "/^${key}=/d" "$file"
+    fi
+  done
+  if sed --version >/dev/null 2>&1; then
+    sed -i '/^# 国内加速（install\.sh --cn）$/d' "$file"
+  else
+    sed -i '' '/^# 国内加速（install\.sh --cn）$/d' "$file"
+  fi
+}
+
+unset_cn_build_env() {
+  unset FSWAF_PIP_INDEX_URL FSWAF_PIP_TRUSTED_HOST FSWAF_ALPINE_MIRROR FSWAF_NPM_REGISTRY
+}
+
+# 构建前按是否启用国内加速设置或清除镜像环境变量；不写入 .env
+prepare_build_mirror_env() {
+  if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
+    export_cn_build_env
+    return 0
+  fi
+  unset_cn_build_env
+  clear_cn_mirror_env_file
+}
+
+export_cn_build_env() {
+  export FSWAF_PIP_INDEX_URL="${FSWAF_CN_PIP_INDEX_URL}"
+  export FSWAF_PIP_TRUSTED_HOST="${FSWAF_CN_PIP_TRUSTED_HOST}"
+  export FSWAF_ALPINE_MIRROR="${FSWAF_CN_ALPINE_MIRROR}"
+  export FSWAF_NPM_REGISTRY="${FSWAF_CN_NPM_REGISTRY}"
+}
+
 write_meta() {
+  local cn_line=""
+  if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
+    cn_line=$'\n'"cn_mirror=1"
+  fi
   cat >"$FSWAF_META_FILE" <<EOF
 installed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 install_dir=$(pwd)
 script_version=${FSWAF_VERSION}
-os=${OS_FAMILY}/${OS_ID}
+os=${OS_FAMILY}/${OS_ID}${cn_line}
 EOF
 }
 
@@ -1620,6 +1829,139 @@ sys.stdout.write("\n")
   return 0
 }
 
+# 向 daemon.json 合并 registry-mirrors（不重复）；成功返回 0
+merge_docker_registry_mirrors_to_daemon_json() {
+  local daemon_json="/etc/docker/daemon.json"
+  local tmp bak raw
+  [[ -f "$daemon_json" ]] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+
+  tmp="$(mktemp)"
+  bak="${daemon_json}.bak.flowshield.$(date +%Y%m%d%H%M%S)"
+  raw="$(need_sudo cat "$daemon_json")" || {
+    rm -f "$tmp"
+    return 1
+  }
+  if ! printf '%s\n' "$raw" | python3 -c '
+import json, sys
+add = [m for m in sys.argv[1:] if m]
+data = json.load(sys.stdin)
+mirrors = data.get("registry-mirrors") or []
+if not isinstance(mirrors, list):
+    mirrors = []
+seen = set(mirrors)
+for m in add:
+    if m not in seen:
+        mirrors.insert(0, m)
+        seen.add(m)
+if mirrors:
+    data["registry-mirrors"] = mirrors
+json.dump(data, sys.stdout, ensure_ascii=False, indent=2)
+sys.stdout.write("\n")
+' "$@" >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+
+  need_sudo cp "$daemon_json" "$bak" || {
+    rm -f "$tmp"
+    return 1
+  }
+  if ! need_sudo install -m 644 "$tmp" "$daemon_json"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+  info "已备份原配置：$bak"
+  return 0
+}
+
+create_docker_daemon_json_with_mirrors() {
+  local daemon_json="/etc/docker/daemon.json"
+  local tmp
+  command -v python3 >/dev/null 2>&1 || return 1
+  tmp="$(mktemp)"
+  if ! python3 -c '
+import json, sys
+json.dump({"registry-mirrors": sys.argv[1:]}, sys.stdout, ensure_ascii=False, indent=2)
+sys.stdout.write("\n")
+' "$@" >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  need_sudo mkdir -p /etc/docker
+  if ! need_sudo install -m 644 "$tmp" "$daemon_json"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+  return 0
+}
+
+apply_china_docker_registry_mirrors() {
+  local reachable=() m host
+  local daemon_json="/etc/docker/daemon.json"
+
+  [[ "$HAVE_DOCKER" -eq 1 ]] || probe_docker_access || return 0
+
+  if [[ "$OS_FAMILY" != "linux" ]]; then
+    warn "非 Linux：请在本机 Docker 引擎配置 registry-mirrors（Docker Desktop → Docker Engine）："
+    for m in "${_FSWAF_CN_DOCKER_MIRROR_LIST[@]}"; do
+      echo "  - $m"
+    done
+    return 0
+  fi
+
+  for m in "${_FSWAF_CN_DOCKER_MIRROR_LIST[@]}"; do
+    host="$(docker_mirror_host_from_url "$m")"
+    if is_known_dead_docker_mirror_host "$host"; then
+      continue
+    fi
+    if docker_mirror_host_resolvable "$host"; then
+      reachable+=("$m")
+    else
+      warn "Docker 镜像加速源不可达，跳过：${host}"
+    fi
+  done
+
+  if ((${#reachable[@]} == 0)); then
+    warn "未探测到可用的 Docker Hub 国内镜像，镜像拉取将使用当前 Docker 配置或直连"
+    return 0
+  fi
+
+  info "配置 Docker Hub 国内镜像加速..."
+  if [[ -f "$daemon_json" ]]; then
+    sanitize_docker_registry_mirrors || true
+    if merge_docker_registry_mirrors_to_daemon_json "${reachable[@]}"; then
+      info "正在重启 Docker 使镜像加速生效..."
+      if reload_docker_after_daemon_json; then
+        ok "已添加 Docker Hub 镜像加速"
+      else
+        warn "daemon.json 已更新，但 Docker 重启失败，请手动：sudo systemctl restart docker"
+      fi
+    else
+      warn "自动写入 daemon.json 失败，请手动添加 registry-mirrors 后重启 Docker"
+    fi
+  else
+    if create_docker_daemon_json_with_mirrors "${reachable[@]}"; then
+      info "正在重启 Docker 使镜像加速生效..."
+      if reload_docker_after_daemon_json; then
+        ok "已创建 daemon.json 并启用 Docker Hub 镜像加速"
+      else
+        warn "daemon.json 已创建，但 Docker 重启失败，请手动：sudo systemctl restart docker"
+      fi
+    else
+      warn "无法创建 /etc/docker/daemon.json，请手动配置 registry-mirrors"
+    fi
+  fi
+}
+
+apply_china_mirror_settings() {
+  info "国内加速已启用：Docker Hub / apk / pip / npm / Git 将优先使用国内镜像"
+  export_cn_build_env
+  apply_china_docker_registry_mirrors || true
+}
+
 reload_docker_after_daemon_json() {
   if command -v systemctl >/dev/null 2>&1; then
     need_sudo systemctl restart docker || return 1
@@ -1714,8 +2056,11 @@ compose() {
 
 build_and_start() {
   sanitize_docker_registry_mirrors || true
+  prepare_build_mirror_env
   info "拉取依赖镜像并本地构建启动（首次安装可能较久，约10-20分钟）..."
-  if ! compose up -d --build; then
+  # plain：BuildKit + Compose 均用纯文本进度；须 export 以便 sudo/sg 子进程可见
+  export BUILDKIT_PROGRESS=plain
+  if ! compose up -d --build --progress plain; then
     print_docker_pull_hint
     die "docker compose up 失败"
   fi
@@ -2071,10 +2416,41 @@ run_install() {
 }
 
 # ---------------------------------------------------------------------------
+# 命令行参数
+# ---------------------------------------------------------------------------
+
+print_usage() {
+  cat <<EOF
+${FSWAF_PRODUCT} 一键安装 / 更新脚本 v${FSWAF_VERSION}
+
+用法：
+  curl -fsSL ${FSWAF_SITE}/install.sh | bash
+  bash install.sh
+
+安装过程中会询问是否启用国内加速（国内服务器选 Y，海外选 N）。
+
+非交互模式（FSWAF_ASSUME_YES=1）默认海外直连；需国内加速可设 FSWAF_CN_MIRROR=1。
+
+官网：${FSWAF_SITE}
+EOF
+}
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
 main() {
+  case "${1:-}" in
+  -h | --help)
+    print_usage
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    die "未知参数：$1（使用 --help 查看用法）"
+    ;;
+  esac
   detect_os
 
   if [[ "$OS_FAMILY" == "unsupported" ]]; then
@@ -2095,6 +2471,10 @@ main() {
 
   # 依赖装好后重新判定一次（例如刚装好 docker 才能看到容器）
   detect_mode_and_dir
+
+  if [[ "${FSWAF_CN_MIRROR:-}" == "1" ]]; then
+    apply_china_mirror_settings
+  fi
 
   if [[ "$MODE" == "update" ]]; then
     run_update
