@@ -94,12 +94,17 @@ RUN /usr/local/openresty/nginx/sbin/nginx -v 2>&1 \
 RUN cut -d. -f1-3 /tmp/openresty_ver > /tmp/nginx_build_version
 RUN test -s /tmp/nginx_build_version
 RUN nginx_ver="$(cat /tmp/nginx_build_version)"; \
+    official="https://nginx.org/download/nginx-${nginx_ver}.tar.gz"; \
     if [ -n "${NGINX_MIRROR}" ]; then \
-      nginx_url="${NGINX_MIRROR}/nginx-${nginx_ver}.tar.gz"; \
+      curl -fL --retry 2 --retry-delay 1 \
+        -o "/tmp/nginx-${nginx_ver}.tar.gz" \
+        "${NGINX_MIRROR}/nginx-${nginx_ver}.tar.gz" \
+      || curl -fL --retry 5 --retry-delay 2 \
+        -o "/tmp/nginx-${nginx_ver}.tar.gz" "${official}"; \
     else \
-      nginx_url="https://nginx.org/download/nginx-${nginx_ver}.tar.gz"; \
-    fi; \
-    curl -fsSL --retry 5 --retry-delay 2 -o "/tmp/nginx-${nginx_ver}.tar.gz" "${nginx_url}"
+      curl -fL --retry 5 --retry-delay 2 \
+        -o "/tmp/nginx-${nginx_ver}.tar.gz" "${official}"; \
+    fi
 RUN tar xzf "/tmp/nginx-$(cat /tmp/nginx_build_version).tar.gz" -C /tmp
 RUN cd "/tmp/nginx-$(cat /tmp/nginx_build_version)" \
     && ./configure --with-compat --add-dynamic-module=/tmp/ngx_http_geoip2_module

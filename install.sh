@@ -53,7 +53,8 @@ FSWAF_CN_PIP_INDEX_URL="${FSWAF_CN_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu
 FSWAF_CN_PIP_TRUSTED_HOST="${FSWAF_CN_PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}"
 FSWAF_CN_ALPINE_MIRROR="${FSWAF_CN_ALPINE_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/alpine}"
 FSWAF_CN_NPM_REGISTRY="${FSWAF_CN_NPM_REGISTRY:-https://registry.npmmirror.com}"
-FSWAF_CN_NGINX_MIRROR="${FSWAF_CN_NGINX_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/nginx}"
+# 清华等常见镜像站没有 nginx.org/download 目录，默认仍走官网；填了无效地址会 404
+FSWAF_CN_NGINX_MIRROR="${FSWAF_CN_NGINX_MIRROR:-}"
 FSWAF_CN_CARGO_REGISTRY="${FSWAF_CN_CARGO_REGISTRY:-sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/}"
 # 可由 FSWAF_CN_DOCKER_MIRRORS 覆盖整表（空格分隔）
 if [[ -n "${FSWAF_CN_DOCKER_MIRRORS:-}" ]]; then
