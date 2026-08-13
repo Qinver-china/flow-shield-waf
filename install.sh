@@ -1587,6 +1587,31 @@ git_pull_with_mirror_fallback() {
   return 1
 }
 
+# 无 .git 时下载最新代码覆盖项目文件；保留 .env，Docker 数据卷不在目录内故不受影响
+overlay_project_from_fresh_clone() {
+  local tmp dest f base
+  tmp="$(mktemp -d)"
+  dest="$tmp/repo"
+  info "正在下载最新代码..."
+  if ! git_clone_with_mirror_fallback "$dest"; then
+    rm -rf "$tmp"
+    warn "下载最新代码失败，将继续使用当前目录代码构建"
+    return 1
+  fi
+  shopt -s dotglob nullglob
+  for f in "$dest"/*; do
+    base="$(basename "$f")"
+    case "$base" in
+    . | .. | .env) continue ;;
+    esac
+    rm -rf "./${base}"
+    mv "$f" "./${base}"
+  done
+  shopt -u dotglob nullglob
+  rm -rf "$tmp"
+  ok "已用最新代码覆盖项目文件（.env 与 Docker 数据卷未改动）"
+}
+
 ensure_repo() {
   if [[ -n "$INSTALL_DIR" && -d "$INSTALL_DIR" ]]; then
     cd "$INSTALL_DIR"
@@ -1756,16 +1781,23 @@ EOF
 
 # 2024-06 起多数高校/厂商公开 Docker Hub 缓存已停服或仅校内可用；
 # 若 daemon.json 仍指向它们，pull 会报 lookup ... no such host / 403。
+_FSWAF_DEAD_DOCKER_MIRROR_HOSTS=(
+  docker.mirrors.ustc.edu.cn
+  hub-mirror.c.163.com
+  mirror.baidubce.com
+  docker.mirrors.sjtug.sjtu.edu.cn
+  docker.nju.edu.cn
+  registry.docker-cn.com
+  dockerhub.azk8s.cn
+  mirror.ccs.tencentyun.com
+)
+
 is_known_dead_docker_mirror_host() {
-  local host="$1"
-  case "$host" in
-  docker.mirrors.ustc.edu.cn | hub-mirror.c.163.com | mirror.baidubce.com | \
-    docker.mirrors.sjtug.sjtu.edu.cn | docker.nju.edu.cn | registry.docker-cn.com | \
-    dockerhub.azk8s.cn | mirror.ccs.tencentyun.com)
-    return 0
-    ;;
-  *) return 1 ;;
-  esac
+  local host="$1" h
+  for h in "${_FSWAF_DEAD_DOCKER_MIRROR_HOSTS[@]}"; do
+    [[ "$host" == "$h" ]] && return 0
+  done
+  return 1
 }
 
 docker_mirror_host_from_url() {
@@ -1816,12 +1848,29 @@ strip_docker_registry_mirrors_from_daemon_json() {
   }
   if ! printf '%s\n' "$raw" | python3 -c '
 import json, sys
-remove = set(sys.argv[1:])
+
+def norm_url(u):
+    return (u or "").strip().rstrip("/")
+
+def host(u):
+    u = norm_url(u)
+    for p in ("https://", "http://"):
+        if u.lower().startswith(p):
+            u = u[len(p):]
+            break
+    return u.split("/")[0].split(":")[0].lower()
+
+remove = [x for x in sys.argv[1:] if x]
+remove_urls = {norm_url(x) for x in remove}
+remove_hosts = {host(x) for x in remove}
 data = json.load(sys.stdin)
 mirrors = data.get("registry-mirrors") or []
 if not isinstance(mirrors, list):
     mirrors = []
-kept = [m for m in mirrors if m not in remove]
+kept = [
+    m for m in mirrors
+    if norm_url(m) not in remove_urls and host(m) not in remove_hosts
+]
 if kept:
     data["registry-mirrors"] = kept
 else:
@@ -1862,21 +1911,54 @@ merge_docker_registry_mirrors_to_daemon_json() {
   }
   if ! printf '%s\n' "$raw" | python3 -c '
 import json, sys
-add = [m for m in sys.argv[1:] if m]
+
+def norm_url(u):
+    return (u or "").strip().rstrip("/")
+
+def host(u):
+    u = norm_url(u)
+    for p in ("https://", "http://"):
+        if u.lower().startswith(p):
+            u = u[len(p):]
+            break
+    return u.split("/")[0].split(":")[0].lower()
+
+args = [x for x in sys.argv[1:] if x]
+dead_hosts = set()
+add = args
+if "--" in args:
+    i = args.index("--")
+    add = args[:i]
+    dead_hosts = {x.lower() for x in args[i + 1:]}
 data = json.load(sys.stdin)
 mirrors = data.get("registry-mirrors") or []
 if not isinstance(mirrors, list):
     mirrors = []
-seen = set(mirrors)
+kept = []
+seen = set()
+for m in mirrors:
+    if host(m) in dead_hosts:
+        continue
+    key = norm_url(m)
+    if key in seen:
+        continue
+    seen.add(key)
+    kept.append(m)
 for m in add:
-    if m not in seen:
-        mirrors.insert(0, m)
-        seen.add(m)
-if mirrors:
-    data["registry-mirrors"] = mirrors
+    if host(m) in dead_hosts:
+        continue
+    key = norm_url(m)
+    if not m or key in seen:
+        continue
+    kept.insert(0, m)
+    seen.add(key)
+if kept:
+    data["registry-mirrors"] = kept
+else:
+    data.pop("registry-mirrors", None)
 json.dump(data, sys.stdout, ensure_ascii=False, indent=2)
 sys.stdout.write("\n")
-' "$@" >"$tmp"; then
+' "$@" -- "${_FSWAF_DEAD_DOCKER_MIRROR_HOSTS[@]}" >"$tmp"; then
     rm -f "$tmp"
     return 1
   fi
@@ -1949,7 +2031,6 @@ apply_china_docker_registry_mirrors() {
 
   info "配置 Docker Hub 国内镜像加速..."
   if [[ -f "$daemon_json" ]]; then
-    sanitize_docker_registry_mirrors || true
     if merge_docker_registry_mirrors_to_daemon_json "${reachable[@]}"; then
       info "正在重启 Docker 使镜像加速生效..."
       if reload_docker_after_daemon_json; then
@@ -1998,6 +2079,7 @@ sanitize_docker_registry_mirrors() {
   local m host
   local line
 
+  [[ "${_FSWAF_SANITIZE_DONE:-0}" == "1" ]] && return 0
   [[ "$HAVE_DOCKER" -eq 1 ]] || probe_docker_access || return 0
 
   while IFS= read -r line; do
@@ -2018,8 +2100,12 @@ sanitize_docker_registry_mirrors() {
     fi
   done
 
-  ((${#bad[@]})) || return 0
+  ((${#bad[@]})) || {
+    _FSWAF_SANITIZE_DONE=1
+    return 0
+  }
 
+  _FSWAF_SANITIZE_DONE=1
   echo
   warn "检测到 Docker 配置了不可用的镜像加速源（registry-mirrors）："
   for m in "${bad[@]}"; do
@@ -2446,7 +2532,13 @@ run_update() {
   if [[ -d .git ]]; then
     git_pull_with_mirror_fallback || true
   else
-    warn "当前目录不是 git 仓库，跳过 pull（若用压缩包部署请自行覆盖代码并保留 .env）"
+    echo
+    warn "当前目录不是 git 仓库，无法 git pull。"
+    if confirm "是否下载最新代码并覆盖项目文件？（保留 .env，站点数据在 Docker 卷中不受影响）" "Y"; then
+      overlay_project_from_fresh_clone || true
+    else
+      warn "已跳过代码更新，将使用当前目录现有代码构建"
+    fi
   fi
 
   merge_missing_env_from_example
