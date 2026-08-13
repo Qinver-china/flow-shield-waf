@@ -18,6 +18,7 @@
 
 ### 修复
 
+- 回源协议选择「跟随协议」时，可能出现 502 错误
 - 前端 Docker 构建：`npm ci` 后先移走 `node_modules` 再 `COPY frontend/`，避免部分 BuildKit 用空目录覆盖依赖，导致间歇性 `vite: not found`；`package-lock.json` 未变时仍复用依赖缓存
 
 ## [1.0.1] - 2026-08-12

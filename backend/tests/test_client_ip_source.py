@@ -141,3 +141,59 @@ def test_render_site_keeps_default_buffering():
     assert "proxy_set_header X-Forwarded-For $waf_geoip_client;" in conf
     assert 'proxy_set_header Connection $waf_connection_upgrade;' in conf
     assert 'proxy_set_header Connection "upgrade";' not in conf
+
+
+def _follow_site(**kwargs):
+    cert = SimpleNamespace(
+        cert_path="/etc/nginx/certs/example.crt",
+        key_path="/etc/nginx/certs/example.key",
+    )
+    base = dict(
+        id=10,
+        domain="example.com",
+        extra_domains=None,
+        origin_host="host.docker.internal",
+        origin_protocol="follow",
+        origin_http_port=8080,
+        origin_https_port=4343,
+        client_ip_source="remote_addr",
+        listen_http=True,
+        listen_https=True,
+        force_https=False,
+        disable_content_buffering=False,
+        certificate_id=1,
+        certificate=cert,
+    )
+    base.update(kwargs)
+    return SimpleNamespace(**base)
+
+
+def test_render_site_follow_splits_http_and_https_upstreams():
+    conf = render_site(_follow_site())
+    assert "map $scheme" not in conf
+    assert "proxy_pass $waf_upstream_" not in conf
+    assert "listen 80;" in conf
+    assert "listen 443 ssl;" in conf
+    assert "proxy_pass http://host.docker.internal:8080;" in conf
+    assert "proxy_pass https://host.docker.internal:4343;" in conf
+    http_block, https_block = conf.split("listen 443 ssl;", 1)
+    assert "proxy_pass http://host.docker.internal:8080;" in http_block
+    assert "proxy_pass https://" not in http_block
+    assert "proxy_pass https://host.docker.internal:4343;" in https_block
+    assert "proxy_pass http://" not in https_block
+
+
+def test_render_site_follow_http_only_uses_http_origin():
+    conf = render_site(_follow_site(listen_https=False, certificate_id=None, certificate=None))
+    assert "listen 80;" in conf
+    assert "listen 443" not in conf
+    assert "proxy_pass http://host.docker.internal:8080;" in conf
+    assert "proxy_pass https://" not in conf
+
+
+def test_render_site_follow_force_https_uses_https_origin():
+    conf = render_site(_follow_site(force_https=True))
+    assert "return 301 https://$host$request_uri;" in conf
+    assert conf.count("listen 80;") == 1
+    assert "proxy_pass https://host.docker.internal:4343;" in conf
+    assert "proxy_pass http://" not in conf
