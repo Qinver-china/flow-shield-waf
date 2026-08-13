@@ -14,6 +14,10 @@
 - 「从其他面板导入」改为单个按钮，抽屉内用宝塔 / 1Panel 两个 Tab；未配置时显示「暂未设置」并跳转系统设置
 - 优化一些UI细节
 
+### 修复
+
+- 前端 Docker 构建：`npm ci` 后先移走 `node_modules` 再 `COPY frontend/`，避免部分 BuildKit 用空目录覆盖依赖，导致间歇性 `vite: not found`；`package-lock.json` 未变时仍复用依赖缓存
+
 ## [1.0.1] - 2026-08-12
 
 ### 新增

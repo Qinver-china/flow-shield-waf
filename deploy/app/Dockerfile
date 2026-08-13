@@ -5,15 +5,22 @@
 # ---- 1) 构建前端 ----
 FROM node:20-alpine AS frontend-build
 WORKDIR /build
-# vite 在 devDependencies：固定 development + --include=dev，避免 production 语义跳过构建工具。
-# package.json 分层安装以利用缓存；.dockerignore 必须排除 frontend/node_modules，
-# 否则后续 COPY 可能用空目录覆盖本层依赖（表现为 vite: not found）。
-ENV NODE_ENV=development
+# vite 在 devDependencies。分层安装以缓存 node_modules：lockfile 不变则跳过 npm ci。
+# COPY frontend/ 前把依赖移出 /build，避免部分 Docker/BuildKit 用上下文里的空
+# node_modules 盖掉已安装的 vite（.dockerignore 排除空目录并不总生效）。
+# 不能在 Dockerfile 里「先删宿主机 frontend/node_modules 再 COPY」：COPY 读的是
+# 构建开始时已打包的上下文。NPM_CONFIG_PRODUCTION=false 防止 omit=dev。
+ENV NODE_ENV=development \
+    NPM_CONFIG_PRODUCTION=false
 COPY frontend/package.json frontend/package-lock.json ./
 RUN echo "==> [frontend] npm ci（安装依赖，含 vite）..." \
-    && npm ci --include=dev
+    && npm ci --include=dev \
+    && test -f node_modules/.bin/vite \
+    && mv node_modules /tmp/frontend-node_modules
 COPY frontend/ ./
 RUN echo "==> [frontend] npm run build（Vite 打包）..." \
+    && rm -rf node_modules \
+    && mv /tmp/frontend-node_modules node_modules \
     && npm run build \
     && echo "==> [frontend] 构建完成。" \
     && echo "==> 拉取 OpenResty 基础镜像（首次拉取约3–10分钟。如耗时过久，请检查服务器网络状态，或更换网络更好的 Docker 加速源）" 
