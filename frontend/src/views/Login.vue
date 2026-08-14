@@ -22,18 +22,36 @@
             <app-logo variant="login" class="panel-logo" />
             <theme-toggle />
           </div>
-          <h2>登录管理面板</h2>
-          <p>请输入管理员账号密码</p>
+          <h2>{{ needsSetup ? "设置管理员账号" : "登录管理面板" }}</h2>
+          <p>{{ needsSetup ? "首次使用，请设置管理员用户名和密码" : "请输入管理员账号密码" }}</p>
         </div>
-        <a-form layout="vertical" :model="form" @finish="onSubmit">
-          <a-form-item label="账号" name="username" :rules="[{ required: true }]">
-            <a-input v-model:value="form.username" size="large" placeholder="请输入账号" />
+        <a-form v-if="ready" layout="vertical" :model="form" @finish="onSubmit">
+          <a-form-item :label="needsSetup ? '管理员用户名' : '账号'" name="username" :rules="[{ required: true }]">
+            <a-input
+              v-model:value="form.username"
+              size="large"
+              :placeholder="needsSetup ? '3-64 位，字母、数字、下划线、连字符' : '请输入账号'"
+              autocomplete="username"
+            />
           </a-form-item>
           <a-form-item label="密码" name="password" :rules="[{ required: true }]">
-            <a-input-password v-model:value="form.password" size="large" placeholder="请输入密码" />
+            <a-input-password
+              v-model:value="form.password"
+              size="large"
+              :placeholder="needsSetup ? '至少 6 位' : '请输入密码'"
+              :autocomplete="needsSetup ? 'new-password' : 'current-password'"
+            />
+          </a-form-item>
+          <a-form-item v-if="needsSetup" label="确认密码" name="confirm_password" :rules="[{ required: true }]">
+            <a-input-password
+              v-model:value="form.confirm_password"
+              size="large"
+              placeholder="再次输入密码"
+              autocomplete="new-password"
+            />
           </a-form-item>
           <a-button type="primary" size="large" block html-type="submit" :loading="loading">
-            登录
+            {{ needsSetup ? "保存并进入面板" : "登录" }}
           </a-button>
         </a-form>
       </a-card>
@@ -42,25 +60,77 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import { CheckCircleOutlined } from "@ant-design/icons-vue";
 import AppLogo from "@/components/AppLogo.vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
+import { api } from "@/api";
 import { BRAND } from "@/constants/brand";
 import { useAuthStore } from "@/stores/auth";
 
 const router = useRouter();
 const auth = useAuthStore();
 const loading = ref(false);
-const form = reactive({ username: "", password: "" });
+const ready = ref(false);
+const needsSetup = ref(false);
+const form = reactive({ username: "", password: "", confirm_password: "" });
+
+onMounted(async () => {
+  try {
+    const resp = await api.get<{ needs_setup: boolean }>("/api/v1/auth/setup-status");
+    needsSetup.value = Boolean(resp.data.needs_setup);
+    if (needsSetup.value && auth.isLoggedIn) {
+      auth.logout();
+    }
+  } catch {
+    needsSetup.value = false;
+  } finally {
+    ready.value = true;
+  }
+});
+
+function validateSetup(): boolean {
+  const username = form.username.trim();
+  if (!username) {
+    message.warning("请输入管理员用户名");
+    return false;
+  }
+  if (username.length < 3 || username.length > 64) {
+    message.warning("用户名长度需在 3-64 个字符之间");
+    return false;
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    message.warning("用户名仅允许字母、数字、下划线和连字符");
+    return false;
+  }
+  if (!form.password) {
+    message.warning("请输入密码");
+    return false;
+  }
+  if (form.password.length < 6) {
+    message.warning("密码至少 6 位");
+    return false;
+  }
+  if (form.password !== form.confirm_password) {
+    message.warning("两次输入的密码不一致");
+    return false;
+  }
+  return true;
+}
 
 async function onSubmit() {
+  if (needsSetup.value && !validateSetup()) return;
   loading.value = true;
   try {
-    await auth.login(form.username, form.password);
-    message.success("登录成功");
+    if (needsSetup.value) {
+      await auth.completeInitialSetup(form.username.trim(), form.password);
+      message.success("管理员账号已设置");
+    } else {
+      await auth.login(form.username, form.password);
+      message.success("登录成功");
+    }
     router.push("/dashboard");
   } catch (err: any) {
     const status = err.response?.status;

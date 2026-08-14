@@ -31,7 +31,7 @@ git clone https://github.com/Qinver-china/flow-shield-waf.git
 cd flow-shield-waf
 
 cp .env.example .env #仅首次安装拷贝
-vi .env   # 推荐修改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET、WAF_ADMIN_PASSWORD
+vi .env   # 推荐修改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET
 ```
 
 ### 2. 检查端口
@@ -47,9 +47,13 @@ nginx -t && nginx -s reload
 ### 3. 构建并启动
 
 ```bash
-bash install.sh
 # 或
 docker compose up -d --build
+```
+
+#### 国内访问较慢，可以使用清华镜像构建启动
+```bash
+FSWAF_ALPINE_MIRROR=https://mirrors.aliyun.com/alpine docker compose up -d --build
 ```
 
 将启动 **3 个容器**：`redis`、`clickhouse`、`app`。

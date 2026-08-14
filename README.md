@@ -189,7 +189,6 @@ cp .env.example .env  #仅首次安装拷贝
 | `REDIS_PASSWORD` | Redis 密码 |
 | `JWT_SECRET` | JWT 签名密钥（建议长随机串） |
 | `WAF_CHALLENGE_SECRET` | 挑战 Cookie HMAC 密钥（建议长随机串） |
-| `WAF_ADMIN_USER` / `WAF_ADMIN_PASSWORD` | 初始管理员（首次启动自动创建） |
 
 生产环境建议同时设置：
 
@@ -244,6 +243,12 @@ nginx -t && systemctl reload nginx
 docker compose up -d --build
 ```
 
+国内访问较慢，可以使用清华镜像构建启动
+
+```bash
+FSWAF_ALPINE_MIRROR=https://mirrors.aliyun.com/alpine docker compose up -d --build
+```
+
 等待所有容器健康（首次启动约 1–2 分钟）：
 
 ```bash
@@ -270,7 +275,7 @@ docker compose ps
 #### 4. 登录面板并添加站点
 
 1. 打开管理面板：`http://<服务器IP>:9000`
-2. 使用 `.env` 中的 `WAF_ADMIN_USER` / `WAF_ADMIN_PASSWORD` 登录
+2. 全新安装首次打开登录页时设置管理员账号密码
 3. **站点管理** → 新增站点：填写域名、回源地址、监听端口（HTTP/HTTPS）
 4. 若启用 HTTPS，先在**证书管理**上传证书，再在站点中选择
 5. 将域名 DNS 解析到本服务器，流量即经 WAF 防护后回源

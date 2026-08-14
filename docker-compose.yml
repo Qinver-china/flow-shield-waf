@@ -78,7 +78,8 @@ services:
       # Linux 宿主机若构建时 apk/npm 拉包失败（容器桥接网络出网问题），取消下行注释：
       # network: host
       args:
-        # 默认海外 PyPI；install.sh --cn 时通过环境变量注入国内源
+        # 默认海外 PyPI；install.sh 选国内加速时通过环境变量注入。
+        # apk 走官方源很慢时可设 FSWAF_ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
         PIP_INDEX_URL: ${FSWAF_PIP_INDEX_URL:-https://pypi.org/simple}
         PIP_TRUSTED_HOST: ${FSWAF_PIP_TRUSTED_HOST:-}
         ALPINE_MIRROR: ${FSWAF_ALPINE_MIRROR:-}
@@ -97,9 +98,7 @@ services:
       REDIS_KEEPALIVE_MS: "60000"
       JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_TTL_MIN: ${JWT_ACCESS_TTL_MIN}
-      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS}
-      WAF_ADMIN_USER: ${WAF_ADMIN_USER}
-      WAF_ADMIN_PASSWORD: ${WAF_ADMIN_PASSWORD}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-3}
       WAF_CHALLENGE_SECRET: ${WAF_CHALLENGE_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       SLIDE_CAPTCHA_ASSETS_DIR: /data/slide_captcha

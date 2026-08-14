@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -16,12 +16,49 @@ from app.models import User
 from app.schemas.auth import (
     ChangePasswordRequest,
     ChangeUsernameRequest,
+    InitialSetupRequest,
     LoginRequest,
     RefreshRequest,
 )
 from app.schemas.common import ok
 
 router = APIRouter()
+
+
+async def _admin_exists(db: AsyncSession) -> bool:
+    count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
+    return int(count or 0) > 0
+
+
+def _token_payload(username: str) -> dict:
+    return {
+        "access_token": create_access_token(username),
+        "refresh_token": create_refresh_token(username),
+        "token_type": "Bearer",
+    }
+
+
+@router.get("/setup-status")
+async def setup_status(db: AsyncSession = Depends(get_db)):
+    return ok({"needs_setup": not await _admin_exists(db)})
+
+
+@router.post("/initial-setup")
+async def initial_setup(
+    body: InitialSetupRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await check_login_rate_limit(request)
+    if await _admin_exists(db):
+        raise HTTPException(status_code=400, detail="管理员账号已存在")
+    db.add(User(
+        username=body.new_username,
+        password_hash=hash_password(body.new_password),
+        is_active=True,
+    ))
+    await db.commit()
+    return ok(_token_payload(body.new_username))
 
 
 @router.post("/login")
@@ -38,11 +75,7 @@ async def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已禁用")
-    return ok({
-        "access_token": create_access_token(user.username),
-        "refresh_token": create_refresh_token(user.username),
-        "token_type": "Bearer",
-    })
+    return ok(_token_payload(user.username))
 
 
 @router.post("/refresh")
@@ -59,11 +92,7 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     ).scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="refresh token 无效")
-    return ok({
-        "access_token": create_access_token(user.username),
-        "refresh_token": create_refresh_token(user.username),
-        "token_type": "Bearer",
-    })
+    return ok(_token_payload(user.username))
 
 
 @router.get("/me")
@@ -91,9 +120,7 @@ async def change_username(
     await db.refresh(user)
     return ok({
         "username": user.username,
-        "access_token": create_access_token(user.username),
-        "refresh_token": create_refresh_token(user.username),
-        "token_type": "Bearer",
+        **_token_payload(user.username),
     })
 
 

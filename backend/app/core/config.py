@@ -23,11 +23,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "FlowShield_JWT_ChangeMe_ToYourOwnSecret_32b"
     jwt_algorithm: str = "HS256"
     jwt_access_ttl_min: int = 120
-    jwt_refresh_ttl_days: int = 7
-
-    # bootstrap admin
-    waf_admin_user: str = "admin"
-    waf_admin_password: str = "admin888"
+    jwt_refresh_ttl_days: int = 3
 
     # waf
     waf_challenge_secret: str = "FlowShield_Challenge_ChangeMe_Secret32"

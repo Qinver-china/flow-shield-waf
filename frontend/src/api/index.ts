@@ -50,7 +50,12 @@ async function refreshAccessToken(): Promise<string> {
 
 function shouldAttemptRefresh(url?: string) {
   if (!url) return false;
-  return !url.includes("/api/v1/auth/login") && !url.includes("/api/v1/auth/refresh");
+  return (
+    !url.includes("/api/v1/auth/login") &&
+    !url.includes("/api/v1/auth/refresh") &&
+    !url.includes("/api/v1/auth/setup-status") &&
+    !url.includes("/api/v1/auth/initial-setup")
+  );
 }
 
 function formatErrorMessage(error: any) {

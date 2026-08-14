@@ -8,7 +8,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 
 from app.api.internal.slide_captcha import router as slide_captcha_router
 from app.api.v1 import api_router
@@ -17,8 +16,6 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.logging import setup_logging
 from app.core.redis import get_redis
-from app.core.security import hash_password
-from app.models import User, WafSetting
 from app.services import certificate_store, rule_sync, waf_settings
 from app.services.schema_bootstrap import ensure_database_schema
 
@@ -31,17 +28,6 @@ async def _bootstrap() -> None:
     await ensure_database_schema()
 
     async with SessionLocal() as db:
-        existing = (
-            await db.execute(select(User).where(User.username == settings.waf_admin_user))
-        ).scalar_one_or_none()
-        if existing is None:
-            db.add(User(
-                username=settings.waf_admin_user,
-                password_hash=hash_password(settings.waf_admin_password),
-                is_active=True,
-            ))
-            await db.commit()
-            log.info("bootstrap admin user created: %s", settings.waf_admin_user)
         await waf_settings.get_or_create(db)
         from app.services.ai_guard.config import get_or_create_setting
 

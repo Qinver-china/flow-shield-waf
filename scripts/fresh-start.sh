@@ -19,4 +19,3 @@ docker compose ps
 
 echo ""
 echo "全新环境已就绪。面板: http://localhost:${PANEL_PORT:-9000}"
-echo "默认管理员见 .env 中的 WAF_ADMIN_USER / WAF_ADMIN_PASSWORD"

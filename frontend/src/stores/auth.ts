@@ -53,6 +53,14 @@ export const useAuthStore = defineStore("auth", {
         new_password: newPassword,
       });
     },
+    async completeInitialSetup(username: string, password: string) {
+      const resp = await api.post<{ access_token: string; refresh_token: string }>(
+        "/api/v1/auth/initial-setup",
+        { new_username: username, new_password: password },
+      );
+      this.setSession(username, resp.data.access_token, resp.data.refresh_token);
+      return resp.data;
+    },
     logout() {
       this.accessToken = "";
       this.username = "";

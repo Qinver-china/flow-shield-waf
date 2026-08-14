@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 #
 # 流盾 WAF 应用镜像：后端 + Worker + OpenResty 引擎 + 管理面板
 # （同一容器，由 supervisord 管理）
@@ -12,6 +11,8 @@
 #   3. GeoIP2 动态模块编译
 #   4. Python base/extra 分层 pip 安装
 #
+# 缓存：会变的 build-arg（PyPI / npm / Cargo / nginx 源）必须在 apk 系统包层之后再声明，
+# 否则日常更新或切换 pip 源会打掉 python/nginx 层。仅 ALPINE_MIRROR 变化才应重装系统包。
 # RUN 尽量拆成单条命令：构建失败时 BuildKit 会标出具体步骤号，便于定位。
 
 # ---- 1. 前端构建 ----
@@ -24,8 +25,6 @@ WORKDIR /build
 ENV NODE_ENV=development \
     NPM_CONFIG_PRODUCTION=false \
     NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
-
-RUN printf '==> [frontend-build] NPM_CONFIG_REGISTRY=%s\n' "${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}"
 
 # 先只复制 lockfile：未变更时跳过 npm ci，复用 node_modules 缓存。
 COPY frontend/package.json frontend/package-lock.json ./
@@ -51,41 +50,29 @@ FROM openresty/openresty:1.25.3.1-2-alpine-fat
 # Alpine 源默认官方；仅 apk 慢/失败时再指定：
 #   --build-arg ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
 # 构建容器无法访问外网 apk 源时，Linux 宿主机可用 host 网络构建，见 docker-compose.yml。
-ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
-ARG ALPINE_MIRROR=
-ARG NGINX_MIRROR=
-ARG CARGO_REGISTRY=
-
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_PROGRESS_BAR=off \
-    PIP_INDEX_URL=${PIP_INDEX_URL} \
-    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
-
-RUN printf '==> [runtime] ALPINE_MIRROR=%s PIP_INDEX_URL=%s NGINX_MIRROR=%s CARGO_REGISTRY=%s\n' \
-    "${ALPINE_MIRROR:-official}" \
-    "${PIP_INDEX_URL}" \
-    "${NGINX_MIRROR:-https://nginx.org/download}" \
-    "${CARGO_REGISTRY:-crates.io}"
+    PIP_PROGRESS_BAR=off
 
 # ---- 3. 系统依赖 ----
+# 只让 ALPINE_MIRROR 参与本层缓存键。PIP_/NGINX_/CARGO_ 在后面才 ARG，避免更新时重装系统包。
+ARG ALPINE_MIRROR=
 RUN if [ -n "${ALPINE_MIRROR}" ]; then \
       sed -i "s#https\\?://dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
-    fi
-RUN if [ -n "${ALPINE_MIRROR}" ]; then \
       sed -i "s#https\\?://[^/]*/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories; \
     fi
-RUN apk add --no-cache python3 py3-pip nginx supervisor curl redis libjpeg-turbo tzdata
+RUN --mount=type=cache,id=fswaf-apk,target=/etc/apk/cache \
+    apk add python3 py3-pip nginx supervisor curl redis libjpeg-turbo tzdata
 
 # ---- 4. GeoIP2 动态模块 ----
 # OpenResty fat 仅含旧版 GeoIP(.dat)，不含 GeoIP2(.mmdb)；需编译动态模块才能用地理字段。
 # 模块源码已 vendored 到 deploy/app/vendor/ngx_http_geoip2_module，避免构建时拉 GitHub。
 # nginx 版本由 openresty/x.y.z.N 截取为 x.y.z，再下载对应 nginx 源码做 --with-compat 编译。
 COPY deploy/app/vendor/ngx_http_geoip2_module /tmp/ngx_http_geoip2_module
-RUN apk add --no-cache --virtual .geoip2-build \
+RUN --mount=type=cache,id=fswaf-apk,target=/etc/apk/cache \
+    apk add --virtual .geoip2-build \
         build-base pcre-dev zlib-dev openssl-dev linux-headers libmaxminddb-dev curl
 RUN /usr/local/openresty/nginx/sbin/nginx -v 2>&1 \
     | sed -n 's/.*openresty\///p' \
@@ -93,6 +80,7 @@ RUN /usr/local/openresty/nginx/sbin/nginx -v 2>&1 \
     > /tmp/openresty_ver
 RUN cut -d. -f1-3 /tmp/openresty_ver > /tmp/nginx_build_version
 RUN test -s /tmp/nginx_build_version
+ARG NGINX_MIRROR=
 RUN nginx_ver="$(cat /tmp/nginx_build_version)"; \
     official="https://nginx.org/download/nginx-${nginx_ver}.tar.gz"; \
     if [ -n "${NGINX_MIRROR}" ]; then \
@@ -113,17 +101,25 @@ RUN cp "/tmp/nginx-$(cat /tmp/nginx_build_version)/objs/ngx_http_geoip2_module.s
     /usr/local/openresty/nginx/modules/
 RUN rm -rf /tmp/nginx-* /tmp/ngx_http_geoip2_module /tmp/openresty_ver /tmp/nginx_build_version
 RUN apk del .geoip2-build
-RUN apk add --no-cache libmaxminddb
+RUN --mount=type=cache,id=fswaf-apk,target=/etc/apk/cache \
+    apk add libmaxminddb
 
 # ---- 5. Python 依赖（分层安装） ----
+# gcc/rust 与 requirements 解耦：改 pip 包列表不会重装编译工具链。
 # base：稳定包，requirements-base.txt 不变则整层缓存。
 # extra：增量包，仅 requirements-extra.txt 变化时重装。
 # MAKEFLAGS/CARGO 固定 -j1，避免小内存机器编译时 OOM。
 WORKDIR /app/backend
-COPY backend/requirements-base.txt backend/requirements-extra.txt ./
-RUN apk add --no-cache --virtual .py-build-deps \
+RUN --mount=type=cache,id=fswaf-apk,target=/etc/apk/cache \
+    apk add --virtual .py-build-deps \
         python3-dev gcc musl-dev jpeg-dev zlib-dev rust cargo
 RUN python3 -m venv /opt/venv
+COPY backend/requirements-base.txt backend/requirements-extra.txt ./
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+ARG CARGO_REGISTRY=
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
 RUN /opt/venv/bin/pip install --upgrade pip
 RUN if [ -n "${CARGO_REGISTRY}" ]; then \
       mkdir -p /root/.cargo; \

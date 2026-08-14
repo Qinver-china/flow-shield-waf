@@ -30,6 +30,7 @@ async def _apply_schema_patches(conn) -> None:
     await _drop_legacy_bot_columns(conn)
     await _ensure_bot_profile_categories(conn)
     await _ensure_waf_setting_panel_public_url(conn)
+    await _drop_waf_setting_admin_credentials_set(conn)
     await _ensure_ai_guard_floating_chat_enabled(conn)
     await _ensure_ai_guard_policy_custom_prompt(conn)
     await _ensure_rule_remark(conn)
@@ -187,6 +188,16 @@ async def _ensure_waf_setting_panel_public_url(conn) -> None:
         text("ALTER TABLE waf_setting ADD COLUMN panel_public_url VARCHAR(512) NULL")
     )
     log.info("schema patch applied: waf_setting.panel_public_url")
+
+
+async def _drop_waf_setting_admin_credentials_set(conn) -> None:
+    if not await _column_exists(conn, "waf_setting", "admin_credentials_set"):
+        return
+    try:
+        await conn.execute(text("ALTER TABLE waf_setting DROP COLUMN admin_credentials_set"))
+        log.info("schema patch applied: dropped waf_setting.admin_credentials_set")
+    except Exception:  # noqa: BLE001
+        log.warning("could not drop legacy column waf_setting.admin_credentials_set")
 
 
 async def _ensure_ai_guard_floating_chat_enabled(conn) -> None:

@@ -1,7 +1,7 @@
 # 流盾WAF · API 说明
 
 - Base 前缀：`/api/v1`
-- 认证：除登录外均需 `Authorization: Bearer <access_token>`
+- 认证：除登录、初始账号设置外均需 `Authorization: Bearer <access_token>`
 - 交互式文档（`ENABLE_DOCS=true` 时）：`/docs`（Swagger）、`/redoc`
 
 ## 统一响应结构
@@ -19,6 +19,8 @@
 | POST | `/auth/login` | 用户名密码登录，返回 access/refresh token |
 | POST | `/auth/refresh` | 用 refresh token 换取新 access token |
 | GET | `/auth/me` | 当前登录用户信息 |
+| GET | `/auth/setup-status` | 公开接口：库中是否已有管理员（`needs_setup`） |
+| POST | `/auth/initial-setup` | 公开接口：无管理员时创建首个账号并返回 token |
 
 ## 元数据 `/meta`
 
