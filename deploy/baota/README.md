@@ -51,10 +51,7 @@ nginx -t && nginx -s reload
 docker compose up -d --build
 ```
 
-#### 国内访问较慢，可以使用清华镜像构建启动
-```bash
-FSWAF_ALPINE_MIRROR=https://mirrors.aliyun.com/alpine docker compose up -d --build
-```
+国内构建较慢时，在 `.env` 中取消「国内构建加速」几行注释后再执行
 
 将启动 **3 个容器**：`redis`、`clickhouse`、`app`。
 
@@ -62,7 +59,7 @@ FSWAF_ALPINE_MIRROR=https://mirrors.aliyun.com/alpine docker compose up -d --bui
 
 ## 三、访问
 
-- 管理面板：`http://<服务器IP>:9000`，用 `.env` 中账号登录。
+- 管理面板：`http://<服务器IP>:9000`。全新安装首次打开登录页时设置管理员账号密码。
 - 添加站点后，把域名解析到本服务器即可。
 
 ## 四、版本更新

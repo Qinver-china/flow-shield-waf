@@ -2,6 +2,7 @@
 # 流盾WAF (Flow Shield WAF) 引擎 4 种防护方式 + 黑白名单 集成回归脚本。
 # 前置：docker compose 已启动 (docker compose up -d)。
 # 用法：bash deploy/smoke_test.sh [PANEL_URL] [ENGINE_URL] [ADMIN_USER] [ADMIN_PASS]
+# 全新安装后请传入登录页设置的账号密码（不再有默认 admin/admin888）。
 set -euo pipefail
 
 PANEL="${1:-http://localhost:9000}"

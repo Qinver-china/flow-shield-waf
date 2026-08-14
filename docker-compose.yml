@@ -79,7 +79,7 @@ services:
       # network: host
       args:
         # 默认海外 PyPI；install.sh 选国内加速时通过环境变量注入。
-        # apk 走官方源很慢时可设 FSWAF_ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
+        # apk 走官方源很慢时可在 .env 写入 FSWAF_ALPINE_MIRROR（见 .env.example）
         PIP_INDEX_URL: ${FSWAF_PIP_INDEX_URL:-https://pypi.org/simple}
         PIP_TRUSTED_HOST: ${FSWAF_PIP_TRUSTED_HOST:-}
         ALPINE_MIRROR: ${FSWAF_ALPINE_MIRROR:-}
