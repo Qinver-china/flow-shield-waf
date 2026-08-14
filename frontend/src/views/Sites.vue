@@ -2,11 +2,11 @@
   <page-shell title="站点管理" description="配置防护域名、回源地址、HTTPS 证书与自定义拦截页">
     <template #actions>
       <a-button type="primary" @click="crudRef?.openCreate()">新增站点</a-button>
-      <a-button @click="panelImportOpen = true">从其他面板导入</a-button>
     </template>
     <resource-crud ref="crudRef" embedded title="站点管理" api-base="/api/v1/sites" :columns="columns" :filters="filters"
       :default-record="defaultRecord" :prepare-payload="preparePayload" :batch="batchConfig" name-field="name"
-      detail-actions duplicatable @mutated="invalidateSiteOptions">
+      detail-actions duplicatable :extra-create-tabs="panelImportTabs" :extra-create-footer="panelImportFooter"
+      @mutated="invalidateSiteOptions" @extra-create-ok="onPanelImportOk">
       <template
         #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate }">
         <a-spin :spinning="loading || (metricsLoading && !Object.keys(metricsMap).length)">
@@ -169,14 +169,19 @@
           </fs-form-section>
         </div>
       </template>
+      <template #create-tab-extra="{ tabKey }">
+        <panel-import-form
+          ref="panelImportRef"
+          kind="sites"
+          :provider="tabKey === 'onepanel' ? 'onepanel' : 'baota'"
+          @status="onPanelStatus"
+          @imported="onPanelImported"
+          @close="crudRef?.closeDrawer()"
+        />
+      </template>
     </resource-crud>
 
-    <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100" @saved="onCertImported" />
-    <panel-import-drawer
-      v-model:open="panelImportOpen"
-      kind="sites"
-      @imported="onPanelImported"
-    />
+    <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100" @saved="onCertImported" @imported="onCertPanelImported" />
   </page-shell>
 </template>
 
@@ -189,7 +194,7 @@ import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import OriginHostInput from "@/components/OriginHostInput.vue";
 import CertificateFormDrawer, { type CertificateSaved } from "@/components/CertificateFormDrawer.vue";
-import PanelImportDrawer from "@/components/PanelImportDrawer.vue";
+import PanelImportForm, { type PanelImportStatus } from "@/components/PanelImportForm.vue";
 import SiteCard, { type SiteCardMetrics } from "@/components/SiteCard.vue";
 import { enabledFilterOptions } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
@@ -224,7 +229,23 @@ const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const certOptions = ref<CertOption[]>([]);
 const certDrawerOpen = ref(false);
 const certSelectRecord = ref<Record<string, any> | null>(null);
-const panelImportOpen = ref(false);
+const panelImportRef = ref<{ submit: () => Promise<void> } | null>(null);
+const panelImportTabs = [
+  { key: "baota", tab: "从宝塔导入" },
+  { key: "onepanel", tab: "从 1Panel 导入" },
+];
+const panelStatus = reactive<PanelImportStatus>({
+  canImport: false,
+  okText: "导入",
+  importing: false,
+  loading: false,
+});
+const panelImportFooter = computed(() => ({
+  okText: panelStatus.okText,
+  hideOk: !panelStatus.canImport,
+  confirmLoading: panelStatus.importing,
+  loading: panelStatus.loading,
+}));
 const metricsLoading = ref(false);
 const metricsMap = reactive<Record<string, SiteCardMetrics>>({});
 let metricsTimer: ReturnType<typeof setInterval> | null = null;
@@ -338,10 +359,23 @@ async function onCertImported(cert: CertificateSaved) {
   }
 }
 
+function onPanelStatus(status: PanelImportStatus) {
+  Object.assign(panelStatus, status);
+}
+
+function onPanelImportOk() {
+  void panelImportRef.value?.submit();
+}
+
 function onPanelImported() {
   invalidateSiteOptions();
+  crudRef.value?.closeDrawer();
   crudRef.value?.fetchList();
   void loadCertOptions();
+}
+
+async function onCertPanelImported() {
+  await loadCertOptions();
 }
 
 async function loadMetrics() {

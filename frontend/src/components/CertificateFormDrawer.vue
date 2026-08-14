@@ -1,102 +1,72 @@
 <template>
-  <fs-form-drawer
-    :open="open"
-    title="SSL 证书"
-    :subtitle="certificateId ? `#${certificateId}` : undefined"
-    :mode="certificateId ? 'edit' : 'create'"
-    :width="760"
-    :z-index="zIndex"
-    :loading="detailLoading"
-    :confirm-loading="saving"
-    @update:open="emit('update:open', $event)"
-    @ok="save"
-  >
+  <fs-form-drawer :open="open" title="SSL 证书" :subtitle="certificateId ? `#${certificateId}` : undefined"
+    :mode="certificateId ? 'edit' : 'create'" :width="820" :z-index="zIndex"
+    :loading="isPanelImport ? panelStatus.loading : detailLoading"
+    :confirm-loading="isPanelImport ? panelStatus.importing : saving"
+    :ok-text="isPanelImport ? panelStatus.okText : undefined" :hide-ok="isPanelImport ? !panelStatus.canImport : false"
+    @update:open="emit('update:open', $event)" @ok="save">
     <a-form layout="vertical">
-      <fs-form-section title="基本信息">
-        <a-form-item label="证书名称" required>
-          <a-input v-model:value="form.name" placeholder="" />
-        </a-form-item>
-        <a-form-item label="备注">
-          <a-textarea
-            v-model:value="form.remark"
-            placeholder="可选"
-            :auto-size="{ minRows: 1, maxRows: 6 }"
-          />
-        </a-form-item>
-      </fs-form-section>
+      <template v-if="!isPanelImport">
+        <fs-form-section title="基本信息">
+          <a-form-item label="证书名称" required>
+            <a-input v-model:value="form.name" placeholder="" />
+          </a-form-item>
+          <a-form-item label="备注">
+            <a-textarea v-model:value="form.remark" placeholder="可选" :auto-size="{ minRows: 1, maxRows: 6 }" />
+          </a-form-item>
+        </fs-form-section>
 
-      <fs-form-section
-        title="到期前通知"
-        description="到期前 7 天每日会通知一次"
-      >
-        <template #extra>
-          <a-switch v-model:checked="form.expiry_notify_enabled" />
-        </template>
-        <a-form-item v-if="form.expiry_notify_enabled" label="通知通道" required>
-          <a-select
-            v-model:value="form.expiry_notify_channel_ids"
-            mode="multiple"
-            placeholder="选择已配置的通知通道"
-            allow-clear
-            option-filter-prop="label"
-            style="width: 100%"
-          >
-            <a-select-option
-              v-for="ch in channels"
-              :key="ch.id"
-              :value="ch.id"
-              :label="ch.name"
-              :disabled="!ch.enabled"
-            >
-              {{ ch.name }}（{{ channelTypeLabel(ch.channel_type) }}）
-            </a-select-option>
-          </a-select>
-          <p class="fs-hint is-inline">请先在「系统设置 → 通知通道」中配置邮件等通道。</p>
-        </a-form-item>
-      </fs-form-section>
+        <fs-form-section title="到期前通知" description="到期前 7 天每日会通知一次">
+          <template #extra>
+            <a-switch v-model:checked="form.expiry_notify_enabled" />
+          </template>
+          <a-form-item v-if="form.expiry_notify_enabled" label="通知通道" required>
+            <a-select v-model:value="form.expiry_notify_channel_ids" mode="multiple" placeholder="选择已配置的通知通道"
+              allow-clear option-filter-prop="label" style="width: 100%">
+              <a-select-option v-for="ch in channels" :key="ch.id" :value="ch.id" :label="ch.name"
+                :disabled="!ch.enabled">
+                {{ ch.name }}（{{ channelTypeLabel(ch.channel_type) }}）
+              </a-select-option>
+            </a-select>
+            <p class="fs-hint is-inline">请先在「系统设置 → 通知通道」中配置邮件等通道。</p>
+          </a-form-item>
+        </fs-form-section>
+      </template>
 
-      <fs-form-section title="证书内容" description="支持粘贴 PEM 文本或上传文件">
-         <a-tabs v-model:activeKey="importMode">
+      <fs-form-section :title="isPanelImport ? undefined : '证书内容'"
+        :description="isPanelImport ? undefined : '支持粘贴 PEM 文本或上传文件'">
+        <a-tabs v-model:activeKey="importMode">
           <a-tab-pane key="paste" tab="粘贴内容">
             <a-form-item label="证书 (PEM)" required>
-              <a-textarea
-                v-model:value="form.cert_content"
-                :rows="6"
-                placeholder="-----BEGIN CERTIFICATE-----"
-                class="fs-code-textarea"
-              />
+              <a-textarea v-model:value="form.cert_content" :rows="6" placeholder="-----BEGIN CERTIFICATE-----"
+                class="fs-code-textarea" />
             </a-form-item>
             <a-form-item label="密钥 (KEY)" required>
-              <a-textarea
-                v-model:value="form.key_content"
-                :rows="6"
-                placeholder="-----BEGIN PRIVATE KEY-----"
-                class="fs-code-textarea"
-              />
+              <a-textarea v-model:value="form.key_content" :rows="6" placeholder="-----BEGIN PRIVATE KEY-----"
+                class="fs-code-textarea" />
             </a-form-item>
           </a-tab-pane>
           <a-tab-pane key="upload" tab="上传文件">
             <a-form-item label="证书文件 (.pem / .crt)" required>
-              <a-upload
-                :before-upload="onCertFile"
-                :max-count="1"
-                :file-list="certFileList"
-                @remove="clearCertFile"
-              >
+              <a-upload :before-upload="onCertFile" :max-count="1" :file-list="certFileList" @remove="clearCertFile">
                 <a-button>选择证书文件</a-button>
               </a-upload>
             </a-form-item>
             <a-form-item label="私钥文件 (.key / .pem)" required>
-              <a-upload
-                :before-upload="onKeyFile"
-                :max-count="1"
-                :file-list="keyFileList"
-                @remove="clearKeyFile"
-              >
+              <a-upload :before-upload="onKeyFile" :max-count="1" :file-list="keyFileList" @remove="clearKeyFile">
                 <a-button>选择私钥文件</a-button>
               </a-upload>
             </a-form-item>
             <p v-if="certificateId" class="fs-hint">未选择新文件时，将保留当前证书内容。</p>
+          </a-tab-pane>
+          <a-tab-pane v-if="!certificateId" key="baota" tab="从宝塔导入">
+            <panel-import-form v-if="importMode === 'baota'" ref="panelImportRef" kind="certificates" provider="baota"
+              @status="onPanelStatus" @imported="onPanelImported" @close="emit('update:open', false)" />
+          </a-tab-pane>
+          <a-tab-pane v-if="!certificateId" key="onepanel" tab="从 1Panel 导入">
+            <panel-import-form v-if="importMode === 'onepanel'" ref="panelImportRef" kind="certificates"
+              provider="onepanel" @status="onPanelStatus" @imported="onPanelImported"
+              @close="emit('update:open', false)" />
           </a-tab-pane>
         </a-tabs>
       </fs-form-section>
@@ -105,11 +75,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { message, type UploadProps } from "ant-design-vue";
 import { api } from "@/api";
 import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
+import PanelImportForm, { type PanelImportStatus } from "@/components/PanelImportForm.vue";
 
 export interface CertificateSaved {
   id: number;
@@ -151,12 +122,24 @@ const props = withDefaults(
 const emit = defineEmits<{
   "update:open": [boolean];
   saved: [cert: CertificateSaved];
+  imported: [];
 }>();
 
 const detailLoading = ref(false);
 const saving = ref(false);
-const importMode = ref<"paste" | "upload">("paste");
+const importMode = ref<"paste" | "upload" | "baota" | "onepanel">("paste");
+const panelImportRef = ref<{ submit: () => Promise<void> } | null>(null);
+const panelStatus = reactive<PanelImportStatus>({
+  canImport: false,
+  okText: "导入",
+  importing: false,
+  loading: false,
+});
 const channels = ref<NotificationChannelItem[]>([]);
+
+const isPanelImport = computed(
+  () => !props.certificateId && (importMode.value === "baota" || importMode.value === "onepanel"),
+);
 
 const form = reactive({
   name: "",
@@ -303,7 +286,20 @@ function notifyPayload() {
   };
 }
 
+function onPanelStatus(status: PanelImportStatus) {
+  Object.assign(panelStatus, status);
+}
+
+function onPanelImported() {
+  emit("update:open", false);
+  emit("imported");
+}
+
 async function save() {
+  if (isPanelImport.value) {
+    await panelImportRef.value?.submit();
+    return;
+  }
   if (!form.name.trim()) {
     message.warning("请填写证书名称");
     return;

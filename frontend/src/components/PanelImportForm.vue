@@ -1,13 +1,6 @@
 <template>
-  <fs-form-drawer :open="open" :title="drawerTitle" :subtitle="connection?.name" mode="create" :width="820"
-    :loading="loading" :confirm-loading="importing" :ok-text="okText" :hide-ok="!canImport"
-    @update:open="emit('update:open', $event)" @ok="submit">
-    <a-tabs v-model:activeKey="activeProvider" class="panel-import-tabs" @change="onTabChange">
-      <a-tab-pane key="baota" tab="从宝塔导入" />
-      <a-tab-pane key="onepanel" tab="从 1Panel 导入" />
-    </a-tabs>
-
-    <a-empty v-if="!tabConnections.length" class="panel-import-empty" description="暂未添加面板集成">
+  <a-spin :spinning="loading">
+    <a-empty v-if="!tabConnections.length" class="panel-import-empty" :description="emptyDescription">
       <a-button type="primary" @click="goPanelSettings">去添加</a-button>
     </a-empty>
 
@@ -18,7 +11,7 @@
         </a-form-item>
       </fs-form-section>
 
-      <fs-form-section title="选择站点">
+      <fs-form-section :title="kind === 'sites' ? '选择站点' : '选择证书'">
         <a-table size="small" row-key="key" :columns="tableColumns" :data-source="items" :pagination="false"
           :row-selection="rowSelection" :scroll="{ y: 420 }">
           <template #bodyCell="{ column, record }">
@@ -46,23 +39,28 @@
 
       <a-alert v-if="kind === 'sites' && connection?.same_server" type="info" show-icon
           style="margin-bottom: 12px" message="同服务器导入：回源默认 host.docker.internal，80/443 会纠正为 8080/4343，并关闭内容缓冲。" />
-
     </template>
-  </fs-form-drawer>
+  </a-spin>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import { api } from "@/api";
-import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import OriginHostInput from "@/components/OriginHostInput.vue";
 import type { PanelConnectionRow } from "@/components/PanelConnectionsCard.vue";
 
 export type PanelImportKind = "sites" | "certificates";
-type PanelProvider = "baota" | "onepanel";
+export type PanelProvider = "baota" | "onepanel";
+
+export interface PanelImportStatus {
+  canImport: boolean;
+  okText: string;
+  importing: boolean;
+  loading: boolean;
+}
 
 interface PreviewItem {
   key: string;
@@ -78,13 +76,14 @@ interface PreviewItem {
 }
 
 const props = defineProps<{
-  open: boolean;
   kind: PanelImportKind;
+  provider: PanelProvider;
 }>();
 
 const emit = defineEmits<{
-  "update:open": [boolean];
   imported: [];
+  close: [];
+  status: [status: PanelImportStatus];
 }>();
 
 const router = useRouter();
@@ -94,16 +93,14 @@ const items = ref<PreviewItem[]>([]);
 const selectedKeys = ref<string[]>([]);
 const originHost = ref("host.docker.internal");
 const connections = ref<PanelConnectionRow[]>([]);
-const activeProvider = ref<PanelProvider>("baota");
 const connectionId = ref<number | null>(null);
-const bootstrapping = ref(false);
 
-const drawerTitle = computed(() =>
-  props.kind === "sites" ? "从其他面板导入站点" : "从其他面板导入证书",
+const emptyDescription = computed(() =>
+  props.provider === "baota" ? "暂未添加宝塔账号" : "暂未添加 1Panel 账号",
 );
 
 const tabConnections = computed(() =>
-  connections.value.filter((item) => item.provider === activeProvider.value && item.enabled),
+  connections.value.filter((item) => item.provider === props.provider && item.enabled),
 );
 
 const connection = computed(
@@ -161,6 +158,15 @@ function clearPreview() {
   selectedKeys.value = [];
 }
 
+function emitStatus() {
+  emit("status", {
+    canImport: canImport.value,
+    okText: okText.value,
+    importing: importing.value,
+    loading: loading.value,
+  });
+}
+
 async function loadConnections() {
   try {
     const resp = await api.get<PanelConnectionRow[]>("/api/v1/panel-connections");
@@ -206,23 +212,15 @@ async function applyTab() {
 }
 
 async function bootstrap() {
-  bootstrapping.value = true;
   loading.value = true;
-  activeProvider.value = "baota";
   connectionId.value = null;
   clearPreview();
   try {
     await loadConnections();
     await applyTab();
   } finally {
-    bootstrapping.value = false;
     if (!connection.value) loading.value = false;
   }
-}
-
-function onTabChange() {
-  if (bootstrapping.value) return;
-  void applyTab();
 }
 
 function onAccountChange(id: number) {
@@ -231,7 +229,7 @@ function onAccountChange(id: number) {
 }
 
 function goPanelSettings() {
-  emit("update:open", false);
+  emit("close");
   router.push({ path: "/settings", query: { tab: "panels" } });
 }
 
@@ -265,33 +263,21 @@ async function submit() {
       message.success(parts.join("，"));
     }
     emit("imported");
-    emit("update:open", false);
   } finally {
     importing.value = false;
   }
 }
 
-watch(
-  () => props.open,
-  (open) => {
-    if (open) void bootstrap();
-  },
-);
+watch([canImport, okText, importing, loading], emitStatus, { immediate: true });
+
+onMounted(() => {
+  void bootstrap();
+});
+
+defineExpose({ submit });
 </script>
 
 <style scoped>
-.hint {
-  margin-top: -8px;
-  margin-bottom: 12px;
-  font-size: 12px;
-  color: var(--fs-text-secondary);
-  line-height: 1.5;
-}
-
-.panel-import-tabs {
-  margin-bottom: 8px;
-}
-
 .panel-import-empty {
   padding: 48px 0 24px;
 }

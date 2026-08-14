@@ -162,9 +162,13 @@
       :title="drawerTitle"
       :subtitle="drawerSubtitle"
       :mode="drawerMode"
-      :confirm-loading="saving"
+      :width="extraCreateTabs.length ? 820 : undefined"
+      :loading="extraCreateTabActive ? extraCreateFooter?.loading : false"
+      :confirm-loading="extraCreateTabActive ? !!extraCreateFooter?.confirmLoading : saving"
+      :ok-text="extraCreateTabActive ? (extraCreateFooter?.okText || '导入') : undefined"
+      :hide-ok="extraCreateTabActive ? !!extraCreateFooter?.hideOk : false"
       :json-content="drawerMode === 'view' && props.showViewJson ? recordJson : undefined"
-      @ok="save"
+      @ok="onDrawerOk"
     >
       <a-form layout="vertical">
          <a-tabs
@@ -180,6 +184,17 @@
               :mode="drawerMode"
               :enabled-loading="drawerEnabledToggling"
               :on-enabled-persist="persistDrawerEnabled"
+            />
+          </a-tab-pane>
+          <a-tab-pane
+            v-for="tab in extraCreateTabs"
+            :key="tab.key"
+            :tab="tab.tab"
+          >
+            <slot
+              v-if="createFormTab === tab.key"
+              name="create-tab-extra"
+              :tab-key="tab.key"
             />
           </a-tab-pane>
           <a-tab-pane key="import" tab="JSON 导入">
@@ -274,12 +289,20 @@ const props = withDefaults(
       mode: FormDrawerMode,
     ) => Record<string, any> | Promise<Record<string, any>>;
     canDelete?: (row: Record<string, any>) => boolean;
+    extraCreateTabs?: { key: string; tab: string }[];
+    extraCreateFooter?: {
+      okText?: string;
+      hideOk?: boolean;
+      confirmLoading?: boolean;
+      loading?: boolean;
+    };
   }>(),
   { duplicatable: false, detailActions: false, embedded: false, showViewJson: true, createLabel: "新增", showCreate: true },
 );
 
 const emit = defineEmits<{
   mutated: [];
+  "extra-create-ok": [];
 }>();
 
 function notifyMutated() {
@@ -308,7 +331,7 @@ const pageSize = ref(20);
 const total = ref(0);
 const togglingId = ref<number | null>(null);
 const drawerEnabledToggling = ref(false);
-const createFormTab = ref<"form" | "import">("form");
+const createFormTab = ref("form");
 const filterValues = reactive<Record<string, unknown>>({});
 const sortField = ref(props.defaultSort?.field);
 const sortOrder = ref<"asc" | "desc" | undefined>(props.defaultSort?.order);
@@ -329,6 +352,14 @@ const recordJson = computed(() => JSON.stringify(record, null, 2));
 
 const showJsonImport = computed(
   () => drawerMode.value === "create" || drawerMode.value === "copy",
+);
+
+const extraCreateTabs = computed(() =>
+  drawerMode.value === "create" ? props.extraCreateTabs ?? [] : [],
+);
+
+const extraCreateTabActive = computed(() =>
+  extraCreateTabs.value.some((tab) => tab.key === createFormTab.value),
 );
 
 const hasEnabledColumn = computed(() => props.columns.some((c) => c.key === "enabled"));
@@ -636,6 +667,18 @@ async function deleteCurrent() {
   await remove(id);
 }
 
+function closeDrawer() {
+  drawerOpen.value = false;
+}
+
+function onDrawerOk() {
+  if (extraCreateTabActive.value) {
+    emit("extra-create-ok");
+    return;
+  }
+  void save();
+}
+
 async function save() {
   saving.value = true;
   try {
@@ -705,6 +748,7 @@ async function persistDrawerEnabled(enabled: boolean) {
 defineExpose({
   fetchList,
   openCreate,
+  closeDrawer,
   openViewById: (id: number) => openDrawerById(id, "view"),
   openEditById: (id: number) => openDrawerById(id, "edit"),
 });

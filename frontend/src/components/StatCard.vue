@@ -169,24 +169,45 @@ const deltaPrefix = computed(() => {
 
 @media (max-width: 767px) {
   .stat-card-top {
-  align-items: baseline;
-}
-.stat-card-icon{
-  background: transparent;
-  width: 24px;
-  height: 24px;
-}
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 
-.stat-card-lg .stat-card-value {
-  font-size: 20px;
-}
+  .stat-card-main {
+    display: contents;
+  }
 
-.stat-card-label{
-  font-size: 12px;
-}
-.stat-card-delta{
-  font-size: 11px;
-}
+  .stat-card-value {
+    flex: 1;
+    min-width: 0;
+  }
 
+  .stat-card-icon {
+    background: transparent;
+    width: 24px;
+    height: 24px;
+  }
+
+  .stat-card-lg .stat-card-value {
+    font-size: 20px;
+  }
+
+  .stat-card-label {
+    flex: 1 0 100%;
+    width: 100%;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+
+  .stat-card-delta {
+    font-size: 11px;
+  }
+
+  .stat-card-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 </style>
