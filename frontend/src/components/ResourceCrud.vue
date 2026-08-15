@@ -142,19 +142,20 @@
             </a-dropdown>
           </div>
         </div>
-        <div v-if="total > pageSize" class="mobile-pagination">
-          <a-pagination
-            v-model:current="page"
-            :total="total"
-            :page-size="pageSize"
-            :size="paginationSize"
-            :show-total="(t: number) => `共 ${t} 条`"
-            :show-size-changer="total > DEFAULT_PAGE_SIZE"
-            :page-size-options="DEFAULT_PAGE_SIZE_OPTIONS"
-            @change="onMobilePageChange"
-          />
-        </div>
       </a-spin>
+    </div>
+
+    <div v-if="($slots.list || isMobile) && total > pageSize" class="mobile-pagination">
+      <a-pagination
+        v-model:current="page"
+        :total="total"
+        :page-size="pageSize"
+        :size="paginationSize"
+        :show-total="(t: number) => `共 ${t} 条`"
+        :show-size-changer="total > DEFAULT_PAGE_SIZE"
+        :page-size-options="DEFAULT_PAGE_SIZE_OPTIONS"
+        @change="onMobilePageChange"
+      />
     </div>
 
     <fs-form-drawer
@@ -902,6 +903,13 @@ watch(
   display: flex;
   justify-content: center;
   padding: 8px 0;
+}
+
+@media (min-width: 768px) {
+  .mobile-pagination {
+    justify-content: flex-end;
+    padding-top: 16px;
+  }
 }
 
 .resource-crud__create-tabs {

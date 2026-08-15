@@ -13,74 +13,72 @@
     </a-tabs>
     <fs-slide-transition :transition-key="activeTab">
       <template v-if="activeTab === 'account'">
-  <a-card class="settings-panel" :bordered="false">
-          <a-row :gutter="[24, 24]">
-            <a-col :xs="24" :xl="12">
-              <section class="settings-section">
-                <div class="section-head">
-                  <div class="section-title">修改用户名</div>
-                  <div class="section-desc">修改后需使用新用户名登录，系统会自动刷新当前会话凭证。</div>
-                </div>
-                <a-form layout="vertical" class="section-form">
-                  <a-form-item label="当前用户名">
-                    <a-input :value="accountProfile.username" disabled />
-                  </a-form-item>
-                  <a-form-item label="新用户名" required>
-                    <a-input
-                      v-model:value="usernameForm.new_username"
-                      placeholder="3-64 位，支持字母、数字、下划线、连字符"
-                      autocomplete="username"
-                    />
-                  </a-form-item>
-                  <a-form-item label="当前密码" required>
-                    <a-input-password
-                      v-model:value="usernameForm.current_password"
-                      placeholder="验证身份"
-                      autocomplete="current-password"
-                    />
-                  </a-form-item>
-                  <a-button type="primary" :loading="usernameSaving" @click="saveUsername">
-                    保存用户名
-                  </a-button>
-                </a-form>
-              </section>
-            </a-col>
-            <a-col :xs="24" :xl="12">
-              <section class="settings-section">
-                <div class="section-head">
-                  <div class="section-title">修改密码</div>
-                  <div class="section-desc">保存后当前会话仍有效，下次登录请使用新密码。</div>
-                </div>
-                <a-form layout="vertical" class="section-form">
-                  <a-form-item label="当前密码" required>
-                    <a-input-password
-                      v-model:value="passwordForm.current_password"
-                      placeholder="请输入当前密码"
-                      autocomplete="current-password"
-                    />
-                  </a-form-item>
-                  <a-form-item label="新密码" required>
-                    <a-input-password
-                      v-model:value="passwordForm.new_password"
-                      placeholder="至少 6 位"
-                      autocomplete="new-password"
-                    />
-                  </a-form-item>
-                  <a-form-item label="确认新密码" required>
-                    <a-input-password
-                      v-model:value="passwordForm.confirm_password"
-                      placeholder="再次输入新密码"
-                      autocomplete="new-password"
-                    />
-                  </a-form-item>
-                  <a-button type="primary" :loading="passwordSaving" @click="savePassword">
-                    保存密码
-                  </a-button>
-                </a-form>
-              </section>
-            </a-col>
-          </a-row>
-        </a-card>
+        <a-row :gutter="[16, 16]">
+          <a-col :xs="24" :xl="12">
+            <a-card class="settings-panel" :bordered="false">
+              <div class="section-head">
+                <div class="section-title">修改用户名</div>
+                <div class="section-desc">修改后需使用新用户名登录，系统会自动刷新当前会话凭证。</div>
+              </div>
+              <a-form layout="vertical" class="section-form">
+                <a-form-item label="当前用户名">
+                  <a-input :value="accountProfile.username" disabled />
+                </a-form-item>
+                <a-form-item label="新用户名" required>
+                  <a-input
+                    v-model:value="usernameForm.new_username"
+                    placeholder="3-64 位，支持字母、数字、下划线、连字符"
+                    autocomplete="username"
+                  />
+                </a-form-item>
+                <a-form-item label="当前密码" required>
+                  <a-input-password
+                    v-model:value="usernameForm.current_password"
+                    placeholder="验证身份"
+                    autocomplete="current-password"
+                  />
+                </a-form-item>
+                <a-button type="primary" :loading="usernameSaving" @click="saveUsername">
+                  保存用户名
+                </a-button>
+              </a-form>
+            </a-card>
+          </a-col>
+          <a-col :xs="24" :xl="12">
+            <a-card class="settings-panel" :bordered="false">
+              <div class="section-head">
+                <div class="section-title">修改密码</div>
+                <div class="section-desc">保存后当前会话仍有效，下次登录请使用新密码。</div>
+              </div>
+              <a-form layout="vertical" class="section-form">
+                <a-form-item label="当前密码" required>
+                  <a-input-password
+                    v-model:value="passwordForm.current_password"
+                    placeholder="请输入当前密码"
+                    autocomplete="current-password"
+                  />
+                </a-form-item>
+                <a-form-item label="新密码" required>
+                  <a-input-password
+                    v-model:value="passwordForm.new_password"
+                    placeholder="至少 6 位"
+                    autocomplete="new-password"
+                  />
+                </a-form-item>
+                <a-form-item label="确认新密码" required>
+                  <a-input-password
+                    v-model:value="passwordForm.confirm_password"
+                    placeholder="再次输入新密码"
+                    autocomplete="new-password"
+                  />
+                </a-form-item>
+                <a-button type="primary" :loading="passwordSaving" @click="savePassword">
+                  保存密码
+                </a-button>
+              </a-form>
+            </a-card>
+          </a-col>
+        </a-row>
       </template>
       <template v-if="activeTab === 'display'">
 <a-card class="settings-panel" :bordered="false">
@@ -186,10 +184,10 @@
         </a-card>
       </template>
       <template v-if="activeTab === 'response-pages'">
-<a-card class="settings-panel" :bordered="false">
-          <section class="settings-section page-section">
+        <div class="settings-stack">
+          <a-card class="settings-panel" :bordered="false">
             <div class="section-head">
-              <div class="section-title">全局防护页面</div>
+              <div class="section-title">全局拦截页面</div>
               <div class="section-desc">
                 命中拦截动作时返回的完整 HTML 页面，支持变量占位。保存后立即下发到引擎。
               </div>
@@ -223,9 +221,9 @@
                 </a-button>
               </a-form-item>
             </a-form>
-          </section>
+          </a-card>
 
-          <section class="settings-section page-section">
+          <a-card class="settings-panel" :bordered="false">
             <div class="section-head">
               <div class="section-title">全局验证页页脚</div>
               <div class="section-desc">
@@ -253,8 +251,8 @@
                 </a-button>
               </a-form-item>
             </a-form>
-          </section>
-        </a-card>
+          </a-card>
+        </div>
       </template>
       <template v-if="activeTab === 'logging'">
 <a-card class="settings-panel" :bordered="false">
@@ -1212,6 +1210,7 @@ onUnmounted(() => {
 }
 
 .settings-panel {
+  height: 100%;
   background: var(--fs-bg-surface);
   border-radius: var(--fs-radius-md);
   box-shadow: var(--fs-shadow-sm);
@@ -1226,12 +1225,10 @@ onUnmounted(() => {
   margin-top: 0 !important;
 }
 
-.settings-section {
-  height: 100%;
-  padding: 16px;
-  border: 1px solid #7d7d7d1f;
-  border-radius: 10px;
-  background: #8585850a;
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .section-head {
@@ -1346,10 +1343,6 @@ onUnmounted(() => {
 
 .debug-headers code {
   font-size: 12px;
-}
-
-.page-section + .page-section {
-  margin-top: 16px;
 }
 
 .code-textarea :deep(textarea) {

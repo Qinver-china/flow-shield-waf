@@ -1,6 +1,8 @@
 # env / secrets
 .env
 *.local
+docker-compose.override.yml
+docker-compose.extra-ports.yml
 
 # python
 backend/build/

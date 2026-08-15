@@ -115,10 +115,14 @@ services:
       LOG_COLLECTOR_BOT_CATALOG_REFRESH_SEC: ${LOG_COLLECTOR_BOT_CATALOG_REFRESH_SEC:-30}
       LOG_LEVEL: ${LOG_LEVEL:-WARNING}
       WAF_ORIGIN_HOST_GATEWAY: ${WAF_ORIGIN_HOST_GATEWAY:-172.17.0.1}
+      # 0 = FastAPI 走 unix socket，不占用 TCP 8000
+      BACKEND_PORT: "0"
     ports:
       - "${WAF_HTTP_PORT:-80}:80"
       - "${WAF_HTTPS_PORT:-443}:443"
       - "${PANEL_PORT:-9000}:9000"
+      # 额外站点端口：在 .env 写 EXTRA_LISTEN_PORTS=8080,8443，由 scripts/sync-compose-ports.sh
+      # 生成 docker-compose.override.yml（已 gitignore）。不要手改该文件。
     volumes:
       - app_data:/data
       - ./deploy/geoip:/etc/nginx/geoip:ro

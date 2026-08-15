@@ -116,11 +116,27 @@ class DisplaySettingsOut(DisplaySettings):
     timezone_options: list[TimezoneOption] = Field(
         default_factory=lambda: [TimezoneOption.model_validate(opt) for opt in TIMEZONE_OPTIONS]
     )
+    backend_port: int = 8000
+    panel_port: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "DisplaySettingsOut":
+    def from_row(
+        cls,
+        row,
+        *,
+        backend_port: int | None = None,
+        panel_port: int | None = None,
+    ) -> "DisplaySettingsOut":
+        from app.services.listen_ports import port_from_url
+
         tz = getattr(row, "timezone", None) or DEFAULT_TIMEZONE
         if tz not in ALLOWED_TIMEZONES:
             tz = DEFAULT_TIMEZONE
         panel_url = getattr(row, "panel_public_url", None) or ""
-        return cls(timezone=tz, panel_public_url=panel_url)
+        resolved_panel = panel_port if panel_port is not None else port_from_url(panel_url, implicit=False)
+        return cls(
+            timezone=tz,
+            panel_public_url=panel_url,
+            backend_port=backend_port if backend_port is not None else 8000,
+            panel_port=resolved_panel,
+        )

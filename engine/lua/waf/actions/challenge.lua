@@ -225,13 +225,13 @@ body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0f17
 .box{text-align:center}.spin{width:44px;height:44px;border:4px solid #334155;border-top-color:#38bdf8;border-radius:50%;margin:0 auto 20px;animation:s 1s linear infinite}
 @keyframes s{to{transform:rotate(360deg)}}
 p{color:#94a3b8}
-.brand{margin-top:24px;color:#64748b;font-size:13px}.brand b{color:#38bdf8}
+.brand{margin-top:24px;color:#64748b;font-size:13px}.brand b,.brand a{color:#38bdf8}.brand a{text-decoration:none}.brand a:hover{text-decoration:underline}
 </style></head>
 <body><div class="box">
 <div class="spin"></div>
 <h3>正在验证您的浏览器…</h3>
 <p>请稍候，此过程为自动完成，用于防护恶意流量。</p>
-<div class="brand">由 <b>流盾WAF</b> · Flow Shield WAF 提供防护</div>
+<div class="brand">由 <a href="https://fswaf.top" target="_blank" rel="noopener noreferrer"><b>流盾WAF</b></a> · Flow Shield WAF 提供防护</div>
 <script>
 ]]
 
@@ -417,7 +417,7 @@ h3{margin-top:0}.q{font-size:26px;font-weight:700;margin:18px 0;color:#38bdf8}
 input{width:100%%;padding:12px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:16px;box-sizing:border-box}
 button{margin-top:16px;width:100%%;padding:12px;border:0;border-radius:8px;background:#38bdf8;color:#04121f;font-weight:700;font-size:16px;cursor:pointer}
 .tip{color:#94a3b8;font-size:13px;margin-top:14px}
-.brand{margin-top:18px;color:#64748b;font-size:12px}.brand b{color:#38bdf8}
+.brand{margin-top:18px;color:#64748b;font-size:12px}.brand b,.brand a{color:#38bdf8}.brand a{text-decoration:none}.brand a:hover{text-decoration:underline}
 </style></head>
 <body><div class="card">
 <h3>请完成数学计算验证</h3>
@@ -528,7 +528,7 @@ h3{margin:0 0 8px;text-align:center}
 .tile-float{position:absolute;top:0;left:0;z-index:2;touch-action:none;cursor:grab;filter:drop-shadow(0 2px 6px rgba(0,0,0,.4))}
 .tile-float:active{cursor:grabbing}
 .drag-tip{color:#64748b;font-size:13px;text-align:center;margin:12px 0 0;min-height:18px}
-.brand{margin-top:16px;color:#64748b;font-size:12px;text-align:center}.brand b{color:#38bdf8}
+.brand{margin-top:16px;color:#64748b;font-size:12px;text-align:center}.brand b,.brand a{color:#38bdf8}.brand a{text-decoration:none}.brand a:hover{text-decoration:underline}
 .loading{text-align:center;color:#94a3b8;padding:40px 0}
 #panel{min-height:240px}
 </style></head>

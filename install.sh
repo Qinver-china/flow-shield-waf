@@ -7,7 +7,7 @@
 # 官网：https://fswaf.top
 set -euo pipefail
 
-FSWAF_VERSION="1.0.3"
+FSWAF_VERSION="1.0.4"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.top"
@@ -718,17 +718,8 @@ prompt_cn_mirror_choice() {
     return 0
   fi
 
-  echo
-  ui_line t
-  ui_row "${c_bold}网络加速${c_reset}"
-  ui_line m
-  ui_row "拉取镜像与构建应用时需访问 Docker Hub、PyPI、npm 等外网资源。"
-  ui_row "服务器在${c_bold}国内${c_reset}建议启用国内加速；在${c_bold}海外${c_reset}请选直连。"
-  ui_line b
-  echo
-
   while true; do
-    read_tty "是否启用国内加速？国内服务器请输入 Y，海外服务器请输入 N： " ans
+    read_tty "是否启用国内镜像源加速？国内服务器请输入 Y，海外服务器请输入 N： " ans
     case "$ans" in
     Y | y)
       FSWAF_CN_MIRROR=1
@@ -1692,6 +1683,10 @@ PANEL_PORT=${panel_port}
 
 WAF_HTTP_PORT=80
 WAF_HTTPS_PORT=443
+# 站点自定义额外监听的访问端口，例如：888,8443
+# 不要手改 docker-compose.override.yml，只改本变量后执行：
+# bash scripts/sync-compose-ports.sh && docker compose up -d
+EXTRA_LISTEN_PORTS=
 WAF_ORIGIN_HOST_GATEWAY=${gateway}
 EOF
 
@@ -2162,6 +2157,9 @@ print_docker_pull_hint() {
 # ---------------------------------------------------------------------------
 
 compose() {
+  if [[ -f ./scripts/sync-compose-ports.sh ]]; then
+    bash ./scripts/sync-compose-ports.sh || true
+  fi
   run_compose "$@"
 }
 

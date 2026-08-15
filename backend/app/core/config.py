@@ -60,8 +60,8 @@ class Settings(BaseSettings):
     engine_reload_url: str = "http://engine/.waf/reload"
     # Loopback health probe (same host as OpenResty in app/baota layouts).
     engine_health_url: str = "http://127.0.0.1/waf-health"
-    # Public panel URL for links in emails (no trailing slash).
-    # Configured in system settings (waf_setting.panel_public_url).
+    # Local-dev FastAPI TCP port (vite proxy). Docker uses a unix socket; set 0 to skip.
+    backend_port: int = 8000
     # Docker host gateway when origin_host is localhost (container localhost != host).
     waf_origin_host_gateway: str = "172.17.0.1"
     # slide captcha static assets (backgrounds + tiles); Docker 默认 /data/slide_captcha

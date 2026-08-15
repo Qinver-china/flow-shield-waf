@@ -1,5 +1,5 @@
 <template>
-  <a-config-provider :theme="antdTheme">
+  <a-config-provider :locale="zhCN" :theme="antdTheme">
     <div class="fs-app-root">
       <div class="fs-app-bg" aria-hidden="true" />
       <div class="fs-app-shell">
@@ -12,6 +12,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
+import zhCN from "ant-design-vue/es/locale/zh_CN";
 import { useThemeStore } from "@/stores/theme";
 import { buildAntdTheme } from "@/utils/antdTheme";
 

@@ -82,6 +82,7 @@ diff .env.example .env || true
 | 变量 | 说明 |
 |------|------|
 | `CORS_ORIGINS` | 面板跨域来源 |
+| `EXTRA_LISTEN_PORTS` | 站点自定义访问端口（逗号分隔，如 `9088`）；改后执行 `bash scripts/sync-compose-ports.sh && docker compose up -d`。不要手改 `docker-compose.override.yml` |
 | `CLICKHOUSE_*` | 日志库连接（Compose 内通常用默认值即可） |
 
 > **不要**在更新时随意修改 `JWT_SECRET`、`WAF_CHALLENGE_SECRET`，否则已签发 Token 与挑战 Cookie 会失效。

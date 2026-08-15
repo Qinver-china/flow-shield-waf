@@ -3,10 +3,29 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
+from app.api.internal.slide_captcha import _ensure_local
 from app.services.slide_captcha.service import SlideCaptchaService
+
+
+def test_ensure_local_allows_unix_socket_peer():
+    _ensure_local(SimpleNamespace(client=None))
+    _ensure_local(SimpleNamespace(client=SimpleNamespace(host="")))
+
+
+def test_ensure_local_allows_loopback():
+    _ensure_local(SimpleNamespace(client=SimpleNamespace(host="127.0.0.1")))
+    _ensure_local(SimpleNamespace(client=SimpleNamespace(host="::1")))
+
+
+def test_ensure_local_rejects_remote_tcp():
+    with pytest.raises(HTTPException) as exc:
+        _ensure_local(SimpleNamespace(client=SimpleNamespace(host="8.8.8.8")))
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

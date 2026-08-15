@@ -17,6 +17,13 @@ from app.services.site_domains import (
     normalize_domain_list,
     site_domain_list,
 )
+from app.services.listen_ports import (
+    DEFAULT_HTTP_PORTS,
+    DEFAULT_HTTPS_PORTS,
+    load_listen_ports,
+    parse_listen_ports,
+    validate_custom_listen_ports,
+)
 
 
 def _coerce_domains_input(data: object) -> object:
@@ -37,6 +44,9 @@ class SiteBase(BaseModel):
     client_ip_source: str = CLIENT_IP_SOURCE_DEFAULT
     listen_http: bool = True
     listen_https: bool = False
+    custom_listen_ports: bool = False
+    listen_http_ports: list[int] = Field(default_factory=lambda: list(DEFAULT_HTTP_PORTS))
+    listen_https_ports: list[int] = Field(default_factory=lambda: list(DEFAULT_HTTPS_PORTS))
     force_https: bool = False
     disable_content_buffering: bool = False
     certificate_id: int | None = None
@@ -103,6 +113,11 @@ class SiteBase(BaseModel):
             raise ValueError("客户端 IP 获取方式无效")
         return v
 
+    @field_validator("listen_http_ports", "listen_https_ports", mode="before")
+    @classmethod
+    def _normalize_listen_ports(cls, value: object) -> list[int]:
+        return parse_listen_ports(value)
+
     @model_validator(mode="after")
     def _check_listen_and_certs(self) -> "SiteBase":
         if not self.listen_http and not self.listen_https:
@@ -111,6 +126,13 @@ class SiteBase(BaseModel):
             raise ValueError("开启 HTTPS 时必须选择 SSL 证书")
         if self.force_https and not self.listen_https:
             raise ValueError("开启强制 HTTPS 需要先开启 HTTPS 监听")
+        validate_custom_listen_ports(
+            custom_listen_ports=self.custom_listen_ports,
+            listen_http=self.listen_http,
+            listen_https=self.listen_https,
+            http_ports=self.listen_http_ports,
+            https_ports=self.listen_https_ports,
+        )
         return self
 
 
@@ -128,6 +150,9 @@ class SiteUpdate(BaseModel):
     client_ip_source: str | None = None
     listen_http: bool | None = None
     listen_https: bool | None = None
+    custom_listen_ports: bool | None = None
+    listen_http_ports: list[int] | None = None
+    listen_https_ports: list[int] | None = None
     force_https: bool | None = None
     disable_content_buffering: bool | None = None
     certificate_id: int | None = None
@@ -153,6 +178,13 @@ class SiteUpdate(BaseModel):
         if isinstance(value, list):
             return normalize_domain_list(value)
         raise ValueError("域名格式无效")
+
+    @field_validator("listen_http_ports", "listen_https_ports", mode="before")
+    @classmethod
+    def _normalize_listen_ports(cls, value: object) -> list[int] | None:
+        if value is None:
+            return None
+        return parse_listen_ports(value)
 
     @field_validator("block_page_status_code")
     @classmethod
@@ -212,6 +244,15 @@ class SiteOut(SiteBase):
                 "client_ip_source": getattr(data, "client_ip_source", CLIENT_IP_SOURCE_DEFAULT),
                 "listen_http": data.listen_http,
                 "listen_https": data.listen_https,
+                "custom_listen_ports": getattr(data, "custom_listen_ports", False),
+                "listen_http_ports": load_listen_ports(
+                    getattr(data, "listen_http_ports", None),
+                    default=DEFAULT_HTTP_PORTS,
+                ),
+                "listen_https_ports": load_listen_ports(
+                    getattr(data, "listen_https_ports", None),
+                    default=DEFAULT_HTTPS_PORTS,
+                ),
                 "force_https": getattr(data, "force_https", False),
                 "disable_content_buffering": getattr(data, "disable_content_buffering", False),
                 "certificate_id": data.certificate_id,

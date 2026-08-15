@@ -25,6 +25,9 @@ class Site(Base, TimestampMixin):
     client_ip_source: Mapped[str] = mapped_column(String(32), default="remote_addr")
     listen_http: Mapped[bool] = mapped_column(Boolean, default=True)
     listen_https: Mapped[bool] = mapped_column(Boolean, default=False)
+    custom_listen_ports: Mapped[bool] = mapped_column(Boolean, default=False)
+    listen_http_ports: Mapped[str] = mapped_column(String(255), default="80")
+    listen_https_ports: Mapped[str] = mapped_column(String(255), default="443")
     force_https: Mapped[bool] = mapped_column(Boolean, default=False)
     disable_content_buffering: Mapped[bool] = mapped_column(Boolean, default=False)
     certificate_id: Mapped[int | None] = mapped_column(

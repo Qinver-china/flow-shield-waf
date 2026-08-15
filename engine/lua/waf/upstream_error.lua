@@ -22,7 +22,9 @@ body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;backgr
 h1{font-size:100px;margin:0;color:#f87171;font-weight:700;letter-spacing:.04em;line-height:1}
 h2{font-size:22px;font-weight:600;margin:16px 0 0;color:#e2e8f0}
 .brand{margin-top:40px;color:#64748b;font-size:13px;letter-spacing:.5px}
-.brand b{color:#38bdf8}
+.brand b,.brand a{color:#38bdf8}
+.brand a{text-decoration:none}
+.brand a:hover{text-decoration:underline}
 </style>
 </head>
 <body>

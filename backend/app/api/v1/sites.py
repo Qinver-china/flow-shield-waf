@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,6 +20,7 @@ from app.constants.response_pages import DEFAULT_BLOCK_PAGE_HTML, DEFAULT_BLOCK_
 from app.constants.traffic_windows import TRAFFIC_BASELINE_WINDOWS_SEC
 from app.core.db import get_db
 from app.core.redis import get_redis
+from app.core.config import settings
 from app.models import Certificate, Site, User
 from app.schemas.common import ok
 from app.schemas.site import SiteCreate, SiteOption, SiteOut, SiteUpdate
@@ -29,6 +30,17 @@ from app.constants.traffic_windows import TRAFFIC_WINDOW_LABELS
 from app.services.logging.query_clickhouse import stats_sites_24h_compare
 from app.services.traffic_intel.windows import label as traffic_window_label
 from app.services.site_domains import apply_domains_to_site, ensure_domains_available
+from app.services.listen_ports import (
+    DEFAULT_HTTP_PORTS,
+    DEFAULT_HTTPS_PORTS,
+    load_listen_ports,
+    load_other_enabled_sites,
+    port_from_url,
+    ports_for_db,
+    reserved_listen_port_messages,
+    validate_cross_site_listen_ports,
+    validate_custom_listen_ports,
+)
 from app.services.traffic_intel.constants import REDIS_SNAPSHOT_KEY
 from app.services.traffic_intel.store.baseline_mysql import BaselineStore
 from app.services.traffic_intel.timezone import get_traffic_timezone
@@ -62,6 +74,62 @@ def _reload_warn_message(result) -> str:
 def _validate_listen(*, listen_http: bool, listen_https: bool) -> None:
     if not listen_http and not listen_https:
         raise HTTPException(status_code=400, detail="至少需要开启 HTTP 或 HTTPS 监听")
+
+
+def _reserved_listen_ports(request: Request) -> dict[int, str]:
+    return reserved_listen_port_messages(
+        panel_port=port_from_url(waf_settings.infer_panel_public_url(request), implicit=False),
+        api_port=settings.backend_port,
+    )
+
+
+def _validate_custom_listen(
+    *,
+    custom_listen_ports: bool,
+    listen_http: bool,
+    listen_https: bool,
+    http_ports: list[int],
+    https_ports: list[int],
+    reserved: dict[int, str] | None = None,
+) -> None:
+    try:
+        validate_custom_listen_ports(
+            custom_listen_ports=custom_listen_ports,
+            listen_http=listen_http,
+            listen_https=listen_https,
+            http_ports=http_ports,
+            https_ports=https_ports,
+            reserved=reserved,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+async def _validate_cross_site_listen(
+    db: AsyncSession,
+    *,
+    enabled: bool,
+    custom_listen_ports: bool,
+    listen_http: bool,
+    listen_https: bool,
+    http_ports: list[int],
+    https_ports: list[int],
+    exclude_site_id: int | None = None,
+) -> None:
+    if not enabled:
+        return
+    others = await load_other_enabled_sites(db, exclude_site_id=exclude_site_id)
+    try:
+        validate_cross_site_listen_ports(
+            custom_listen_ports=custom_listen_ports,
+            listen_http=listen_http,
+            listen_https=listen_https,
+            http_ports=http_ports,
+            https_ports=https_ports,
+            other_sites=others,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _validate_https(
@@ -270,6 +338,7 @@ async def get_site(
 @router.post("")
 async def create_site(
     body: SiteCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -283,9 +352,26 @@ async def create_site(
         certificate_id=body.certificate_id,
         force_https=body.force_https,
     )
+    _validate_custom_listen(
+        custom_listen_ports=body.custom_listen_ports,
+        listen_http=body.listen_http,
+        listen_https=body.listen_https,
+        http_ports=body.listen_http_ports,
+        https_ports=body.listen_https_ports,
+        reserved=_reserved_listen_ports(request),
+    )
+    await _validate_cross_site_listen(
+        db,
+        enabled=body.enabled,
+        custom_listen_ports=body.custom_listen_ports,
+        listen_http=body.listen_http,
+        listen_https=body.listen_https,
+        http_ports=body.listen_http_ports,
+        https_ports=body.listen_https_ports,
+    )
     if body.certificate_id:
         await _ensure_certificate(db, body.certificate_id)
-    payload = body.model_dump()
+    payload = ports_for_db(body.model_dump())
     domains = payload.pop("domains")
     _normalize_response_pages(payload)
     site = Site(**payload)
@@ -304,6 +390,7 @@ async def create_site(
 async def update_site(
     site_id: int,
     body: SiteUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -328,6 +415,37 @@ async def update_site(
         certificate_id=certificate_id,
         force_https=force_https,
     )
+    custom_listen_ports = data.get(
+        "custom_listen_ports", getattr(site, "custom_listen_ports", False)
+    )
+    http_ports = data.get("listen_http_ports")
+    if http_ports is None:
+        http_ports = load_listen_ports(
+            getattr(site, "listen_http_ports", None), default=DEFAULT_HTTP_PORTS
+        )
+    https_ports = data.get("listen_https_ports")
+    if https_ports is None:
+        https_ports = load_listen_ports(
+            getattr(site, "listen_https_ports", None), default=DEFAULT_HTTPS_PORTS
+        )
+    _validate_custom_listen(
+        custom_listen_ports=bool(custom_listen_ports),
+        listen_http=listen_http,
+        listen_https=listen_https,
+        http_ports=http_ports,
+        https_ports=https_ports,
+        reserved=_reserved_listen_ports(request),
+    )
+    await _validate_cross_site_listen(
+        db,
+        enabled=bool(data.get("enabled", site.enabled)),
+        custom_listen_ports=bool(custom_listen_ports),
+        listen_http=listen_http,
+        listen_https=listen_https,
+        http_ports=http_ports,
+        https_ports=https_ports,
+        exclude_site_id=site.id,
+    )
     if certificate_id:
         await _ensure_certificate(db, certificate_id)
 
@@ -349,6 +467,8 @@ async def update_site(
     ):
         if key in merged:
             data[key] = merged[key]
+
+    data = ports_for_db(data)
 
     for k, v in data.items():
         setattr(site, k, v)

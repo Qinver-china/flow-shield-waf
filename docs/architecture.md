@@ -16,7 +16,7 @@
 
 | 进程 | 说明 |
 | --- | --- |
-| backend | FastAPI，127.0.0.1:8000 |
+| backend | FastAPI，unix socket（面板 Nginx 反代） |
 | worker | 日志消费 / 留存清理 |
 | engine | OpenResty WAF，:80 / :443 |
 | panel | Nginx 静态面板 + API 反代，:9000 |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from sqlalchemy import select
@@ -17,10 +18,33 @@ _DOMAIN_RE = re.compile(
 )
 
 
+def _canonical_ip_host(value: str) -> str | None:
+    """Return a Host-header-compatible IP, or None if value is not an IP.
+
+    IPv6 is wrapped in brackets so nginx ``server_name`` and Lua site lookup
+    match the Host header (e.g. ``[2001:db8::1]``).
+    """
+    raw = value.strip()
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    if "%" in raw:
+        return None
+    try:
+        ip = ipaddress.ip_address(raw)
+    except ValueError:
+        return None
+    if isinstance(ip, ipaddress.IPv6Address):
+        return f"[{ip.compressed}]"
+    return str(ip)
+
+
 def validate_domain(value: str) -> str:
     domain = value.strip().lower().rstrip(".")
     if not domain:
         raise ValueError("域名不能为空")
+    ip_host = _canonical_ip_host(domain)
+    if ip_host is not None:
+        return ip_host
     if "*" in domain:
         # Only allow nginx-style leftmost wildcard: *.example.com
         if not domain.startswith("*.") or domain.count("*") != 1:
@@ -28,7 +52,7 @@ def validate_domain(value: str) -> str:
         if domain == "*." or domain.count(".") < 2:
             raise ValueError(f"通配符域名格式无效：{value}")
     if not _DOMAIN_RE.match(domain):
-        raise ValueError(f"域名格式无效：{value}")
+        raise ValueError(f"域名或 IP 格式无效：{value}")
     return domain
 
 

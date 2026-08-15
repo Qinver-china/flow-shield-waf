@@ -8,9 +8,13 @@ router = APIRouter(prefix="/internal/waf/slide-captcha", tags=["internal"])
 
 
 def _ensure_local(request: Request) -> None:
-    client = request.client.host if request.client else ""
-    if client not in {"127.0.0.1", "::1"}:
-        raise HTTPException(status_code=403, detail="forbidden")
+    """Allow loopback TCP and Unix-socket peers (uvicorn sets client=None on UDS)."""
+    if request.client is None:
+        return
+    host = request.client.host or ""
+    if host in {"127.0.0.1", "::1", ""}:
+        return
+    raise HTTPException(status_code=403, detail="forbidden")
 
 
 @router.get("/issue")

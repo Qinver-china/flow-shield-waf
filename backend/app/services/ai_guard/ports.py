@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.fields import field_map, validate_condition
 from app.models import Exception_, IpList, RateLimit, Rule, Site
 from app.models.exception import SCOPES
@@ -20,13 +21,21 @@ from app.schemas.ip_list import IpListCreate
 from app.schemas.rate_limit import RateLimitCreate
 from app.schemas.rule import RuleCreate
 from app.schemas.site import SiteCreate
-from app.services import nginx_conf, rule_sync
+from app.services import nginx_conf, rule_sync, waf_settings
 from app.services.ai_guard.log_query import build_log_query_from_tool_args
 from app.services.logging.query_clickhouse import query_logs as ch_query_logs
 from app.services.logging.query_clickhouse import stats_by_dimension, stats_overview
 from app.services.notifications.channels import send_via_channel
 from app.services.site_scope import apply_site_scope
 from app.services.site_domains import site_domain_list
+from app.services.listen_ports import (
+    load_other_enabled_sites,
+    port_from_url,
+    ports_for_db,
+    reserved_listen_port_messages,
+    validate_cross_site_listen_ports,
+    validate_custom_listen_ports,
+)
 
 log = logging.getLogger("waf.ai_guard.ports")
 _FIELDS = field_map()
@@ -267,13 +276,34 @@ class AiResourceWriter:
             raise ValueError("开启 HTTPS 时必须选择 SSL 证书")
         if body.force_https and not body.listen_https:
             raise ValueError("开启强制 HTTPS 需要先开启 HTTPS 监听")
+        validate_custom_listen_ports(
+            custom_listen_ports=body.custom_listen_ports,
+            listen_http=body.listen_http,
+            listen_https=body.listen_https,
+            http_ports=body.listen_http_ports,
+            https_ports=body.listen_https_ports,
+            reserved=reserved_listen_port_messages(
+                panel_port=port_from_url(await waf_settings.get_panel_public_url(db), implicit=False),
+                api_port=settings.backend_port,
+            ),
+        )
+        if body.enabled:
+            others = await load_other_enabled_sites(db)
+            validate_cross_site_listen_ports(
+                custom_listen_ports=body.custom_listen_ports,
+                listen_http=body.listen_http,
+                listen_https=body.listen_https,
+                http_ports=body.listen_http_ports,
+                https_ports=body.listen_https_ports,
+                other_sites=others,
+            )
         if body.certificate_id:
             from app.models import Certificate
 
             cert = await db.get(Certificate, body.certificate_id)
             if cert is None:
                 raise ValueError("所选证书不存在")
-        payload_data = body.model_dump()
+        payload_data = ports_for_db(body.model_dump())
         domains = payload_data.pop("domains")
         from app.services.site_domains import apply_domains_to_site
 

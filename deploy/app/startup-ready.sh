@@ -14,7 +14,7 @@ for i in $(seq 1 "$WAIT_MAX"); do
   panel_ok=0
   engine_ok=0
 
-  curl -fsS "http://127.0.0.1:8000/health" >/dev/null 2>&1 && backend_ok=1
+  curl -fsS --unix-socket /run/flowshield/backend.sock http://localhost/health >/dev/null 2>&1 && backend_ok=1
   curl -fsS "http://127.0.0.1:9000/health" >/dev/null 2>&1 && panel_ok=1
   curl -fsS "http://127.0.0.1/waf-health" >/dev/null 2>&1 && engine_ok=1
 

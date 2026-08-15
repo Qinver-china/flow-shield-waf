@@ -25,6 +25,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_site_extra_domains(conn)
     await _ensure_site_client_ip_source(conn)
     await _ensure_site_force_https(conn)
+    await _ensure_site_custom_listen_ports(conn)
     await _ensure_site_disable_content_buffering(conn)
     await _ensure_resource_block_page_columns(conn)
     await _drop_legacy_bot_columns(conn)
@@ -35,6 +36,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_ai_guard_policy_custom_prompt(conn)
     await _ensure_rule_remark(conn)
     await _ensure_certificate_expiry_notify(conn)
+    await _upgrade_default_response_page_brand_links(conn)
 
 
 async def _ensure_resource_block_page_columns(conn) -> None:
@@ -104,6 +106,33 @@ async def _ensure_site_force_https(conn) -> None:
         text("ALTER TABLE site ADD COLUMN force_https BOOLEAN NOT NULL DEFAULT 0")
     )
     log.info("schema patch applied: site.force_https")
+
+
+async def _ensure_site_custom_listen_ports(conn) -> None:
+    if not await _column_exists(conn, "site", "custom_listen_ports"):
+        await conn.execute(
+            text(
+                "ALTER TABLE site "
+                "ADD COLUMN custom_listen_ports BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        log.info("schema patch applied: site.custom_listen_ports")
+    if not await _column_exists(conn, "site", "listen_http_ports"):
+        await conn.execute(
+            text(
+                "ALTER TABLE site "
+                "ADD COLUMN listen_http_ports VARCHAR(255) NOT NULL DEFAULT '80'"
+            )
+        )
+        log.info("schema patch applied: site.listen_http_ports")
+    if not await _column_exists(conn, "site", "listen_https_ports"):
+        await conn.execute(
+            text(
+                "ALTER TABLE site "
+                "ADD COLUMN listen_https_ports VARCHAR(255) NOT NULL DEFAULT '443'"
+            )
+        )
+        log.info("schema patch applied: site.listen_https_ports")
 
 
 async def _ensure_site_disable_content_buffering(conn) -> None:
@@ -287,3 +316,26 @@ async def _ensure_certificate_expiry_notify_channel_ids(conn) -> None:
                 "OR expiry_notify_channel_ids = 'null'"
             )
         )
+
+
+async def _upgrade_default_response_page_brand_links(conn) -> None:
+    """Add official-site links to unmodified default block page / captcha footer HTML."""
+    if not await _column_exists(conn, "waf_setting", "block_page_html"):
+        return
+    from app.constants.response_pages import (
+        DEFAULT_BLOCK_PAGE_HTML,
+        DEFAULT_CAPTCHA_FOOTER_HTML,
+        LEGACY_DEFAULT_BLOCK_PAGE_HTML,
+        LEGACY_DEFAULT_CAPTCHA_FOOTER_HTML,
+    )
+
+    result = await conn.execute(
+        text("UPDATE waf_setting SET block_page_html = :new WHERE block_page_html = :old"),
+        {"new": DEFAULT_BLOCK_PAGE_HTML, "old": LEGACY_DEFAULT_BLOCK_PAGE_HTML},
+    )
+    footer_result = await conn.execute(
+        text("UPDATE waf_setting SET captcha_footer_html = :new WHERE captcha_footer_html = :old"),
+        {"new": DEFAULT_CAPTCHA_FOOTER_HTML, "old": LEGACY_DEFAULT_CAPTCHA_FOOTER_HTML},
+    )
+    if result.rowcount or footer_result.rowcount:
+        log.info("schema patch applied: default response pages now link to official site")

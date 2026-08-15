@@ -37,7 +37,7 @@
               <a-col :md="14" :lg="14" :xs="24">
                 <a-form-item label="域名" required>
                   <a-select v-model:value="record.domains" mode="tags" :open="false" :token-separators="[',', ' ', ';']"
-                    placeholder="输入域名后回车，支持输入多个域名，支持通配符" style="width: 100%" :disabled="readonly" />
+                    placeholder="输入域名后回车，支持多个，支持泛解析" style="width: 100%" :disabled="readonly" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -130,58 +130,91 @@
           </fs-form-section>
           <fs-form-section title="高级配置">
             <div class="fs-switch-row">
-              <div>
-                <div><b>关闭内容缓冲</b></div>
-                <div class="fs-muted">如果源站在本机，建议开启此开关</div>
+              <div class="fs-switch-row-header">
+                <div>
+                  <div><b>修改访问监控端口</b></div>
+                  <div class="fs-muted">系统默认监控 80 和 443 端口，如您的访问端口不同，可以在此修改</div>
+                </div>
+                <a-switch v-model:checked="record.custom_listen_ports" :disabled="readonly"
+                  @change="(checked) => onCustomListenPortsChange(record, checked)" />
               </div>
-              <a-switch v-model:checked="record.disable_content_buffering" :disabled="readonly" />
+              <div class="fs-switch-row-body" v-if="record.custom_listen_ports">
+                <a-row :gutter="16">
+                  <a-col :md="12" :lg="12" :xs="24">
+                    <a-form-item label="HTTP 访问端口">
+                      <a-select v-model:value="record.listen_http_ports" mode="tags" :open="false"
+                        :token-separators="[]" placeholder="输入端口后回车，可添加多个" style="width: 100%"
+                        :disabled="readonly || !record.listen_http" @inputKeyDown="onListenPortKeyDown"
+                        @change="(v) => { record.listen_http_ports = sanitizeListenPorts(v) }" />
+                    </a-form-item>
+                  </a-col>
+                  <a-col :md="12" :lg="12" :xs="24">
+                    <a-form-item label="HTTPS 访问端口">
+                      <a-select v-model:value="record.listen_https_ports" mode="tags" :open="false"
+                        :token-separators="[]" placeholder="输入端口后回车，可添加多个" style="width: 100%"
+                        :disabled="readonly || !record.listen_https" @inputKeyDown="onListenPortKeyDown"
+                        @change="(v) => { record.listen_https_ports = sanitizeListenPorts(v) }" />
+                    </a-form-item>
+                  </a-col>
+                </a-row>
+                <a-alert type="warning" show-icon style="margin-bottom: 0px"
+                  message="修改的端口请确保已在docker中映射，且已在防火墙和安全组放行" />
+              </div>
             </div>
             <div class="fs-switch-row">
-              <div>
-                <div><b>自定义拦截页面</b></div>
-                <div class="fs-muted">为此站点自定义拦截页面内容，优先级低于规则/黑名单/限速的专属配置</div>
+              <div class="fs-switch-row-header">
+                <div>
+                  <div><b>关闭内容缓冲</b></div>
+                  <div class="fs-muted">如果源站在本机，启用后可降低内存占用</div>
+                </div>
+                <a-switch v-model:checked="record.disable_content_buffering" :disabled="readonly" />
               </div>
-              <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
             </div>
-            <template v-if="record.custom_block_page_enabled">
-              <a-form-item label="响应状态码">
-                <a-select v-model:value="record.block_page_status_code" :disabled="readonly"
-                  :options="blockStatusOptions" />
-              </a-form-item>
-              <a-form-item label="HTML 内容">
-                <a-textarea v-model:value="record.block_page_html" :rows="10" :disabled="readonly"
-                  class="fs-code-textarea" />
-              </a-form-item>
-            </template>
             <div class="fs-switch-row">
-              <div>
-                <div><b>自定义人机验证页脚</b></div>
-                <div class="fs-muted">为此站点自定义人机验证页面的底部页脚显示内容，优先级低于规则/黑名单/限速的专属配置</div>
+              <div class="fs-switch-row-header">
+                <div>
+                  <div><b>自定义拦截页面</b></div>
+                  <div class="fs-muted">为此站点自定义拦截页面内容，优先级低于规则/黑名单/限速的专属配置</div>
+                </div>
+                <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
               </div>
-              <a-switch v-model:checked="record.custom_captcha_footer_enabled" :disabled="readonly" />
+              <div class="fs-switch-row-body" v-if="record.custom_block_page_enabled">
+                <a-form-item label="响应状态码">
+                  <a-select v-model:value="record.block_page_status_code" :disabled="readonly"
+                    :options="blockStatusOptions" />
+                </a-form-item>
+                <a-form-item label="HTML 内容">
+                  <a-textarea v-model:value="record.block_page_html" :rows="10" :disabled="readonly"
+                    class="fs-code-textarea" />
+                </a-form-item>
+              </div>
             </div>
-            <template v-if="record.custom_captcha_footer_enabled">
-              <a-form-item label="页脚 HTML">
-                <a-textarea v-model:value="record.captcha_footer_html" :rows="4" :disabled="readonly"
-                  class="fs-code-textarea" />
-              </a-form-item>
-            </template>
+            <div class="fs-switch-row">
+              <div class="fs-switch-row-header">
+                <div>
+                  <div><b>自定义人机验证页脚</b></div>
+                  <div class="fs-muted">为此站点自定义人机验证页面的底部页脚显示内容，优先级低于规则/黑名单/限速的专属配置</div>
+                </div>
+                <a-switch v-model:checked="record.custom_captcha_footer_enabled" :disabled="readonly" />
+              </div>
+              <div class="fs-switch-row-body" v-if="record.custom_captcha_footer_enabled">
+                <a-form-item label="页脚 HTML">
+                  <a-textarea v-model:value="record.captcha_footer_html" :rows="4" :disabled="readonly"
+                    class="fs-code-textarea" />
+                </a-form-item>
+              </div>
+            </div>
           </fs-form-section>
         </div>
       </template>
       <template #create-tab-extra="{ tabKey }">
-        <panel-import-form
-          ref="panelImportRef"
-          kind="sites"
-          :provider="tabKey === 'onepanel' ? 'onepanel' : 'baota'"
-          @status="onPanelStatus"
-          @imported="onPanelImported"
-          @close="crudRef?.closeDrawer()"
-        />
+        <panel-import-form ref="panelImportRef" kind="sites" :provider="tabKey === 'onepanel' ? 'onepanel' : 'baota'"
+          @status="onPanelStatus" @imported="onPanelImported" @close="crudRef?.closeDrawer()" />
       </template>
     </resource-crud>
 
-    <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100" @saved="onCertImported" @imported="onCertPanelImported" />
+    <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100" @saved="onCertImported"
+      @imported="onCertPanelImported" />
   </page-shell>
 </template>
 
@@ -203,6 +236,7 @@ import { useLogNavigation } from "@/composables/useLogNavigation";
 import { invalidateSiteOptions } from "@/composables/useSiteOptions";
 import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
 import { api } from "@/api";
+import { useAppSettingsStore } from "@/stores/appSettings";
 import type { BatchConfig } from "@/types/batch";
 import type { ResourceColumn, ResourceFilterField } from "@/types/resourceList";
 
@@ -225,6 +259,7 @@ interface CertOption {
 }
 
 const { goToLogs } = useLogNavigation();
+const appSettings = useAppSettingsStore();
 const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const certOptions = ref<CertOption[]>([]);
 const certDrawerOpen = ref(false);
@@ -291,6 +326,25 @@ const certSelectOptions = computed(() =>
   })),
 );
 
+function currentBrowserPort(): number | null {
+  const raw = window.location.port;
+  if (raw && /^\d+$/.test(raw)) return Number(raw);
+  return null;
+}
+
+function reservedListenPortMessages(): Record<number, string> {
+  const reserved: Record<number, string> = {};
+  const apiPort = Number(appSettings.backendPort) || 0;
+  const panelPort = currentBrowserPort() || Number(appSettings.panelPort) || 0;
+  if (apiPort) {
+    reserved[apiPort] = `端口 ${apiPort} 为系统内部接口，请换一个`;
+  }
+  if (panelPort && !reserved[panelPort]) {
+    reserved[panelPort] = `端口 ${panelPort} 为管理面板占用，请换一个`;
+  }
+  return reserved;
+}
+
 const defaultRecord = () => ({
   name: "",
   domains: [] as string[],
@@ -301,6 +355,9 @@ const defaultRecord = () => ({
   client_ip_source: "remote_addr",
   listen_http: true,
   listen_https: false,
+  custom_listen_ports: false,
+  listen_http_ports: [80] as number[],
+  listen_https_ports: [443] as number[],
   force_https: false,
   disable_content_buffering: false,
   certificate_id: null as number | null,
@@ -329,6 +386,34 @@ function preparePayload(row: Record<string, any>) {
   if (row.force_https && (!row.listen_https || !row.certificate_id)) {
     throw new Error("开启强制 HTTPS 需要先开启 HTTPS 监听并选择 SSL 证书");
   }
+  row.listen_http_ports = sanitizeListenPorts(row.listen_http_ports);
+  row.listen_https_ports = sanitizeListenPorts(row.listen_https_ports);
+  if (row.custom_listen_ports) {
+    if (row.listen_http && !row.listen_http_ports.length) {
+      throw new Error("开启自定义访问端口后，HTTP 监听至少需要一个端口");
+    }
+    if (row.listen_https && !row.listen_https_ports.length) {
+      throw new Error("开启自定义访问端口后，HTTPS 监听至少需要一个端口");
+    }
+    if (row.listen_http && row.listen_https) {
+      const overlap = row.listen_http_ports.filter((port: number) =>
+        row.listen_https_ports.includes(port)
+      );
+      if (overlap.length) {
+        throw new Error(`HTTP 与 HTTPS 不能使用相同端口：${overlap.join("、")}`);
+      }
+    }
+    const reserved = reservedListenPortMessages();
+    const used = [
+      ...(row.listen_http ? row.listen_http_ports : []),
+      ...(row.listen_https ? row.listen_https_ports : []),
+    ];
+    for (const port of used) {
+      if (reserved[port]) throw new Error(reserved[port]);
+    }
+  }
+  if (!row.listen_http_ports.length) row.listen_http_ports = [80];
+  if (!row.listen_https_ports.length) row.listen_https_ports = [443];
   if (!row.listen_https || !row.certificate_id) {
     row.force_https = false;
   }
@@ -344,6 +429,54 @@ function preparePayload(row: Record<string, any>) {
 async function loadCertOptions() {
   const resp = await api.get<CertOption[]>("/api/v1/certificates/options");
   certOptions.value = resp.data;
+}
+
+function sanitizeListenPorts(values: unknown): number[] {
+  const list = Array.isArray(values) ? values : [];
+  const seen = new Set<number>();
+  const ports: number[] = [];
+  for (const item of list) {
+    const text = String(item ?? "").trim();
+    if (!/^\d+$/.test(text)) continue;
+    const port = Number(text);
+    if (port < 1 || port > 65535 || seen.has(port)) continue;
+    seen.add(port);
+    ports.push(port);
+  }
+  return ports;
+}
+
+function onListenPortKeyDown(e: KeyboardEvent) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (
+    e.key === "Backspace" ||
+    e.key === "Delete" ||
+    e.key === "Tab" ||
+    e.key === "Enter" ||
+    e.key === "Escape" ||
+    e.key === "ArrowLeft" ||
+    e.key === "ArrowRight" ||
+    e.key === "Home" ||
+    e.key === "End"
+  ) {
+    return;
+  }
+  if (e.key.length === 1 && /^\d$/.test(e.key)) return;
+  e.preventDefault();
+}
+
+function onCustomListenPortsChange(record: Record<string, any>, checked: boolean) {
+  if (!checked) return;
+  if (!sanitizeListenPorts(record.listen_http_ports).length) {
+    record.listen_http_ports = [80];
+  } else {
+    record.listen_http_ports = sanitizeListenPorts(record.listen_http_ports);
+  }
+  if (!sanitizeListenPorts(record.listen_https_ports).length) {
+    record.listen_https_ports = [443];
+  } else {
+    record.listen_https_ports = sanitizeListenPorts(record.listen_https_ports);
+  }
 }
 
 function openImportCert(record: Record<string, any>) {
@@ -527,7 +660,8 @@ onUnmounted(() => {
   .site-card-grid {
     grid-template-columns: 1fr;
   }
-  .site-listen-port{
+
+  .site-listen-port {
     margin-bottom: 6px;
   }
 }

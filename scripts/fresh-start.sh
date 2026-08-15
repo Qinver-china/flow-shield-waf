@@ -5,6 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+echo "==> 同步额外端口映射..."
+bash "$ROOT/scripts/sync-compose-ports.sh"
+
 echo "==> 停止并删除容器与数据卷..."
 docker compose down -v --remove-orphans
 

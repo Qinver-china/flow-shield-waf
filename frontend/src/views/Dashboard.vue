@@ -33,7 +33,7 @@
 
     <h3 class="fs-section-title"><appstore-outlined /> 防护配置</h3>
     <a-row :gutter="[12, 12]">
-      <a-col v-for="item in resourceCards" :key="item.key" :xs="12" :sm="8" :md="6" :xl="4">
+      <a-col v-for="item in resourceCards" :key="item.key" :xs="12" :sm="8" :md="8" :xl="4">
         <stat-card clickable :label="item.label" :value="item.value" :sub="item.sub" :color="item.color"
           :icon="item.icon" @click="onResourceCardClick(item.key)" />
       </a-col>

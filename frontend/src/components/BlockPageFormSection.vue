@@ -1,11 +1,13 @@
 <template>
   <fs-form-section :title="title">
     <div class="fs-switch-row">
-      <div>
-        <div><b>{{ switchLabel }}</b></div>
-        <div class="fs-muted" v-if="description">{{ description }}</div>
+      <div class="fs-switch-row-header">
+        <div>
+          <div><b>{{ switchLabel }}</b></div>
+          <div class="fs-muted" v-if="description">{{ description }}</div>
+        </div>
+        <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
       </div>
-      <a-switch v-model:checked="record.custom_block_page_enabled" :disabled="readonly" />
     </div>
     <template v-if="record.custom_block_page_enabled">
       <a-form-item label="响应状态码">

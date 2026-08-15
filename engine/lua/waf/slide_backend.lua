@@ -4,30 +4,42 @@ local cjson = require "cjson.safe"
 
 local _M = {}
 
-local function backend_host()
-    local url = os.getenv("WAF_BACKEND_URL") or "http://127.0.0.1:8000"
+-- WAF_BACKEND_URL: unix:/path (Docker) or http://host:port (local uvicorn).
+local function backend_target()
+    local url = os.getenv("WAF_BACKEND_URL")
+    if not url or url == "" then
+        url = "http://127.0.0.1:8000"
+    end
+    if url:sub(1, 5) == "unix:" then
+        return { unix = url, host = "localhost" }
+    end
     local host, port = url:match("^https?://([^:/]+):?(%d*)")
     if not host then
-        return "127.0.0.1", 8000
+        return { host = "127.0.0.1", port = 8000 }
     end
     port = tonumber(port)
     if not port or port == 0 then
         port = 80
     end
-    return host, port
+    return { host = host, port = port }
 end
 
 local function request_once(method, path, body, extra_headers)
-    local host, port = backend_host()
+    local target = backend_target()
     local sock = ngx.socket.tcp()
     sock:settimeout(5000)
-    local ok, err = sock:connect(host, port)
+    local ok, err
+    if target.unix then
+        ok, err = sock:connect(target.unix)
+    else
+        ok, err = sock:connect(target.host, target.port)
+    end
     if not ok then
         return nil, err or "connect failed"
     end
 
     local headers = {
-        ["Host"] = host,
+        ["Host"] = target.host,
         ["Connection"] = "close",
         ["Accept"] = "application/json",
     }

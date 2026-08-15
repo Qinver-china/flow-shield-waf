@@ -189,6 +189,8 @@ cp .env.example .env  #仅首次安装拷贝
 | `REDIS_PASSWORD` | Redis 密码 |
 | `JWT_SECRET` | JWT 签名密钥（建议长随机串） |
 | `WAF_CHALLENGE_SECRET` | 挑战 Cookie HMAC 密钥（建议长随机串） |
+| `PANEL_PORT` | 管理面板宿主机端口（默认 `9000`） |
+| `EXTRA_LISTEN_PORTS` | 站点自定义访问端口，逗号分隔，如 `9088`（见下方） |
 
 生产环境建议同时设置：
 
@@ -263,7 +265,7 @@ docker compose ps
 
 | 进程 | 端口 | 职责 |
 |------|------|------|
-| backend | 127.0.0.1:8000 | FastAPI API |
+| backend | unix socket | FastAPI API（面板 Nginx 反代，不占用 TCP 8000） |
 | worker | — | 日志消费、预警调度、留存清理 |
 | engine | :80 / :443 | OpenResty WAF 拦截与回源 |
 | panel | :9000 | 管理面板静态资源 + API 反代 |
@@ -298,6 +300,32 @@ python3 scripts/stress_test.py --url http://127.0.0.1 --host your.site.com
 - 对外仅由流盾 WAF 承接 80/443
 
 详见 [`deploy/baota/README.md`](deploy/baota/README.md)。
+
+### 自定义访问端口
+
+默认对外是 **80 / 443**。若网站必须走其它端口，例如访客访问 **9088**、源站也听 **9088**：
+
+1. 在 `.env` 写入（`80` / `443` / 面板端口已映射，不必再写；该文件升级时会保留）：
+
+```bash
+EXTRA_LISTEN_PORTS=9088
+```
+
+2. 同步 Docker 映射并重启（一键安装 / 更新会自动做这一步）：
+
+```bash
+bash scripts/sync-compose-ports.sh && docker compose up -d
+```
+
+不要直接修改 `docker-compose.override.yml`。添加或修改端口只改 `.env` 里的 `EXTRA_LISTEN_PORTS`，再执行上面的命令。该文件由脚本生成，手改会被覆盖。
+
+防火墙 / 安全组同时放行 `9088`。
+
+3. 面板 **站点管理** → 高级 → **修改访问监控端口**：HTTP 端口填 `9088`，HTTP 回源端口也填 `9088`。用 `http://域名:9088` 访问。
+
+> 源站若已在本机占用 9088，不要再映射给流盾（会抢端口）。让流盾继续听 80，只把回源端口填 9088。
+
+完整步骤见官网 [站点配置 · 自定义访问端口](https://fswaf.top/guide/sites#custom-listen-ports)。
 
 ---
 
@@ -382,7 +410,7 @@ docker compose up -d --build   # 或已部署时：docker compose restart app
   ├─ 读/写 ──► Redis（规则版本、限速计数、日志 Stream）
   │
   └─ 配置来源 ◄── app 容器
-                    ├─ FastAPI :8000（写 SQLite、发布 Redis 配置）
+                    ├─ FastAPI unix socket（写 SQLite、发布 Redis 配置）
                     ├─ Worker（消费日志 → ClickHouse、预警）
                     ├─ Panel :9000（Vue 管理界面）
                     └─ SQLite（站点、规则、用户、AI 对话）
@@ -400,7 +428,7 @@ docker compose up -d --build   # 或已部署时：docker compose restart app
 | 模块 | 功能 |
 |------|------|
 | 总览 | 请求量、拦截统计、配置版本、站点概览 |
-| 站点管理 | 域名、回源、HTTP/HTTPS、证书、客户端 IP 获取方式（CDN）、自定义拦截页 |
+| 站点管理 | 域名、回源、HTTP/HTTPS、自定义访问端口、证书、客户端 IP 获取方式（CDN）、自定义拦截页 |
 | 证书管理 | SSL 证书上传与管理 |
 | 自定义规则 | SQL 注入、扫描器等防护规则，支持优先级与五种模式 |
 | 黑名单 / 白名单 | 全局访问控制（黑名单必须配置匹配条件） |
