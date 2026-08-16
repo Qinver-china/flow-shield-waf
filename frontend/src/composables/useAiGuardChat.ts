@@ -79,8 +79,12 @@ export interface UseAiGuardChatOptions {
 /**
  * Shared chat state for the AI Guard page panel and the floating popup.
  * Both UIs must see the same sessions/messages without a page refresh.
+ *
+ * Options are applied per caller. The first `useAiGuardChat()` (often the
+ * always-mounted floating shell with autoLoadSessions=false) must not freeze
+ * init behavior for later surfaces.
  */
-function createAiGuardChat(options?: UseAiGuardChatOptions) {
+function createAiGuardChat() {
   const sessions = ref<ChatSessionRow[]>([]);
   const sessionsLoading = ref(false);
   const sessionId = ref<number | null>(null);
@@ -92,6 +96,45 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
   const streamingAssistantKey = ref<string | null>(null);
   const messageListKey = ref(0);
   let streamAbort: AbortController | null = null;
+  let stayOnNewSession = false;
+  let surfaceCount = 0;
+  let inflightLoad: Promise<void> | null = null;
+  const hooks: {
+    getPreferredSessionId?: () => number | null;
+    onSessionIdChange?: (id: number | null) => void;
+  } = {};
+
+  function applyOptions(options?: UseAiGuardChatOptions) {
+    if (!options) return;
+    if (options.getPreferredSessionId) {
+      hooks.getPreferredSessionId = options.getPreferredSessionId;
+    }
+    if (options.onSessionIdChange) {
+      hooks.onSessionIdChange = options.onSessionIdChange;
+      options.onSessionIdChange(sessionId.value);
+    }
+  }
+
+  function retain() {
+    surfaceCount += 1;
+  }
+
+  function release() {
+    surfaceCount = Math.max(0, surfaceCount - 1);
+    if (surfaceCount === 0) {
+      stopGeneration();
+    }
+  }
+
+  function currentSessionTitle() {
+    const text = messages.value.find((m) => m.role === "user")?.content?.trim();
+    return text ? text.slice(0, 40) : "新对话";
+  }
+
+  function upsertSession(row: ChatSessionRow) {
+    const rest = sessions.value.filter((s) => s.id !== row.id);
+    sessions.value = [row, ...rest];
+  }
 
   function stopGeneration() {
     if (!streamAbort) {
@@ -228,13 +271,33 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
   ];
 
   async function loadSessions() {
+    if (inflightLoad) return inflightLoad;
     sessionsLoading.value = true;
-    try {
-      const res = await api.get<ChatSessionRow[]>("/api/v1/ai-guard/chat/sessions");
-      sessions.value = unwrapApiData(res) || [];
-    } finally {
-      sessionsLoading.value = false;
-    }
+    inflightLoad = (async () => {
+      try {
+        const res = await api.get<ChatSessionRow[]>("/api/v1/ai-guard/chat/sessions");
+        const fetched = unwrapApiData(res);
+        const rows = Array.isArray(fetched) ? [...fetched] : [];
+        if (
+          sessionId.value != null &&
+          !rows.some((s) => s.id === sessionId.value)
+        ) {
+          const existing = sessions.value.find((s) => s.id === sessionId.value);
+          rows.unshift(
+            existing ?? {
+              id: sessionId.value,
+              title: currentSessionTitle(),
+              created_at: new Date().toISOString(),
+            },
+          );
+        }
+        sessions.value = rows;
+      } finally {
+        sessionsLoading.value = false;
+        inflightLoad = null;
+      }
+    })();
+    return inflightLoad;
   }
 
   async function loadMessages(id: number) {
@@ -254,8 +317,8 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
   }
 
   async function restorePreferredSession() {
-    if (sessionId.value != null || sending.value) return;
-    const preferred = options?.getPreferredSessionId?.() ?? null;
+    if (stayOnNewSession || sessionId.value != null || sending.value) return;
+    const preferred = hooks.getPreferredSessionId?.() ?? null;
     const target =
       preferred != null && sessions.value.some((s) => s.id === preferred)
         ? preferred
@@ -266,6 +329,7 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
   }
 
   function newSession() {
+    stayOnNewSession = true;
     sessionId.value = null;
     messages.value = [];
     input.value = "";
@@ -279,6 +343,7 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
       message.warning("请等待当前回复完成");
       return;
     }
+    stayOnNewSession = false;
     sessionId.value = id;
     await loadMessages(id);
   }
@@ -364,7 +429,15 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
 
   function handleStreamEvent(parsed: Record<string, unknown>, assistantMsg: ChatMsg) {
     if (parsed.type === "session") {
-      sessionId.value = Number(parsed.session_id);
+      const id = Number(parsed.session_id);
+      if (!Number.isFinite(id)) return;
+      stayOnNewSession = false;
+      sessionId.value = id;
+      upsertSession({
+        id,
+        title: currentSessionTitle(),
+        created_at: new Date().toISOString(),
+      });
       return;
     }
     if (parsed.type === "step") {
@@ -473,7 +546,6 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
       if (!streamFinished) {
         throw new Error("连接中断，AI 响应未完成");
       }
-      await loadSessions();
       if (sessionId.value != null) {
         await loadMessages(sessionId.value);
       }
@@ -506,6 +578,11 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
       }
       sending.value = false;
       streamingAssistantKey.value = null;
+      try {
+        await loadSessions();
+      } catch {
+        // list refresh is best-effort; stream errors are already surfaced
+      }
     }
   }
 
@@ -533,23 +610,14 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
     }
   }
 
-  if (options?.onSessionIdChange) {
-    watch(sessionId, (id) => options.onSessionIdChange?.(id));
-  }
+  watch(sessionId, (id) => hooks.onSessionIdChange?.(id));
 
-  let initPromise: Promise<void> | null = null;
-
-  function ensureInitialized() {
-    if (options?.autoLoadSessions === false) return Promise.resolve();
-    if (!initPromise) {
-      initPromise = (async () => {
-        await loadSessions();
-        if (options?.restoreLatestSession) {
-          await restorePreferredSession();
-        }
-      })();
+  async function ensureInitialized(callOptions?: UseAiGuardChatOptions) {
+    if (callOptions?.autoLoadSessions === false) return;
+    await loadSessions();
+    if (callOptions?.restoreLatestSession) {
+      await restorePreferredSession();
     }
-    return initPromise;
   }
 
   return {
@@ -583,6 +651,9 @@ function createAiGuardChat(options?: UseAiGuardChatOptions) {
     onPromptClick,
     clearPending,
     ensureInitialized,
+    applyOptions,
+    retain,
+    release,
   };
 }
 
@@ -591,15 +662,16 @@ let sharedChat: ReturnType<typeof createAiGuardChat> | null = null;
 /** Returns the app-wide AI chat instance (page + floating popup share one state). */
 export function useAiGuardChat(options?: UseAiGuardChatOptions) {
   if (!sharedChat) {
-    sharedChat = createAiGuardChat(options);
+    sharedChat = createAiGuardChat();
   }
+  sharedChat.applyOptions(options);
   onMounted(() => {
-    void sharedChat?.ensureInitialized();
+    sharedChat?.retain();
+    void sharedChat?.ensureInitialized(options);
   });
   onUnmounted(() => {
-    // Abort in-flight stream when the last chat surface unmounts; shared state
-    // keeps messages but must not keep reading the network in the background.
-    sharedChat?.stopGeneration();
+    // Abort in-flight stream only when no chat surface remains mounted.
+    sharedChat?.release();
   });
   return sharedChat;
 }

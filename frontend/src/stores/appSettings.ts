@@ -11,6 +11,7 @@ interface DisplaySettingsPayload {
   timezone: string;
   timezone_options: TimezoneOption[];
   panel_public_url: string;
+  acme_account_email?: string | null;
   backend_port?: number;
   panel_port?: number | null;
 }
@@ -20,6 +21,7 @@ export const useAppSettingsStore = defineStore("appSettings", {
     timezone: DEFAULT_TIMEZONE,
     timezoneOptions: [] as TimezoneOption[],
     panelPublicUrl: "",
+    acmeAccountEmail: "",
     backendPort: 0,
     panelPort: null as number | null,
     loaded: false,
@@ -29,6 +31,7 @@ export const useAppSettingsStore = defineStore("appSettings", {
       this.timezone = data.timezone || DEFAULT_TIMEZONE;
       this.timezoneOptions = data.timezone_options || [];
       this.panelPublicUrl = data.panel_public_url || "";
+      this.acmeAccountEmail = data.acme_account_email || "";
       this.backendPort = Number(data.backend_port) || 0;
       this.panelPort = data.panel_port ?? null;
       setAppTimezone(this.timezone);
@@ -38,7 +41,11 @@ export const useAppSettingsStore = defineStore("appSettings", {
       this.applyDisplay(resp.data);
       this.loaded = true;
     },
-    async updateDisplay(payload: { timezone: string; panel_public_url: string }) {
+    async updateDisplay(payload: {
+      timezone: string;
+      panel_public_url: string;
+      acme_account_email?: string | null;
+    }) {
       const resp = await api.put<DisplaySettingsPayload>("/api/v1/settings/display", payload);
       this.applyDisplay({
         ...resp.data,
@@ -50,6 +57,7 @@ export const useAppSettingsStore = defineStore("appSettings", {
       await this.updateDisplay({
         timezone,
         panel_public_url: this.panelPublicUrl || "http://127.0.0.1:9000",
+        acme_account_email: this.acmeAccountEmail || null,
       });
     },
   },

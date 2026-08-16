@@ -23,6 +23,7 @@ dependencies = [
     "openai>=1.40",
     "pi-captcha>=0.0.1",
     "pillow>=10.0",
+    "acme>=2.11,<5",
 ]
 
 [project.optional-dependencies]

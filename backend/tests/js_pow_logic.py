@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 
+BLOCK_SCORE = 80
+
 
 def count_leading_zero_hex(hex_digest: str) -> int:
     n = 0
@@ -24,7 +26,7 @@ def verify_pow(cid: str, seed: str, nonce: int, difficulty: int) -> bool:
     return count_leading_zero_hex(digest) >= difficulty
 
 
-def effective_difficulty(base: int, fp_score: int, *, block_score: int = 60) -> int | None:
+def effective_difficulty(base: int, fp_score: int, *, block_score: int = BLOCK_SCORE) -> int | None:
     if fp_score >= block_score:
         return None
     extra = fp_score // 25

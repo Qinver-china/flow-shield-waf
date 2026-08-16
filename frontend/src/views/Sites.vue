@@ -213,8 +213,9 @@
       </template>
     </resource-crud>
 
-    <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100" @saved="onCertImported"
-      @imported="onCertPanelImported" />
+    <certificate-form-drawer v-model:open="certDrawerOpen" :z-index="1100"
+      :preselect-site-id="certPreselectSiteId" :opened-from-site="Boolean(certSelectRecord)"
+      @saved="onCertImported" @imported="onCertPanelImported" />
   </page-shell>
 </template>
 
@@ -264,6 +265,10 @@ const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const certOptions = ref<CertOption[]>([]);
 const certDrawerOpen = ref(false);
 const certSelectRecord = ref<Record<string, any> | null>(null);
+const certPreselectSiteId = computed(() => {
+  const id = Number(certSelectRecord.value?.id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+});
 const panelImportRef = ref<{ submit: () => Promise<void> } | null>(null);
 const panelImportTabs = [
   { key: "baota", tab: "从宝塔导入" },

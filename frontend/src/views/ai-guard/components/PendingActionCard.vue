@@ -87,7 +87,7 @@ async function confirm(approved: boolean) {
 }
 
 .payload {
-  background: #fafafa;
+  background: var(--fs-bg-muted);
   padding: 8px;
   border-radius: 4px;
   font-size: 12px;

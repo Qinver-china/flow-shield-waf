@@ -6,7 +6,7 @@ source /opt/flowshield/startup-log.sh
 startup_init
 startup_header
 
-mkdir -p /data/engine/conf.d /data/engine/certs /var/log/supervisor /etc/flowshield /etc/nginx/geoip /run/flowshield
+mkdir -p /data/engine/conf.d /data/engine/certs /data/acme/http-01 /var/log/supervisor /etc/flowshield /etc/nginx/geoip /run/flowshield
 rm -f /run/flowshield/backend.sock
 
 startup_step "1/5" "初始化运行环境"

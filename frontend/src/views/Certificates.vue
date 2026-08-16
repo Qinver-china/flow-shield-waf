@@ -1,7 +1,7 @@
 <template>
   <page-shell title="证书管理" description="导入与管理 SSL/TLS 证书，供站点 HTTPS 使用">
     <template #actions>
-      <a-button type="primary" @click="openCreate">导入证书</a-button>
+      <a-button type="primary" @click="openCreate">添加证书</a-button>
     </template>
 
     <list-filter-bar

@@ -404,6 +404,18 @@ def _certificate_channel_ids(item: dict[str, Any]) -> list[int]:
     return out
 
 
+def _apply_certificate_acme_fields(cert, item: dict[str, Any]) -> None:
+    if "acme_provider" in item:
+        provider = item.get("acme_provider")
+        cert.acme_provider = str(provider).strip() or None if provider else None
+    if "acme_auto_renew" in item:
+        cert.acme_auto_renew = bool(item.get("acme_auto_renew"))
+    if "acme_last_attempt_on" in item:
+        cert.acme_last_attempt_on = item.get("acme_last_attempt_on") or None
+    if "acme_last_error" in item:
+        cert.acme_last_error = item.get("acme_last_error") or None
+
+
 async def _import_certificates(
     db: AsyncSession, items: list[dict[str, Any]]
 ) -> dict[int, int]:
@@ -435,6 +447,7 @@ async def _import_certificates(
                 existing.expiry_notify_enabled = bool(item.get("expiry_notify_enabled"))
             if "expiry_notify_channel_ids" in item or "expiry_notify_channel_id" in item:
                 existing.expiry_notify_channel_ids = _certificate_channel_ids(item)
+            _apply_certificate_acme_fields(existing, item)
             paths = certificate_store.write_cert_files(existing.id, cert_pem, key_pem)
             existing.cert_path, existing.key_path = paths
             await db.flush()
@@ -452,6 +465,7 @@ async def _import_certificates(
                 expiry_notify_enabled=bool(item.get("expiry_notify_enabled")),
                 expiry_notify_channel_ids=_certificate_channel_ids(item),
             )
+            _apply_certificate_acme_fields(cert, item)
             db.add(cert)
             await db.flush()
             paths = certificate_store.write_cert_files(cert.id, cert_pem, key_pem)

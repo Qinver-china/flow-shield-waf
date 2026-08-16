@@ -56,7 +56,7 @@ import { BRAND } from "@/constants/brand";
 import { useFloatingAiChatStore } from "@/stores/floatingAiChat";
 
 const floating = useFloatingAiChatStore();
-const { stopGeneration } = useAiGuardChat({ autoLoadSessions: false });
+const { loadSessions } = useAiGuardChat({ autoLoadSessions: false });
 const route = useRoute();
 const router = useRouter();
 const { isMobile } = useBreakpoint();
@@ -74,7 +74,7 @@ const showFloatPanel = computed(
 watch(
   () => floating.open,
   (open) => {
-    if (!open) stopGeneration();
+    if (open) void loadSessions();
   },
 );
 

@@ -12,6 +12,8 @@
       </fs-form-section>
 
       <fs-form-section :title="kind === 'sites' ? '选择站点' : '选择证书'">
+        <a-alert v-if="isReplace" type="info" show-icon style="margin-bottom: 12px"
+          message="将覆盖当前证书的证书与私钥，名称和通知设置保持不变" />
         <a-table size="small" row-key="key" :columns="tableColumns" :data-source="items" :pagination="false"
           :row-selection="rowSelection" :scroll="{ y: 420 }">
           <template #bodyCell="{ column, record }">
@@ -22,10 +24,10 @@
               {{ record.has_ssl ? (record.ssl_not_after || "已部署") : "无" }}
             </template>
             <template v-else-if="column.key === 'status'">
-              <a-tag v-if="record.already_imported || record.skip_reason" color="default">
-                {{ record.skip_reason || "已存在" }}
-              </a-tag>
-              <a-tag v-else color="green">可导入</a-tag>
+              <a-tooltip v-if="record.already_imported || record.skip_reason" :title="record.skip_reason || '已存在'">
+                <a-tag color="default">{{ record.skip_reason || "已存在" }}</a-tag>
+              </a-tooltip>
+              <a-tag v-else color="green">{{ isReplace ? "可覆盖更新" : "可导入" }}</a-tag>
             </template>
           </template>
         </a-table>
@@ -78,6 +80,7 @@ interface PreviewItem {
 const props = defineProps<{
   kind: PanelImportKind;
   provider: PanelProvider;
+  replaceCertificateId?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -99,6 +102,10 @@ const emptyDescription = computed(() =>
   props.provider === "baota" ? "暂未添加宝塔账号" : "暂未添加 1Panel 账号",
 );
 
+const isReplace = computed(
+  () => props.kind === "certificates" && !!props.replaceCertificateId,
+);
+
 const tabConnections = computed(() =>
   connections.value.filter((item) => item.provider === props.provider && item.enabled),
 );
@@ -113,9 +120,10 @@ const accountOptions = computed(() =>
   tabConnections.value.map((item) => ({ value: item.id, label: item.name })),
 );
 
-const okText = computed(() =>
-  selectedKeys.value.length ? `导入 ${selectedKeys.value.length} 项` : "导入",
-);
+const okText = computed(() => {
+  if (isReplace.value) return "覆盖更新";
+  return selectedKeys.value.length ? `导入 ${selectedKeys.value.length} 项` : "导入";
+});
 
 const tableColumns = computed(() => {
   if (props.kind === "sites") {
@@ -140,6 +148,7 @@ const selectableKeys = computed(() =>
 );
 
 const rowSelection = computed(() => ({
+  type: isReplace.value ? "radio" : "checkbox",
   selectedRowKeys: selectedKeys.value,
   onChange: (keys: (string | number)[]) => {
     selectedKeys.value = keys.map(String);
@@ -188,15 +197,20 @@ async function loadPreview() {
       props.kind === "sites"
         ? `/api/v1/panel-connections/${connection.value.id}/sites`
         : `/api/v1/panel-connections/${connection.value.id}/certificates`;
+    const params = isReplace.value
+      ? { replace_certificate_id: props.replaceCertificateId }
+      : undefined;
     const resp = await api.get<{
       origin_host?: string;
       items: PreviewItem[];
-    }>(path, undefined, { timeout: 120000 });
+    }>(path, params, { timeout: 120000 });
     items.value = resp.data?.items || [];
     if (props.kind === "sites") {
       originHost.value = resp.data?.origin_host || originHost.value;
     }
-    selectedKeys.value = selectableKeys.value;
+    selectedKeys.value = isReplace.value
+      ? selectableKeys.value.slice(0, 1)
+      : selectableKeys.value;
   } finally {
     loading.value = false;
   }
@@ -233,6 +247,24 @@ function goPanelSettings() {
   router.push({ path: "/settings", query: { tab: "panels" } });
 }
 
+interface ImportItemResult {
+  key: string;
+  name?: string | null;
+  reason?: string | null;
+}
+
+function formatImportItems(items: ImportItemResult[]): string {
+  return items
+    .map((item) => {
+      const label = String(item.name || item.key || "").trim();
+      const reason = String(item.reason || "").trim();
+      if (label && reason) return `${label}（${reason}）`;
+      return reason || label;
+    })
+    .filter(Boolean)
+    .join("、");
+}
+
 async function submit() {
   if (!connection.value) return;
   if (!selectedKeys.value.length) {
@@ -249,20 +281,39 @@ async function submit() {
     if (props.kind === "sites") {
       payload.origin_host = originHost.value;
     }
-    const resp = await api.post(path, payload, { timeout: 120000 });
-    const data = resp.data || {};
-    const imported = (data.imported || []).length;
-    const skipped = (data.skipped || []).length;
-    const failed = (data.failed || []).length;
-    const parts = [`已导入 ${imported}`];
-    if (skipped) parts.push(`跳过 ${skipped}`);
-    if (failed) parts.push(`失败 ${failed}`);
-    if (data.warning) {
-      message.warning(`${parts.join("，")}。${data.warning}`);
-    } else {
-      message.success(parts.join("，"));
+    if (isReplace.value) {
+      payload.replace_certificate_id = props.replaceCertificateId;
     }
-    emit("imported");
+    const resp = await api.post<{
+      imported?: ImportItemResult[];
+      skipped?: ImportItemResult[];
+      failed?: ImportItemResult[];
+      warning?: string | null;
+    }>(path, payload, { timeout: 120000 });
+    const data = resp.data || {};
+    const importedItems = data.imported || [];
+    const skippedItems = data.skipped || [];
+    const failedItems = data.failed || [];
+    const imported = importedItems.length;
+    const skipped = skippedItems.length;
+    const failed = failedItems.length;
+    const importedLabel = isReplace.value ? "已覆盖更新" : "已导入";
+    const parts = [`${importedLabel} ${imported}`];
+    const skippedText = formatImportItems(skippedItems);
+    const failedText = formatImportItems(failedItems);
+    if (skipped) parts.push(skippedText ? `跳过 ${skipped}：${skippedText}` : `跳过 ${skipped}`);
+    if (failed) parts.push(failedText ? `失败 ${failed}：${failedText}` : `失败 ${failed}`);
+    const text = parts.join("，");
+    if (data.warning) {
+      message.warning(`${text}。${data.warning}`, 6);
+    } else if (skipped || failed) {
+      message.warning(text, 4);
+    } else {
+      message.success(text);
+    }
+    if (!(isReplace.value && failed && !imported && !skipped)) {
+      emit("imported");
+    }
   } finally {
     importing.value = false;
   }

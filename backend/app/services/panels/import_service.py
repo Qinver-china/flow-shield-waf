@@ -13,8 +13,14 @@ from app.schemas.panel_connection import (
     PanelImportResult,
     PanelSitePreview,
 )
-from app.services import nginx_conf, rule_sync
-from app.services.certificate_ops import fingerprint_map, leaf_sha256, persist_new_certificate
+from app.services import certificate_store, nginx_conf, rule_sync
+from app.services.certificate_ops import (
+    apply_pem_to_certificate,
+    fingerprint_map,
+    leaf_sha256,
+    persist_new_certificate,
+    reload_sites_using_certificate,
+)
 from app.services.origin import validate_origin_host
 from app.services.panels import get_adapter
 from app.services.panels.mapping import default_origin_host, remap_listen_ports
@@ -49,6 +55,21 @@ def _occupied_domains(sites: list[Site]) -> dict[str, int]:
 
 def _normalize_domain_set(domains: list[str]) -> set[str]:
     return {item.strip().lower().rstrip(".") for item in domains if item and item.strip()}
+
+
+def _domains_set(value: str | list[str] | None) -> set[str]:
+    """Normalize stored or panel domain lists into a comparable set.
+
+    Args:
+        value: Comma/space separated text, or a list of domain names.
+
+    Returns:
+        Lowercased domains with trailing dots stripped.
+    """
+    if value is None:
+        return set()
+    parts = value.replace(",", " ").split() if isinstance(value, str) else value
+    return _normalize_domain_set(parts)
 
 
 async def preview_sites(db: AsyncSession, row: PanelConnection) -> list[PanelSitePreview]:
@@ -94,20 +115,47 @@ async def preview_sites(db: AsyncSession, row: PanelConnection) -> list[PanelSit
     return items
 
 
-async def preview_certificates(db: AsyncSession, row: PanelConnection) -> list[PanelCertPreview]:
+async def preview_certificates(
+    db: AsyncSession,
+    row: PanelConnection,
+    *,
+    replace_certificate_id: int | None = None,
+) -> list[PanelCertPreview]:
+    """List panel certificates and mark which ones can be imported or used to replace.
+
+    Args:
+        db: Database session.
+        row: Saved panel connection.
+        replace_certificate_id: When set, only the matching domain set is selectable
+            so the caller can overwrite that local certificate.
+
+    Returns:
+        Preview rows for the panel UI.
+
+    Raises:
+        PanelError: If replace_certificate_id does not exist.
+    """
     adapter = adapter_for(row)
     raw_certs = await adapter.list_certificates()
-    existing = (await db.execute(select(Certificate))).scalars().all()
-    existing_sets = [
-        _normalize_domain_set((cert.domains or "").replace(",", " ").split())
-        for cert in existing
-    ]
+    target_set: set[str] | None = None
+    existing_sets: list[set[str]] = []
+    if replace_certificate_id is not None:
+        target = await db.get(Certificate, replace_certificate_id)
+        if target is None:
+            raise PanelError("证书不存在")
+        target_set = _domains_set(target.domains)
+    else:
+        existing = (await db.execute(select(Certificate))).scalars().all()
+        existing_sets = [_domains_set(cert.domains) for cert in existing]
     items: list[PanelCertPreview] = []
     for cert in raw_certs:
         skip = cert.skip_reason
         already = False
-        domain_set = _normalize_domain_set(cert.domains)
-        if domain_set and any(domain_set == other and other for other in existing_sets):
+        domain_set = _domains_set(cert.domains)
+        if target_set is not None:
+            if not domain_set or domain_set != target_set:
+                skip = skip or "与当前证书域名不一致"
+        elif domain_set and any(domain_set == other and other for other in existing_sets):
             already = True
             skip = skip or "相同域名的证书已导入"
         items.append(
@@ -298,7 +346,26 @@ async def import_certificates(
     db: AsyncSession,
     row: PanelConnection,
     keys: list[str],
+    *,
+    replace_certificate_id: int | None = None,
 ) -> PanelImportResult:
+    """Import panel certificates, or overwrite one local certificate in replace mode.
+
+    Args:
+        db: Database session.
+        row: Saved panel connection.
+        keys: Panel certificate keys to import.
+        replace_certificate_id: When set, fetch exactly one PEM and overwrite that row.
+
+    Returns:
+        Imported / skipped / failed item lists.
+
+    Raises:
+        PanelError: If replace mode receives multiple keys, or the target certificate
+            does not exist.
+    """
+    if replace_certificate_id is not None:
+        return await _import_certificate_replace(db, row, keys, replace_certificate_id)
     adapter = adapter_for(row)
     fingerprints = await fingerprint_map(db)
     result = PanelImportResult()
@@ -356,6 +423,100 @@ async def import_certificates(
         reload_ok = await _sync(db)
         if not reload_ok:
             result.warning = "证书已导入，但引擎重载失败"
+    return result
+
+
+async def _import_certificate_replace(
+    db: AsyncSession,
+    row: PanelConnection,
+    keys: list[str],
+    replace_certificate_id: int,
+) -> PanelImportResult:
+    """Overwrite one local certificate with a single PEM fetched from the panel.
+
+    Args:
+        db: Database session.
+        row: Saved panel connection.
+        keys: Selected panel keys; must contain exactly one unique key.
+        replace_certificate_id: Local certificate id to overwrite.
+
+    Returns:
+        Result with one imported, skipped, or failed item.
+
+    Raises:
+        PanelError: If more than one key is selected, or the target does not exist.
+    """
+    wanted = list(dict.fromkeys(keys))
+    result = PanelImportResult()
+    if len(wanted) != 1:
+        raise PanelError("更新证书时只能选择 1 项")
+    key = wanted[0]
+    target = await db.get(Certificate, replace_certificate_id)
+    if target is None:
+        raise PanelError("证书不存在")
+    adapter = adapter_for(row)
+    try:
+        pair = await adapter.fetch_cert(key)
+        cert_obj, _unused_key = certificate_store.validate_pem_pair(
+            pair.cert_pem, pair.key_pem
+        )
+        meta = certificate_store.parse_cert_meta(cert_obj)
+        pem_set = _domains_set(meta["domains"])
+        target_set = _domains_set(target.domains)
+        if not pem_set or pem_set != target_set:
+            result.failed.append(
+                PanelImportItemResult(
+                    key=key,
+                    name=pair.name,
+                    status="failed",
+                    reason="与当前证书域名不一致",
+                )
+            )
+            return result
+        digest = leaf_sha256(pair.cert_pem)
+        try:
+            existing_pem, _unused = certificate_store.read_cert_files(
+                target.cert_path, target.key_path
+            )
+            if leaf_sha256(existing_pem) == digest:
+                result.skipped.append(
+                    PanelImportItemResult(
+                        key=key,
+                        name=pair.name,
+                        status="skipped",
+                        reason="证书内容未变化",
+                        certificate_id=target.id,
+                    )
+                )
+                return result
+        except Exception:  # noqa: BLE001
+            pass
+        apply_pem_to_certificate(target, pair.cert_pem, pair.key_pem)
+        await db.commit()
+        reload_ok = await reload_sites_using_certificate(db, target.id)
+        if not reload_ok:
+            result.warning = "证书已更新，但引擎重载失败"
+        result.imported.append(
+            PanelImportItemResult(
+                key=key,
+                name=pair.name,
+                status="imported",
+                certificate_id=target.id,
+            )
+        )
+    except PanelError as exc:
+        result.failed.append(
+            PanelImportItemResult(key=key, status="failed", reason=str(exc))
+        )
+    except ValueError as exc:
+        result.failed.append(
+            PanelImportItemResult(key=key, status="failed", reason=str(exc))
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.exception("replace cert %s failed", key)
+        result.failed.append(
+            PanelImportItemResult(key=key, status="failed", reason=str(exc))
+        )
     return result
 
 

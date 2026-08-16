@@ -21,3 +21,8 @@ class Certificate(Base, TimestampMixin):
     expiry_notify_channel_ids: Mapped[list] = mapped_column(JSON, default=list)
     # Local calendar date (YYYY-MM-DD) of last successful expiry notification.
     expiry_last_notified_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # ACME: letsencrypt / zerossl / empty for manual import.
+    acme_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    acme_auto_renew: Mapped[bool] = mapped_column(Boolean, default=False)
+    acme_last_attempt_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    acme_last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)

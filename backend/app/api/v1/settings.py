@@ -198,6 +198,7 @@ async def update_display_settings(
     row = await waf_settings.get_or_create(db)
     row.timezone = body.timezone
     row.panel_public_url = body.panel_public_url
+    row.acme_account_email = body.acme_account_email
     await db.commit()
     await db.refresh(row)
     return ok(DisplaySettingsOut.from_row(row, backend_port=settings.backend_port).model_dump())

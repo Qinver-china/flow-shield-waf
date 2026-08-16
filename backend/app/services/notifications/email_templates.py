@@ -608,7 +608,7 @@ def build_cert_expiry_email(
         ),
     )
     body_html = (
-        html_paragraph(message.replace("\n", "<br/>"))
+        "".join(html_paragraph(line) for line in message.split("\n") if line)
         + html_section(
             "建议操作",
             "<ol style=\"margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;\">"
@@ -623,5 +623,61 @@ def build_cert_expiry_email(
         subtitle=subtitle,
         body_html=body_html,
         preheader=f"证书「{cert_name}」{urgency}",
+    )
+    return plain, html_body
+
+
+def build_acme_result_email(
+    *,
+    success: bool,
+    kind: str,
+    cert_name: str,
+    domains: str,
+    ca_name: str,
+    error: str | None = None,
+) -> tuple[str, str]:
+    """Return (plain_text, html_body) for ACME issue or renew notifications."""
+    action = "续期" if kind == "renew" else "申请"
+    domain_text = domains.strip() or "（无域名）"
+    if success:
+        title = f"证书{action}成功 · {cert_name}"
+        subtitle = f"已通过 {ca_name} 完成{action}，站点 HTTPS 将使用新证书。"
+        message = (
+            f"证书「{cert_name}」{action}成功。\n"
+            f"证书机构：{ca_name}\n"
+            f"覆盖域名：{domain_text}"
+        )
+        hint = (
+            "证书已写入并绑定站点。若站点已开启 HTTPS，引擎会自动重载；"
+            "请抽空确认站点访问正常。"
+        )
+    else:
+        title = f"证书{action}失败 · {cert_name}"
+        subtitle = f"通过 {ca_name} {action}未成功，请检查域名解析与 80 端口。"
+        err_text = (error or "未知错误").strip()
+        message = (
+            f"证书「{cert_name}」{action}失败。\n"
+            f"证书机构：{ca_name}\n"
+            f"覆盖域名：{domain_text}\n"
+            f"失败原因：{err_text}"
+        )
+        hint = (
+            "请确认域名 A/AAAA 已指向本机、公网可访问 80 端口，"
+            "且系统设置中已填写 ACME 账户邮箱后重试。"
+        )
+    plain = build_plain_email(
+        title=title,
+        subtitle=subtitle,
+        body=f"{message}\n\n{hint}",
+    )
+    body_html = (
+        "".join(html_paragraph(line) for line in message.split("\n") if line)
+        + html_status_message(hint, success=success, danger=not success)
+    )
+    html_body = build_email_html(
+        title=title,
+        subtitle=subtitle,
+        body_html=body_html,
+        preheader=title,
     )
     return plain, html_body

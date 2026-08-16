@@ -87,7 +87,17 @@ def test_display_settings_out_exposes_runtime_ports():
     row = SimpleNamespace(
         timezone="Asia/Shanghai",
         panel_public_url="https://waf.example.com:9010",
+        acme_account_email="ops@example.com",
     )
     out = DisplaySettingsOut.from_row(row, backend_port=8001)
     assert out.backend_port == 8001
     assert out.panel_port == 9010
+    assert out.acme_account_email == "ops@example.com"
+
+
+def test_display_settings_normalizes_acme_email():
+    settings = DisplaySettings(
+        panel_public_url="http://127.0.0.1:9000",
+        acme_account_email="  Ops@Example.COM  ",
+    )
+    assert settings.acme_account_email == "ops@example.com"

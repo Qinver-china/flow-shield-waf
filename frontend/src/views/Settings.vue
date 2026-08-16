@@ -112,6 +112,15 @@
                 用于 AI 分析邮件中的「应用规则 / 忽略」链接，请勿带尾部斜杠。首次打开本页时会根据当前访问地址自动填入，可手动修改。
               </div>
             </a-form-item>
+            <a-form-item label="ACME 账户邮箱">
+              <a-input
+                v-model:value="displayForm.acme_account_email"
+                placeholder="admin@example.com"
+              />
+              <div class="hint">
+                用于 Let's Encrypt / ZeroSSL 一键申请与自动续期。申请前必须填写可接收邮件的地址。
+              </div>
+            </a-form-item>
             <a-form-item>
               <a-button type="primary" :loading="displaySaving" @click="saveDisplay">保存</a-button>
             </a-form-item>
@@ -849,10 +858,12 @@ const displayForm = reactive<{
   timezone: string;
   timezone_options: TimezoneOption[];
   panel_public_url: string;
+  acme_account_email: string;
 }>({
   timezone: "Asia/Shanghai",
   timezone_options: [],
   panel_public_url: "",
+  acme_account_email: "",
 });
 
 interface ResponsePageForm {
@@ -1018,6 +1029,7 @@ async function loadDisplay() {
   displayForm.timezone = appSettings.timezone;
   displayForm.timezone_options = appSettings.timezoneOptions;
   displayForm.panel_public_url = appSettings.panelPublicUrl;
+  displayForm.acme_account_email = appSettings.acmeAccountEmail;
 }
 
 async function loadBlockPage() {
@@ -1162,10 +1174,12 @@ async function saveDisplay() {
     await appSettings.updateDisplay({
       timezone: displayForm.timezone,
       panel_public_url: url,
+      acme_account_email: displayForm.acme_account_email.trim() || null,
     });
     displayForm.timezone = appSettings.timezone;
     displayForm.timezone_options = appSettings.timezoneOptions;
     displayForm.panel_public_url = appSettings.panelPublicUrl;
+    displayForm.acme_account_email = appSettings.acmeAccountEmail;
     message.success("显示设置已保存");
   } finally {
     displaySaving.value = false;

@@ -25,18 +25,18 @@
     <div
       class="site-card__domains"
     >
-      <template v-if="domainList.length">
-        <template v-for="(domain, index) in domainList" :key="domain">
+      <template v-if="domainLinks.length">
+        <template v-for="(item, index) in domainLinks" :key="item.domain">
           <a
-            v-if="!domain.includes('*')"
+            v-if="item.linkable"
             class="site-card__domain-link"
-            :href="domainHref(domain)"
+            :href="item.href"
             target="_blank"
             rel="noopener noreferrer"
-            :title="`打开 ${domainHref(domain)}`"
-          >{{ domain }}</a>
-          <span v-else class="site-card__domain-text" :title="domain">{{ domain }}</span>
-          <span v-if="index < domainList.length - 1" class="site-card__domain-sep"> · </span>
+            :title="`打开 ${item.href}`"
+          >{{ item.label }}</a>
+          <span v-else class="site-card__domain-text" :title="item.label">{{ item.label }}</span>
+          <span v-if="index < domainLinks.length - 1" class="site-card__domain-sep"> · </span>
         </template>
       </template>
       <span v-else>未配置域名</span>
@@ -254,12 +254,49 @@ const domainList = computed(() => {
   return raw.split(/[,\s·]+/).map((d) => d.trim()).filter(Boolean);
 });
 
-const siteScheme = computed(() => (props.site.listen_https ? "https" : "http"));
-
-function domainHref(domain: string) {
-  const host = domain.replace(/^https?:\/\//i, "").replace(/\/$/, "");
-  return `${siteScheme.value}://${host}`;
+function firstListenPort(value: unknown, fallback: number): number {
+  const items = Array.isArray(value) ? value : [];
+  for (const item of items) {
+    const n = Number(item);
+    if (Number.isInteger(n) && n >= 1 && n <= 65535) return n;
+  }
+  return fallback;
 }
+
+/** HTTP 优先；自定义监听端口时带上非 80/443 的端口。 */
+function siteAccessTarget(site: Record<string, any>): { scheme: "http" | "https"; port: number } {
+  const custom = Boolean(site.custom_listen_ports);
+  if (site.listen_http) {
+    return {
+      scheme: "http",
+      port: custom ? firstListenPort(site.listen_http_ports, 80) : 80,
+    };
+  }
+  return {
+    scheme: "https",
+    port: custom ? firstListenPort(site.listen_https_ports, 443) : 443,
+  };
+}
+
+function hostWithAccessPort(host: string, port: number, custom: boolean): string {
+  if (!custom || port === 80 || port === 443) return host;
+  return `${host}:${port}`;
+}
+
+const domainLinks = computed(() => {
+  const { scheme, port } = siteAccessTarget(props.site);
+  const custom = Boolean(props.site.custom_listen_ports);
+  return domainList.value.map((domain: string) => {
+    const host = domain.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+    const hostPort = hostWithAccessPort(host, port, custom);
+    return {
+      domain,
+      label: hostPort,
+      href: `${scheme}://${hostPort}`,
+      linkable: !domain.includes("*"),
+    };
+  });
+});
 
 const metaItems = computed(() => {
   const listenTags: { text: string; color?: string }[] = [];

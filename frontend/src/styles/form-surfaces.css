@@ -124,7 +124,7 @@
 .fs-form-section {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
 }
 
 .fs-form-section + .fs-form-section {

@@ -33,3 +33,4 @@ class WafSetting(Base, TimestampMixin):
     captcha_footer_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), default=DEFAULT_TIMEZONE)
     panel_public_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    acme_account_email: Mapped[str | None] = mapped_column(String(254), nullable=True)

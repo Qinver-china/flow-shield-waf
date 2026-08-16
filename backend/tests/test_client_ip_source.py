@@ -91,6 +91,9 @@ def test_render_site_force_https_redirect():
     )
     conf = render_site(site)
     assert "return 301 https://$host$request_uri;" in conf
+    assert "location ^~ /.well-known/acme-challenge/" in conf
+    assert "alias /data/acme/http-01/;" in conf
+    assert "location / {\n        return 301 https://$host$request_uri;" in conf
     assert "listen 80;" in conf
     assert "listen 443 ssl;" in conf
     assert conf.count("listen 80;") == 1
@@ -116,6 +119,7 @@ def test_render_site_disable_content_buffering():
     )
     conf = render_site(site)
     assert "proxy_buffering off;" in conf
+    assert "location ^~ /.well-known/acme-challenge/" in conf
 
 
 def test_render_site_keeps_default_buffering():

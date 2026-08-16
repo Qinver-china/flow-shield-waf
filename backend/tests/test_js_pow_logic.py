@@ -1,4 +1,5 @@
 from tests.js_pow_logic import (
+    BLOCK_SCORE,
     base_difficulty_from_server_score,
     count_leading_zero_hex,
     effective_difficulty,
@@ -13,8 +14,11 @@ def test_count_leading_zero_hex():
 
 
 def test_effective_difficulty_blocks_high_fp():
-    assert effective_difficulty(4, 60) is None
-    assert effective_difficulty(4, 59) == 6
+    assert effective_difficulty(4, BLOCK_SCORE) is None
+    assert effective_difficulty(4, BLOCK_SCORE - 1) == 7
+    # Soft domestic-shell stack (chrome-gap skipped + empty plugins) stays under block.
+    assert effective_difficulty(3, 30 + 10) == 4
+    assert effective_difficulty(3, 55) == 5
 
 
 def test_base_difficulty_tiers():

@@ -36,6 +36,8 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_ai_guard_policy_custom_prompt(conn)
     await _ensure_rule_remark(conn)
     await _ensure_certificate_expiry_notify(conn)
+    await _ensure_certificate_acme_columns(conn)
+    await _ensure_waf_setting_acme_account_email(conn)
     await _upgrade_default_response_page_brand_links(conn)
 
 
@@ -316,6 +318,41 @@ async def _ensure_certificate_expiry_notify_channel_ids(conn) -> None:
                 "OR expiry_notify_channel_ids = 'null'"
             )
         )
+
+
+async def _ensure_certificate_acme_columns(conn) -> None:
+    if not await _column_exists(conn, "certificate", "acme_provider"):
+        await conn.execute(
+            text("ALTER TABLE certificate ADD COLUMN acme_provider VARCHAR(32) NULL")
+        )
+        log.info("schema patch applied: certificate.acme_provider")
+    if not await _column_exists(conn, "certificate", "acme_auto_renew"):
+        await conn.execute(
+            text(
+                "ALTER TABLE certificate "
+                "ADD COLUMN acme_auto_renew BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        log.info("schema patch applied: certificate.acme_auto_renew")
+    if not await _column_exists(conn, "certificate", "acme_last_attempt_on"):
+        await conn.execute(
+            text("ALTER TABLE certificate ADD COLUMN acme_last_attempt_on VARCHAR(10) NULL")
+        )
+        log.info("schema patch applied: certificate.acme_last_attempt_on")
+    if not await _column_exists(conn, "certificate", "acme_last_error"):
+        await conn.execute(
+            text("ALTER TABLE certificate ADD COLUMN acme_last_error VARCHAR(512) NULL")
+        )
+        log.info("schema patch applied: certificate.acme_last_error")
+
+
+async def _ensure_waf_setting_acme_account_email(conn) -> None:
+    if await _column_exists(conn, "waf_setting", "acme_account_email"):
+        return
+    await conn.execute(
+        text("ALTER TABLE waf_setting ADD COLUMN acme_account_email VARCHAR(254) NULL")
+    )
+    log.info("schema patch applied: waf_setting.acme_account_email")
 
 
 async def _upgrade_default_response_page_brand_links(conn) -> None:

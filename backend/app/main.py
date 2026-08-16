@@ -17,6 +17,7 @@ from app.core.db import SessionLocal
 from app.core.logging import setup_logging
 from app.core.redis import get_redis
 from app.services import certificate_store, rule_sync, waf_settings
+from app.services.acme_issue import ensure_http01_dir
 from app.services.schema_bootstrap import ensure_database_schema
 
 log = logging.getLogger("waf.main")
@@ -24,6 +25,7 @@ log = logging.getLogger("waf.main")
 
 async def _bootstrap() -> None:
     certificate_store.ensure_cert_dir()
+    ensure_http01_dir()
     # Model-driven schema: create missing tables on first boot (no alembic).
     await ensure_database_schema()
 
@@ -76,6 +78,19 @@ async def _bootstrap() -> None:
         except Exception:  # noqa: BLE001
             log.exception("initial config publish failed")
             await get_redis().set(rule_sync.DIRTY_KEY, "1")
+        # Refresh site nginx so ACME HTTP-01 locations exist after upgrades.
+        try:
+            from app.services import nginx_conf
+
+            result = await nginx_conf.regenerate(db)
+            if not result.ok:
+                log.warning(
+                    "initial nginx regenerate soft-failed reason=%s detail=%s",
+                    result.reason,
+                    (result.detail or "")[:200],
+                )
+        except Exception:  # noqa: BLE001
+            log.exception("initial nginx regenerate failed")
 
 
 @asynccontextmanager

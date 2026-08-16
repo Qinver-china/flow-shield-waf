@@ -131,6 +131,7 @@ class PanelImportKeys(BaseModel):
     origin_host: str | None = None
     origin_http_port: int | None = Field(default=None, ge=1, le=65535)
     origin_https_port: int | None = Field(default=None, ge=1, le=65535)
+    replace_certificate_id: int | None = None
 
 
 class PanelImportItemResult(BaseModel):

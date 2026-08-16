@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,20 @@ def _out(row: PanelConnection) -> dict:
 
 def _http_error(exc: PanelError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
+
+
+def _cert_import_error(exc: PanelError) -> HTTPException:
+    """Map replace-mode missing certificate to 404; other panel errors stay 400.
+
+    Args:
+        exc: Error raised while previewing or importing panel certificates.
+
+    Returns:
+        HTTPException with 404 or 400.
+    """
+    if str(exc) == "证书不存在":
+        return HTTPException(status_code=404, detail=str(exc))
+    return _http_error(exc)
 
 
 async def _get_enabled(db: AsyncSession, connection_id: int) -> PanelConnection:
@@ -226,14 +240,17 @@ async def import_panel_sites(
 @router.get("/{connection_id}/certificates")
 async def list_panel_certificates(
     connection_id: int,
+    replace_certificate_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
     row = await _get_enabled(db, connection_id)
     try:
-        items = await import_service.preview_certificates(db, row)
+        items = await import_service.preview_certificates(
+            db, row, replace_certificate_id=replace_certificate_id
+        )
     except PanelError as exc:
-        raise _http_error(exc) from exc
+        raise _cert_import_error(exc) from exc
     return ok({"connection": _out(row), "items": [item.model_dump() for item in items]})
 
 
@@ -246,7 +263,9 @@ async def import_panel_certificates(
 ):
     row = await _get_enabled(db, connection_id)
     try:
-        result = await import_service.import_certificates(db, row, body.keys)
+        result = await import_service.import_certificates(
+            db, row, body.keys, replace_certificate_id=body.replace_certificate_id
+        )
     except PanelError as exc:
-        raise _http_error(exc) from exc
+        raise _cert_import_error(exc) from exc
     return ok(result.model_dump(), message=result.warning or "ok")

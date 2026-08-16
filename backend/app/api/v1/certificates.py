@@ -19,6 +19,7 @@ from app.core.db import get_db
 from app.models import Certificate, Site, User
 from app.models.notification import NotificationChannel
 from app.schemas.certificate import (
+    AcmeIssueRequest,
     CertificateBoundSite,
     CertificateCreate,
     CertificateDetail,
@@ -27,18 +28,15 @@ from app.schemas.certificate import (
     CertificateUpdate,
 )
 from app.schemas.common import ok
-from app.services import certificate_store, nginx_conf
-from app.services.certificate_ops import persist_new_certificate
+from app.services import certificate_store
+from app.services.acme_issue import AcmeIssueError, issue_for_site
+from app.services.certificate_ops import (
+    apply_pem_to_certificate,
+    persist_new_certificate,
+    reload_sites_using_certificate,
+)
 
 router = APIRouter()
-
-
-async def _reload_sites_using(db: AsyncSession, cert_id: int) -> None:
-    refs = (
-        await db.execute(select(Site.id).where(Site.certificate_id == cert_id))
-    ).scalars().all()
-    if refs:
-        await nginx_conf.regenerate(db)  # soft-fails if engine is down
 
 
 def _parse_form_bool(value: str | bool | None) -> bool:
@@ -196,6 +194,39 @@ async def certificate_options(
     ])
 
 
+@router.post("/acme/issue")
+async def issue_acme_certificate(
+    body: AcmeIssueRequest,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    if body.expiry_notify_channel_ids:
+        await _ensure_notify_channels(db, body.expiry_notify_channel_ids)
+    try:
+        cert = await issue_for_site(
+            db,
+            site_id=body.site_id,
+            domains=body.domains,
+            provider=body.provider,
+            auto_renew=body.auto_renew,
+            expiry_notify_channel_ids=body.expiry_notify_channel_ids,
+            name=body.name,
+            replace_certificate_id=body.replace_certificate_id,
+        )
+    except AcmeIssueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    bound_map = await _bound_sites_by_cert_ids(db, [cert.id])
+    return ok(
+        CertificateOut.model_validate(cert).model_copy(
+            update={"bound_sites": bound_map.get(cert.id, [])}
+        ).model_dump()
+    )
+
+
 @router.get("/{cert_id}")
 async def get_certificate(
     cert_id: int,
@@ -212,9 +243,14 @@ async def get_certificate(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     detail = CertificateDetail.model_validate(cert)
+    bound_map = await _bound_sites_by_cert_ids(db, [cert.id])
     return ok(
         detail.model_copy(
-            update={"cert_content": cert_content, "key_content": key_content}
+            update={
+                "cert_content": cert_content,
+                "key_content": key_content,
+                "bound_sites": bound_map.get(cert.id, []),
+            }
         ).model_dump()
     )
 
@@ -284,17 +320,23 @@ async def update_certificate(
     data = body.model_dump(exclude_unset=True)
     cert_content = data.pop("cert_content", None)
     key_content = data.pop("key_content", None)
+    acme_auto_renew = data.get("acme_auto_renew")
+    if acme_auto_renew and not cert.acme_provider:
+        raise HTTPException(status_code=400, detail="仅 ACME 申请的证书可开启自动更新")
 
     for k, v in data.items():
         setattr(cert, k, v)
 
     enabled = bool(cert.expiry_notify_enabled)
+    auto_renew = bool(getattr(cert, "acme_auto_renew", False))
     channel_ids = list(cert.expiry_notify_channel_ids or [])
-    if not enabled:
+    if auto_renew and not channel_ids:
+        raise HTTPException(status_code=400, detail="开启自动更新时请选择通知通道")
+    if not enabled and not auto_renew:
         channel_ids = []
         cert.expiry_notify_channel_ids = []
-    _validate_notify_settings(enabled=enabled, channel_ids=channel_ids)
-    if enabled:
+    _validate_notify_settings(enabled=enabled or auto_renew, channel_ids=channel_ids)
+    if channel_ids:
         await _ensure_notify_channels(db, channel_ids)
         cert.expiry_notify_channel_ids = channel_ids
 
@@ -302,23 +344,14 @@ async def update_certificate(
         if not (cert_content and key_content):
             raise HTTPException(status_code=400, detail="更新证书时需同时提供证书和私钥")
         try:
-            cert_obj, _key = certificate_store.validate_pem_pair(cert_content, key_content)
-            meta = certificate_store.parse_cert_meta(cert_obj)
-            cert_path, key_path = certificate_store.write_cert_files(
-                cert.id, cert_content, key_content
-            )
+            apply_pem_to_certificate(cert, cert_content, key_content)
         except ValueError as exc:
             await db.rollback()
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        cert.cert_path = cert_path
-        cert.key_path = key_path
-        cert.domains = meta["domains"]
-        cert.not_before = meta["not_before"]
-        cert.not_after = meta["not_after"]
 
     await db.commit()
     await db.refresh(cert)
-    await _reload_sites_using(db, cert.id)
+    await reload_sites_using_certificate(db, cert.id)
     return ok(CertificateOut.model_validate(cert).model_dump())
 
 

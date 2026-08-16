@@ -25,6 +25,27 @@ class CertificateUpdate(BaseModel):
     remark: str | None = None
     expiry_notify_enabled: bool | None = None
     expiry_notify_channel_ids: list[int] | None = None
+    acme_auto_renew: bool | None = None
+
+
+class AcmeIssueRequest(BaseModel):
+    site_id: int
+    domains: list[str] = Field(min_length=1)
+    provider: str
+    auto_renew: bool = False
+    expiry_notify_channel_ids: list[int] = Field(default_factory=list)
+    name: str | None = Field(default=None, max_length=128)
+    replace_certificate_id: int | None = None
+
+    @model_validator(mode="after")
+    def _require_channel_when_auto_renew(self) -> "AcmeIssueRequest":
+        provider = (self.provider or "").strip().lower()
+        if provider not in {"letsencrypt", "zerossl"}:
+            raise ValueError("请选择 Let's Encrypt 或 ZeroSSL")
+        self.provider = provider
+        if self.auto_renew and not self.expiry_notify_channel_ids:
+            raise ValueError("开启自动更新时请选择通知通道")
+        return self
 
 
 class CertificateBoundSite(BaseModel):
@@ -45,6 +66,10 @@ class CertificateOut(BaseModel):
     remark: str | None = None
     expiry_notify_enabled: bool = False
     expiry_notify_channel_ids: list[int] = Field(default_factory=list)
+    acme_provider: str | None = None
+    acme_auto_renew: bool = False
+    acme_last_attempt_on: str | None = None
+    acme_last_error: str | None = None
     bound_sites: list[CertificateBoundSite] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
