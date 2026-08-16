@@ -165,7 +165,9 @@ async def test_issue_binds_site_and_reloads():
             domains=["a.example.com"],
             provider="letsencrypt",
             auto_renew=True,
+            expiry_notify_enabled=True,
             expiry_notify_channel_ids=[3],
+            renew_domains=["a.example.com", "www.example.com"],
         )
     ready.assert_awaited()
     persist.assert_awaited()
@@ -173,6 +175,8 @@ async def test_issue_binds_site_and_reloads():
     assert cert is created
     assert created.acme_provider == "letsencrypt"
     assert created.acme_auto_renew is True
+    assert created.expiry_notify_enabled is True
+    assert created.domains == "a.example.com,www.example.com"
     assert site.certificate_id == 9
     assert site.listen_https is True
     reload.assert_awaited_with(db, 9)

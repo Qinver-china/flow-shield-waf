@@ -511,6 +511,8 @@ async def issue_for_site(
     provider: str,
     auto_renew: bool,
     expiry_notify_channel_ids: list[int],
+    expiry_notify_enabled: bool = False,
+    renew_domains: list[str] | None = None,
     name: str | None = None,
     replace_certificate_id: int | None = None,
     on_progress: ProgressCallback | None = None,
@@ -523,7 +525,11 @@ async def issue_for_site(
         domains: SAN names; must be a subset of the site domains.
         provider: ``letsencrypt`` or ``zerossl``.
         auto_renew: Daily renew when within 10 days of expiry.
-        expiry_notify_channel_ids: Notify channels (required when auto_renew).
+        expiry_notify_channel_ids: Notify channels (required when auto_renew
+            or expiry_notify_enabled).
+        expiry_notify_enabled: Persist the certificate expiry-notify switch.
+        renew_domains: Optional SAN list stored for auto-renew (overrides PEM
+            metadata domains when auto_renew is enabled).
         name: Optional certificate display name.
         replace_certificate_id: Overwrite this row instead of creating.
         on_progress: Optional async/sync callback for UI progress lines.
@@ -538,8 +544,25 @@ async def issue_for_site(
     if provider not in PROVIDERS:
         raise AcmeIssueError("不支持的证书机构")
     channel_ids = list(dict.fromkeys(int(cid) for cid in expiry_notify_channel_ids if cid is not None))
-    if auto_renew and not channel_ids:
-        raise AcmeIssueError("开启自动更新时请选择通知通道")
+    notify_enabled = bool(expiry_notify_enabled)
+    auto_renew = bool(auto_renew)
+    if (auto_renew or notify_enabled) and not channel_ids:
+        raise AcmeIssueError(
+            "开启自动续期时请选择通知通道"
+            if auto_renew
+            else "启用到期前通知时请选择通知通道"
+        )
+    renew_names: list[str] = []
+    if renew_domains:
+        seen_renew: set[str] = set()
+        for item in renew_domains:
+            name_item = str(item or "").strip().lower().rstrip(".")
+            if not name_item or name_item in seen_renew:
+                continue
+            seen_renew.add(name_item)
+            renew_names.append(name_item)
+    if auto_renew and renew_domains is not None and not renew_names:
+        raise AcmeIssueError("开启自动续期时请选择绑定域名")
 
     setting = await waf_settings.get_or_create(db)
     email = (getattr(setting, "acme_account_email", None) or "").strip()
@@ -607,8 +630,11 @@ async def issue_for_site(
                 name=display_name,
                 cert_content=cert_pem,
                 key_content=key_pem,
-                expiry_notify_enabled=False,
+                expiry_notify_enabled=notify_enabled,
                 expiry_notify_channel_ids=channel_ids,
+                acme_auto_renew=auto_renew,
+                acme_provider=provider,
+                renew_domains=renew_names or None,
                 commit=False,
             )
         else:
@@ -616,13 +642,18 @@ async def issue_for_site(
             cert = target
             cert.name = display_name[:128]
             # Do not wipe existing notify channels when re-issue omits them
-            # (auto_renew off + empty list from the ACME tab).
+            # (notify/auto_renew off + empty list from the ACME tab).
         cert.acme_provider = provider
-        cert.acme_auto_renew = bool(auto_renew)
+        cert.acme_auto_renew = auto_renew
+        cert.expiry_notify_enabled = notify_enabled
         cert.acme_last_attempt_on = today
         cert.acme_last_error = None
         if channel_ids:
             cert.expiry_notify_channel_ids = channel_ids
+        elif notify_enabled or auto_renew:
+            cert.expiry_notify_channel_ids = []
+        if auto_renew and renew_names:
+            cert.domains = ",".join(renew_names)
         await _bind_site_certificate(db, site, cert)
         await db.commit()
         await db.refresh(cert)

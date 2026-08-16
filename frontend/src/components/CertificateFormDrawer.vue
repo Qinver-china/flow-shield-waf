@@ -1,59 +1,44 @@
 <template>
   <fs-form-drawer :open="open" title="SSL 证书" :subtitle="certificateId ? `#${certificateId}` : undefined"
-    :mode="certificateId ? 'edit' : 'create'" :width="820" :z-index="zIndex"
+    :mode="certificateId ? 'edit' : 'create'" :width="760" :z-index="zIndex"
     :loading="isPanelImport ? panelStatus.loading : detailLoading"
-    :confirm-loading="isPanelImport ? panelStatus.importing : saving"
-    :ok-text="drawerOkText" :hide-ok="isPanelImport ? !panelStatus.canImport : false"
-    @update:open="emit('update:open', $event)" @ok="save">
+    :confirm-loading="isPanelImport ? panelStatus.importing : saving" :ok-text="drawerOkText"
+    :hide-ok="isPanelImport ? !panelStatus.canImport : false" @update:open="emit('update:open', $event)" @ok="save">
     <a-form layout="vertical">
       <template v-if="!isPanelImport">
         <fs-form-section title="基本信息">
-          <a-form-item label="证书名称" :required="!isAcmeIssue">
-            <a-input v-model:value="form.name" :placeholder="isAcmeIssue ? '可选，默认使用机构名与主域名' : ''" />
-          </a-form-item>
-          <a-form-item label="备注">
-            <a-textarea v-model:value="form.remark" placeholder="可选" :auto-size="{ minRows: 1, maxRows: 6 }" />
-          </a-form-item>
-          <template v-if="isAcmeCert && !isAcmeIssue">
-            <a-form-item label="证书机构">
-              <a-input :value="acmeProviderLabel(form.acme_provider)" disabled />
-            </a-form-item>
-            <a-form-item label="自动更新">
-              <a-switch v-model:checked="form.acme_auto_renew" />
-              <p class="fs-hint is-inline">到期前 10 天起每日尝试续期；成功与失败都会通知所选通道。</p>
-            </a-form-item>
-          </template>
-        </fs-form-section>
-
-        <fs-form-section v-if="!isAcmeIssue" title="到期前通知" description="到期前 7 天每日会通知一次">
-          <template #extra>
-            <a-switch v-model:checked="form.expiry_notify_enabled" />
-          </template>
-          <a-form-item v-if="form.expiry_notify_enabled || form.acme_auto_renew" label="通知通道" required>
-            <a-select v-model:value="form.expiry_notify_channel_ids" mode="multiple" placeholder="选择已配置的通知通道"
-              allow-clear option-filter-prop="label" style="width: 100%">
-              <a-select-option v-for="ch in channels" :key="ch.id" :value="ch.id" :label="ch.name"
-                :disabled="!ch.enabled">
-                {{ ch.name }}（{{ channelTypeLabel(ch.channel_type) }}）
-              </a-select-option>
-            </a-select>
-            <p class="fs-hint is-inline">请先在「系统设置 → 通知通道」中配置邮件等通道。</p>
-          </a-form-item>
+          <a-row :gutter="16">
+            <a-col :xs="24" :md="10">
+              <a-form-item label="证书名称" :required="!isAcmeIssue">
+                <a-input v-model:value="form.name" :placeholder="isAcmeIssue ? '可选，默认使用机构名与主域名' : ''" />
+              </a-form-item>
+            </a-col>
+            <a-col :xs="24" :md="14">
+              <a-form-item label="备注">
+                <a-textarea v-model:value="form.remark" placeholder="可选" :auto-size="{ minRows: 1, maxRows: 6 }" />
+              </a-form-item>
+            </a-col>
+          </a-row>
         </fs-form-section>
       </template>
-
-      <fs-form-section :title="isPanelImport ? undefined : '证书内容'"
-        :description="contentSectionDescription">
+      <fs-form-section :title="isPanelImport ? undefined : '证书内容'">
         <a-tabs v-model:activeKey="importMode">
           <a-tab-pane key="paste" tab="粘贴内容">
-            <a-form-item label="证书 (PEM)" required>
-              <a-textarea v-model:value="form.cert_content" :rows="6" placeholder="-----BEGIN CERTIFICATE-----"
-                class="fs-code-textarea" />
-            </a-form-item>
-            <a-form-item label="密钥 (KEY)" required>
-              <a-textarea v-model:value="form.key_content" :rows="6" placeholder="-----BEGIN PRIVATE KEY-----"
-                class="fs-code-textarea" />
-            </a-form-item>
+            <a-row :gutter="16">
+              <a-col :xs="24" :md="12">
+                <a-form-item label="证书 (PEM)" required>
+                  <a-textarea v-model:value="form.cert_content" :rows="6" placeholder="-----BEGIN CERTIFICATE-----"
+                    class="fs-code-textarea" />
+                </a-form-item>
+              </a-col>
+              <a-col :xs="24" :md="12">
+                <a-form-item label="密钥 (KEY)" required>
+                  <a-textarea v-model:value="form.key_content" :rows="6" placeholder="-----BEGIN PRIVATE KEY-----"
+                    class="fs-code-textarea" />
+                </a-form-item>
+              </a-col>
+            </a-row>
+
           </a-tab-pane>
           <a-tab-pane key="upload" tab="上传文件">
             <a-form-item label="证书文件 (.pem / .crt)" required>
@@ -68,19 +53,7 @@
             </a-form-item>
             <p v-if="certificateId" class="fs-hint">未选择新文件时，将保留当前证书内容。</p>
           </a-tab-pane>
-          <a-tab-pane key="baota" tab="从宝塔导入">
-            <panel-import-form v-if="importMode === 'baota'" ref="panelImportRef" kind="certificates" provider="baota"
-              :replace-certificate-id="certificateId" @status="onPanelStatus" @imported="onPanelImported"
-              @close="emit('update:open', false)" />
-          </a-tab-pane>
-          <a-tab-pane key="onepanel" tab="从 1Panel 导入">
-            <panel-import-form v-if="importMode === 'onepanel'" ref="panelImportRef" kind="certificates"
-              provider="onepanel" :replace-certificate-id="certificateId" @status="onPanelStatus"
-              @imported="onPanelImported" @close="emit('update:open', false)" />
-          </a-tab-pane>
           <a-tab-pane key="acme" tab="申请免费证书">
-            <a-alert type="info" show-icon class="acme-alert"
-              message="仅支持 HTTP-01。请确认所选域名的 A/AAAA 已指向本机，且公网可访问 80 端口（强制 HTTPS 的站点也会在 80 上回答挑战）。不支持通配符。" />
             <a-alert v-if="openedFromSite && !preselectSiteId" type="warning" show-icon class="acme-alert"
               message="请先保存站点后再申请免费证书。" />
             <a-form-item label="站点" required>
@@ -103,28 +76,11 @@
               <p v-else class="fs-hint">请先选择站点。</p>
             </a-form-item>
             <a-form-item label="证书机构" required>
-              <a-radio-group v-model:value="acme.provider" :disabled="acmeBusy">
-                <a-radio value="letsencrypt">Let's Encrypt</a-radio>
+              <a-radio-group v-model:value="acmeProviderModel" :disabled="acmeBusy">
+                <a-radio value="letsencrypt">Let's Encrypt(推荐)</a-radio>
                 <a-radio value="zerossl">ZeroSSL</a-radio>
               </a-radio-group>
             </a-form-item>
-            <a-form-item label="自动更新">
-              <a-switch v-model:checked="acme.autoRenew" :disabled="acmeBusy" />
-              <p class="fs-hint is-inline">
-                到期前 10 天起每日尝试续期。请先在「系统设置 → 显示设置」填写 ACME 账户邮箱（机构账户联系用，一般不验证能否收信）。
-              </p>
-            </a-form-item>
-            <a-form-item v-if="acme.autoRenew" label="通知通道" required>
-              <a-select v-model:value="acme.channelIds" mode="multiple" placeholder="选择已配置的通知通道"
-                allow-clear option-filter-prop="label" style="width: 100%" :disabled="acmeBusy">
-                <a-select-option v-for="ch in channels" :key="ch.id" :value="ch.id" :label="ch.name"
-                  :disabled="!ch.enabled">
-                  {{ ch.name }}（{{ channelTypeLabel(ch.channel_type) }}）
-                </a-select-option>
-              </a-select>
-              <p class="fs-hint is-inline">申请与续期的成功、失败都会发送到所选通道。</p>
-            </a-form-item>
-
             <div v-if="acmeLogs.length || acmeError" class="acme-log-panel">
               <div class="acme-log-panel__title">申请进度</div>
               <div ref="acmeLogEl" class="acme-log-panel__body">
@@ -137,8 +93,87 @@
               <a-alert v-if="acmeError" type="error" show-icon class="acme-alert" :message="acmeError" />
             </div>
           </a-tab-pane>
+          <a-tab-pane key="baota" tab="从宝塔导入">
+            <panel-import-form v-if="importMode === 'baota'" ref="panelImportRef" kind="certificates" provider="baota"
+              :replace-certificate-id="certificateId" @status="onPanelStatus" @imported="onPanelImported"
+              @close="emit('update:open', false)" />
+          </a-tab-pane>
+          <a-tab-pane key="onepanel" tab="从 1Panel 导入">
+            <panel-import-form v-if="importMode === 'onepanel'" ref="panelImportRef" kind="certificates"
+              provider="onepanel" :replace-certificate-id="certificateId" @status="onPanelStatus"
+              @imported="onPanelImported" @close="emit('update:open', false)" />
+          </a-tab-pane>
         </a-tabs>
       </fs-form-section>
+
+      <template v-if="!isPanelImport">
+        <fs-form-section title="高级功能">
+          <div class="fs-switch-row">
+            <div class="fs-switch-row-header">
+              <div>
+                <div><b>到期前通知</b></div>
+                <div class="fs-muted">到期前7天，每日会通知一次</div>
+              </div>
+              <a-switch v-model:checked="form.expiry_notify_enabled" />
+            </div>
+            <div class="fs-switch-row-body" v-if="form.expiry_notify_enabled">
+              <a-form-item label="通知通道" required>
+                <a-select v-model:value="form.expiry_notify_channel_ids" mode="multiple" placeholder="选择已配置的通知通道"
+                  allow-clear option-filter-prop="label" style="width: 100%">
+                  <a-select-option v-for="ch in channels" :key="ch.id" :value="ch.id" :label="ch.name"
+                    :disabled="!ch.enabled">
+                    {{ ch.name }}（{{ channelTypeLabel(ch.channel_type) }}）
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </div>
+          </div>
+          <div class="fs-switch-row">
+            <div class="fs-switch-row-header">
+              <div>
+                <div><b>到期前自动续期</b></div>
+                <div class="fs-muted">到期前10天起，每日将尝试自动申请免费证书续期</div>
+              </div>
+              <a-switch v-model:checked="form.acme_auto_renew" />
+            </div>
+            <div class="fs-switch-row-body" v-if="form.acme_auto_renew">
+              <a-form-item label="证书机构" required>
+                <a-radio-group v-model:value="acmeProviderModel">
+                  <a-radio value="letsencrypt">Let's Encrypt(推荐)</a-radio>
+                  <a-radio value="zerossl">ZeroSSL</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item label="绑定站点" required>
+                <a-select v-model:value="renew.siteId" placeholder="选择已保存的站点" show-search option-filter-prop="label"
+                  style="width: 100%" @change="onRenewSiteChange">
+                  <a-select-option v-for="site in sites" :key="site.id" :value="site.id"
+                    :label="site.name || site.domain">
+                    {{ site.name || site.domain }}
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item label="续期域名" required>
+                <a-checkbox-group v-if="renewSiteDomains.length" v-model:value="renew.domains" class="acme-domains">
+                  <a-checkbox v-for="domain in renewSiteDomains" :key="domain" :value="domain">
+                    {{ domain }}
+                  </a-checkbox>
+                </a-checkbox-group>
+                <p v-else class="fs-hint">请先选择站点。</p>
+              </a-form-item>
+              <a-form-item label="通知通道" required>
+                <a-select v-model:value="form.expiry_notify_channel_ids" mode="multiple" placeholder="选择自动续签的结果通知通道"
+                  allow-clear option-filter-prop="label" style="width: 100%">
+                  <a-select-option v-for="ch in channels" :key="ch.id" :value="ch.id" :label="ch.name"
+                    :disabled="!ch.enabled">
+                    {{ ch.name }}（{{ channelTypeLabel(ch.channel_type) }}）
+                  </a-select-option>
+                </a-select>
+              </a-form-item>
+            </div>
+          </div>
+        </fs-form-section>
+      </template>
+
     </a-form>
   </fs-form-drawer>
 </template>
@@ -251,24 +286,27 @@ const isPanelImport = computed(
   () => importMode.value === "baota" || importMode.value === "onepanel",
 );
 const isAcmeIssue = computed(() => importMode.value === "acme");
-const isAcmeCert = computed(() => Boolean(form.acme_provider));
 const drawerOkText = computed(() => {
   if (isPanelImport.value) return panelStatus.okText;
   if (isAcmeIssue.value) return "立即申请";
   return undefined;
 });
-const contentSectionDescription = computed(() => {
-  if (isPanelImport.value) return undefined;
-  if (isAcmeIssue.value) return "通过 Let's Encrypt 或 ZeroSSL 签发并绑定站点";
-  return "支持粘贴 PEM 文本或上传文件";
+
+const acmeProviderModel = computed({
+  get: () => (form.acme_provider === "zerossl" ? "zerossl" : "letsencrypt"),
+  set: (value: "letsencrypt" | "zerossl") => {
+    form.acme_provider = value;
+  },
 });
 
 const acme = reactive({
   siteId: null as number | null,
   domains: [] as string[],
-  provider: "letsencrypt" as "letsencrypt" | "zerossl",
-  autoRenew: true,
-  channelIds: [] as number[],
+});
+
+const renew = reactive({
+  siteId: null as number | null,
+  domains: [] as string[],
 });
 
 const certFile = ref<File | null>(null);
@@ -276,10 +314,13 @@ const keyFile = ref<File | null>(null);
 const certFileList = ref<UploadProps["fileList"]>([]);
 const keyFileList = ref<UploadProps["fileList"]>([]);
 
-const acmeSiteDomains = computed(() => {
-  const site = sites.value.find((item) => item.id === acme.siteId);
-  return site?.domains?.length ? site.domains : site?.domain ? [site.domain] : [];
-});
+function siteDomainList(site: SiteOption | undefined) {
+  if (!site) return [] as string[];
+  return site.domains?.length ? site.domains : site.domain ? [site.domain] : [];
+}
+
+const acmeSiteDomains = computed(() => siteDomainList(sites.value.find((item) => item.id === acme.siteId)));
+const renewSiteDomains = computed(() => siteDomainList(sites.value.find((item) => item.id === renew.siteId)));
 
 function channelTypeLabel(type: string) {
   if (type === "email") return "邮件";
@@ -287,12 +328,6 @@ function channelTypeLabel(type: string) {
   if (type === "dingtalk") return "钉钉";
   if (type === "sms") return "短信";
   return type;
-}
-
-function acmeProviderLabel(provider: string | null | undefined) {
-  if (provider === "letsencrypt") return "Let's Encrypt";
-  if (provider === "zerossl") return "ZeroSSL";
-  return provider || "手工导入";
 }
 
 function splitDomains(value: string | null | undefined) {
@@ -310,14 +345,13 @@ function resetForm() {
   form.key_content = "";
   form.expiry_notify_enabled = false;
   form.expiry_notify_channel_ids = [];
-  form.acme_provider = "";
+  form.acme_provider = "letsencrypt";
   form.acme_auto_renew = false;
   form.bound_sites = [];
   acme.siteId = null;
   acme.domains = [];
-  acme.provider = "letsencrypt";
-  acme.autoRenew = true;
-  acme.channelIds = [];
+  renew.siteId = null;
+  renew.domains = [];
   acmeLogs.value = [];
   acmeError.value = "";
   certFile.value = null;
@@ -329,8 +363,12 @@ function resetForm() {
 
 function onAcmeSiteChange(id: number) {
   acme.siteId = id;
-  const site = sites.value.find((item) => item.id === id);
-  acme.domains = [...(site?.domains?.length ? site.domains : site?.domain ? [site.domain] : [])];
+  acme.domains = [...siteDomainList(sites.value.find((item) => item.id === id))];
+}
+
+function onRenewSiteChange(id: number) {
+  renew.siteId = id;
+  renew.domains = [...siteDomainList(sites.value.find((item) => item.id === id))];
 }
 
 async function loadChannels() {
@@ -351,35 +389,49 @@ async function loadSites() {
   }
 }
 
-function initAcmeSelection() {
+function pickSiteForDomains(certDomains: string[]) {
+  if (!certDomains.length) return null;
+  const exact = sites.value.find((site) => {
+    const have = new Set(siteDomainList(site));
+    return certDomains.every((domain) => have.has(domain));
+  });
+  const overlap =
+    exact ||
+    sites.value.find((site) => {
+      const have = new Set(siteDomainList(site));
+      return certDomains.some((domain) => have.has(domain));
+    });
+  if (!overlap) return null;
+  const have = siteDomainList(overlap);
+  const selected = certDomains.filter((domain) => have.includes(domain));
+  return {
+    siteId: overlap.id,
+    domains: selected.length ? selected : [...have],
+  };
+}
+
+function initDomainSelections() {
   if (props.preselectSiteId) {
     onAcmeSiteChange(props.preselectSiteId);
+    onRenewSiteChange(props.preselectSiteId);
     return;
   }
+
   const certDomains = splitDomains(form.domains);
-  if (certDomains.length) {
-    const exact = sites.value.find((site) => {
-      const have = new Set(site.domains?.length ? site.domains : site.domain ? [site.domain] : []);
-      return certDomains.every((domain) => have.has(domain));
-    });
-    const overlap =
-      exact ||
-      sites.value.find((site) => {
-        const have = new Set(site.domains?.length ? site.domains : site.domain ? [site.domain] : []);
-        return certDomains.some((domain) => have.has(domain));
-      });
-    if (overlap) {
-      acme.siteId = overlap.id;
-      const have = overlap.domains?.length ? overlap.domains : overlap.domain ? [overlap.domain] : [];
-      acme.domains = certDomains.filter((domain) => have.includes(domain));
-      if (!acme.domains.length) acme.domains = [...have];
-      return;
-    }
+  const matched = pickSiteForDomains(certDomains);
+  if (matched) {
+    acme.siteId = matched.siteId;
+    acme.domains = [...matched.domains];
+    renew.siteId = matched.siteId;
+    renew.domains = [...matched.domains];
+    return;
   }
+
   if (form.bound_sites.length) {
     const boundId = form.bound_sites[0].id;
     if (sites.value.some((site) => site.id === boundId)) {
       onAcmeSiteChange(boundId);
+      onRenewSiteChange(boundId);
     }
   }
 }
@@ -396,14 +448,12 @@ async function loadDetail(id: number) {
     form.key_content = detail.key_content;
     form.expiry_notify_enabled = Boolean(detail.expiry_notify_enabled);
     form.expiry_notify_channel_ids = [...(detail.expiry_notify_channel_ids || [])];
-    form.acme_provider = detail.acme_provider || "";
+    form.acme_provider =
+      detail.acme_provider === "zerossl" || detail.acme_provider === "letsencrypt"
+        ? detail.acme_provider
+        : "letsencrypt";
     form.acme_auto_renew = Boolean(detail.acme_auto_renew);
     form.bound_sites = [...(detail.bound_sites || [])];
-    acme.autoRenew = form.acme_auto_renew;
-    acme.channelIds = [...form.expiry_notify_channel_ids];
-    if (form.acme_provider === "zerossl" || form.acme_provider === "letsencrypt") {
-      acme.provider = form.acme_provider;
-    }
   } finally {
     detailLoading.value = false;
   }
@@ -418,13 +468,21 @@ watch(
     if (props.certificateId) {
       await loadDetail(props.certificateId);
     }
-    initAcmeSelection();
+    initDomainSelections();
   },
 );
 
 watch(importMode, (mode) => {
-  if (mode === "acme" && !acme.siteId) initAcmeSelection();
+  if (mode === "acme" && !acme.siteId) initDomainSelections();
 });
+
+watch(
+  () => form.acme_auto_renew,
+  (enabled) => {
+    if (!enabled) return;
+    if (!renew.siteId) initDomainSelections();
+  },
+);
 
 const onCertFile: UploadProps["beforeUpload"] = (file) => {
   certFile.value = file as File;
@@ -489,14 +547,31 @@ async function resolveCertContents(): Promise<{ cert: string; key: string } | nu
   };
 }
 
+function validateAutoRenewSettings(): boolean {
+  if (!form.acme_auto_renew) return true;
+  if (!renew.domains.length) {
+    message.warning("开启自动续期时请勾选至少一个域名");
+    return false;
+  }
+  if (!form.expiry_notify_channel_ids.length) {
+    message.warning("开启自动续期时请选择通知通道");
+    return false;
+  }
+  return true;
+}
+
 function notifyPayload() {
-  return {
+  const channelsNeeded = form.expiry_notify_enabled || form.acme_auto_renew;
+  const payload: Record<string, unknown> = {
     expiry_notify_enabled: form.expiry_notify_enabled,
-    expiry_notify_channel_ids: form.expiry_notify_enabled || form.acme_auto_renew
-      ? [...form.expiry_notify_channel_ids]
-      : [],
+    expiry_notify_channel_ids: channelsNeeded ? [...form.expiry_notify_channel_ids] : [],
     acme_auto_renew: form.acme_auto_renew,
   };
+  if (form.acme_auto_renew) {
+    payload.acme_provider = acmeProviderModel.value;
+    payload.renew_domains = [...renew.domains];
+  }
+  return payload;
 }
 
 function onPanelStatus(status: PanelImportStatus) {
@@ -540,10 +615,11 @@ async function submitAcme() {
     message.warning("请勾选至少一个域名");
     return;
   }
-  if (acme.autoRenew && !acme.channelIds.length) {
-    message.warning("开启自动更新时请选择通知通道");
+  if (form.expiry_notify_enabled && !form.expiry_notify_channel_ids.length) {
+    message.warning("启用到期前通知时请选择通知通道");
     return;
   }
+  if (!validateAutoRenewSettings()) return;
   if (!appSettings.loaded) {
     try {
       await appSettings.fetch();
@@ -554,6 +630,15 @@ async function submitAcme() {
   if (!appSettings.acmeAccountEmail?.trim()) {
     message.warning("请先在「系统设置 → 显示设置」填写 ACME 账户邮箱");
     return;
+  }
+
+  // Editing: persist notify/renew settings first so they survive even if issue fails later.
+  if (props.certificateId) {
+    try {
+      await api.put(`/api/v1/certificates/${props.certificateId}`, notifyPayload());
+    } catch {
+      return;
+    }
   }
 
   acmeLogs.value = [];
@@ -571,9 +656,14 @@ async function submitAcme() {
       body: JSON.stringify({
         site_id: acme.siteId,
         domains: acme.domains,
-        provider: acme.provider,
-        auto_renew: acme.autoRenew,
-        expiry_notify_channel_ids: acme.autoRenew ? [...acme.channelIds] : [],
+        provider: acmeProviderModel.value,
+        auto_renew: form.acme_auto_renew,
+        expiry_notify_enabled: form.expiry_notify_enabled,
+        expiry_notify_channel_ids:
+          form.acme_auto_renew || form.expiry_notify_enabled
+            ? [...form.expiry_notify_channel_ids]
+            : [],
+        renew_domains: form.acme_auto_renew ? [...renew.domains] : null,
         name: form.name.trim() || null,
         replace_certificate_id: props.certificateId || null,
       }),
@@ -668,10 +758,7 @@ async function save() {
     message.warning("启用到期前通知时请选择通知通道");
     return;
   }
-  if (form.acme_auto_renew && !form.expiry_notify_channel_ids.length) {
-    message.warning("开启自动更新时请选择通知通道");
-    return;
-  }
+  if (!validateAutoRenewSettings()) return;
 
   const contents = await resolveCertContents();
   if (!contents) return;
@@ -694,8 +781,13 @@ async function save() {
       fd.append("name", form.name.trim());
       if (form.remark) fd.append("remark", form.remark);
       fd.append("expiry_notify_enabled", String(notify.expiry_notify_enabled));
-      if (notify.expiry_notify_channel_ids.length) {
+      if ((notify.expiry_notify_channel_ids as number[]).length) {
         fd.append("expiry_notify_channel_ids", JSON.stringify(notify.expiry_notify_channel_ids));
+      }
+      fd.append("acme_auto_renew", String(notify.acme_auto_renew));
+      if (notify.acme_auto_renew) {
+        fd.append("acme_provider", String(notify.acme_provider));
+        fd.append("renew_domains", JSON.stringify(notify.renew_domains));
       }
       fd.append("cert_file", certFile.value!);
       fd.append("key_file", keyFile.value!);
@@ -724,13 +816,7 @@ async function save() {
 
 <style scoped>
 .acme-alert {
-  margin-bottom: 16px;
-}
-
-.acme-domains {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  margin: 4px 12px 8px;
 }
 
 .acme-log-panel {
@@ -738,7 +824,7 @@ async function save() {
   border: 1px solid var(--fs-border, #e2e8f0);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--fs-surface-muted, #f8fafc);
+  background: var(--fs-bg-elevated);
 }
 
 .acme-log-panel__title {
@@ -754,25 +840,25 @@ async function save() {
   padding: 8px 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.55;
+  background: var(--fs-bg-muted, #f8fafc);
 }
 
 .acme-log-line {
   display: flex;
-  gap: 10px;
-  color: var(--fs-text, #0f172a);
+  gap: 8px;
 }
 
 .acme-log-line.is-error {
-  color: #dc2626;
+  color: var(--fs-danger, #dc2626);
 }
 
 .acme-log-line.is-ok {
-  color: #16a34a;
+  color: var(--fs-success, #16a34a);
 }
 
 .acme-log-time {
-  flex: 0 0 auto;
-  color: #94a3b8;
+  flex: none;
+  color: var(--fs-text-muted, #64748b);
 }
 </style>

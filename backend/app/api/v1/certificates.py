@@ -74,6 +74,48 @@ def _validate_notify_settings(*, enabled: bool, channel_ids: list[int] | None) -
         raise HTTPException(status_code=400, detail="启用到期前通知时请选择通知通道")
 
 
+def _parse_form_renew_domains(value: str | list[str] | None) -> list[str] | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="续期域名参数格式无效") from exc
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=400, detail="续期域名参数格式无效")
+    return [str(v) for v in parsed]
+
+
+def _apply_acme_renew_settings(
+    cert: Certificate,
+    *,
+    acme_auto_renew: bool | None = None,
+    acme_provider: str | None = None,
+    renew_domains: list[str] | None = None,
+    provider_provided: bool = False,
+    renew_domains_provided: bool = False,
+) -> None:
+    if acme_auto_renew is not None:
+        cert.acme_auto_renew = bool(acme_auto_renew)
+    if provider_provided:
+        cert.acme_provider = acme_provider
+    if renew_domains_provided and renew_domains is not None:
+        cert.domains = ",".join(renew_domains) if renew_domains else None
+
+    if not cert.acme_auto_renew:
+        return
+    if not cert.acme_provider:
+        raise HTTPException(status_code=400, detail="开启自动续期时请选择证书机构")
+    names = [n.strip() for n in (cert.domains or "").split(",") if n.strip()]
+    if not names:
+        raise HTTPException(status_code=400, detail="开启自动续期时请选择绑定域名")
+
+
 async def _ensure_notify_channels(db: AsyncSession, channel_ids: list[int]) -> None:
     if not channel_ids:
         return
@@ -120,13 +162,24 @@ async def _create_certificate(
     remark: str | None,
     expiry_notify_enabled: bool = False,
     expiry_notify_channel_ids: list[int] | None = None,
+    acme_auto_renew: bool = False,
+    acme_provider: str | None = None,
+    renew_domains: list[str] | None = None,
 ) -> Certificate:
     channel_ids = list(expiry_notify_channel_ids or [])
-    _validate_notify_settings(enabled=expiry_notify_enabled, channel_ids=channel_ids)
-    if expiry_notify_enabled:
+    needs_channels = expiry_notify_enabled or acme_auto_renew
+    if acme_auto_renew and not channel_ids:
+        raise HTTPException(status_code=400, detail="开启自动续期时请选择通知通道")
+    _validate_notify_settings(enabled=needs_channels, channel_ids=channel_ids)
+    if needs_channels:
         await _ensure_notify_channels(db, channel_ids)
     else:
         channel_ids = []
+    if acme_auto_renew:
+        if not acme_provider:
+            raise HTTPException(status_code=400, detail="开启自动续期时请选择证书机构")
+        if not renew_domains:
+            raise HTTPException(status_code=400, detail="开启自动续期时请选择绑定域名")
 
     return await persist_new_certificate(
         db,
@@ -136,6 +189,9 @@ async def _create_certificate(
         remark=remark,
         expiry_notify_enabled=expiry_notify_enabled,
         expiry_notify_channel_ids=channel_ids,
+        acme_auto_renew=acme_auto_renew,
+        acme_provider=acme_provider,
+        renew_domains=renew_domains,
         commit=True,
     )
 
@@ -211,7 +267,9 @@ async def issue_acme_certificate(
             domains=body.domains,
             provider=body.provider,
             auto_renew=body.auto_renew,
+            expiry_notify_enabled=body.expiry_notify_enabled,
             expiry_notify_channel_ids=body.expiry_notify_channel_ids,
+            renew_domains=body.renew_domains,
             name=body.name,
             replace_certificate_id=body.replace_certificate_id,
         )
@@ -254,7 +312,9 @@ async def issue_acme_certificate_stream(
                         domains=body.domains,
                         provider=body.provider,
                         auto_renew=body.auto_renew,
+                        expiry_notify_enabled=body.expiry_notify_enabled,
                         expiry_notify_channel_ids=body.expiry_notify_channel_ids,
+                        renew_domains=body.renew_domains,
                         name=body.name,
                         replace_certificate_id=body.replace_certificate_id,
                         on_progress=on_progress,
@@ -343,6 +403,9 @@ async def create_certificate(
             remark=body.remark,
             expiry_notify_enabled=body.expiry_notify_enabled,
             expiry_notify_channel_ids=body.expiry_notify_channel_ids,
+            acme_auto_renew=body.acme_auto_renew,
+            acme_provider=body.acme_provider,
+            renew_domains=body.renew_domains,
         )
     except ValueError as exc:
         await db.rollback()
@@ -356,6 +419,9 @@ async def upload_certificate(
     remark: str | None = Form(None),
     expiry_notify_enabled: str | None = Form(None),
     expiry_notify_channel_ids: str | None = Form(None),
+    acme_auto_renew: str | None = Form(None),
+    acme_provider: str | None = Form(None),
+    renew_domains: str | None = Form(None),
     cert_file: UploadFile = File(...),
     key_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -363,6 +429,9 @@ async def upload_certificate(
 ):
     cert_content = (await cert_file.read()).decode("utf-8", errors="replace")
     key_content = (await key_file.read()).decode("utf-8", errors="replace")
+    provider = (acme_provider or "").strip().lower() or None
+    if provider and provider not in {"letsencrypt", "zerossl"}:
+        raise HTTPException(status_code=400, detail="请选择 Let's Encrypt 或 ZeroSSL")
     try:
         cert = await _create_certificate(
             db,
@@ -372,6 +441,9 @@ async def upload_certificate(
             remark=remark,
             expiry_notify_enabled=_parse_form_bool(expiry_notify_enabled),
             expiry_notify_channel_ids=_parse_form_channel_ids(expiry_notify_channel_ids),
+            acme_auto_renew=_parse_form_bool(acme_auto_renew),
+            acme_provider=provider,
+            renew_domains=_parse_form_renew_domains(renew_domains),
         )
     except ValueError as exc:
         await db.rollback()
@@ -393,25 +465,14 @@ async def update_certificate(
     data = body.model_dump(exclude_unset=True)
     cert_content = data.pop("cert_content", None)
     key_content = data.pop("key_content", None)
-    acme_auto_renew = data.get("acme_auto_renew")
-    if acme_auto_renew and not cert.acme_provider:
-        raise HTTPException(status_code=400, detail="仅 ACME 申请的证书可开启自动更新")
+    acme_auto_renew = data.pop("acme_auto_renew", None)
+    acme_provider = data.pop("acme_provider", None)
+    renew_domains = data.pop("renew_domains", None)
+    provider_provided = "acme_provider" in body.model_fields_set
+    renew_domains_provided = "renew_domains" in body.model_fields_set
 
     for k, v in data.items():
         setattr(cert, k, v)
-
-    enabled = bool(cert.expiry_notify_enabled)
-    auto_renew = bool(getattr(cert, "acme_auto_renew", False))
-    channel_ids = list(cert.expiry_notify_channel_ids or [])
-    if auto_renew and not channel_ids:
-        raise HTTPException(status_code=400, detail="开启自动更新时请选择通知通道")
-    if not enabled and not auto_renew:
-        channel_ids = []
-        cert.expiry_notify_channel_ids = []
-    _validate_notify_settings(enabled=enabled or auto_renew, channel_ids=channel_ids)
-    if channel_ids:
-        await _ensure_notify_channels(db, channel_ids)
-        cert.expiry_notify_channel_ids = channel_ids
 
     if cert_content is not None or key_content is not None:
         if not (cert_content and key_content):
@@ -421,6 +482,32 @@ async def update_certificate(
         except ValueError as exc:
             await db.rollback()
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        _apply_acme_renew_settings(
+            cert,
+            acme_auto_renew=acme_auto_renew,
+            acme_provider=acme_provider,
+            renew_domains=renew_domains,
+            provider_provided=provider_provided,
+            renew_domains_provided=renew_domains_provided,
+        )
+    except HTTPException:
+        await db.rollback()
+        raise
+
+    enabled = bool(cert.expiry_notify_enabled)
+    auto_renew = bool(getattr(cert, "acme_auto_renew", False))
+    channel_ids = list(cert.expiry_notify_channel_ids or [])
+    if auto_renew and not channel_ids:
+        raise HTTPException(status_code=400, detail="开启自动续期时请选择通知通道")
+    if not enabled and not auto_renew:
+        channel_ids = []
+        cert.expiry_notify_channel_ids = []
+    _validate_notify_settings(enabled=enabled or auto_renew, channel_ids=channel_ids)
+    if channel_ids:
+        await _ensure_notify_channels(db, channel_ids)
+        cert.expiry_notify_channel_ids = channel_ids
 
     await db.commit()
     await db.refresh(cert)

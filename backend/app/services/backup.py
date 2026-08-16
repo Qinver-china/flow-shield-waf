@@ -404,6 +404,17 @@ def _certificate_channel_ids(item: dict[str, Any]) -> list[int]:
     return out
 
 
+def _certificate_domains(item: dict[str, Any], pem_domains: str | None) -> str | None:
+    """Prefer exported domains (auto-renew SANs) when present; else PEM metadata."""
+    if "domains" not in item:
+        return pem_domains
+    raw = item.get("domains")
+    if raw is None:
+        return pem_domains
+    text = str(raw).strip()
+    return text or pem_domains
+
+
 def _apply_certificate_acme_fields(cert, item: dict[str, Any]) -> None:
     if "acme_provider" in item:
         provider = item.get("acme_provider")
@@ -417,9 +428,12 @@ def _apply_certificate_acme_fields(cert, item: dict[str, Any]) -> None:
 
 
 async def _import_certificates(
-    db: AsyncSession, items: list[dict[str, Any]]
+    db: AsyncSession,
+    items: list[dict[str, Any]],
+    channel_map: dict[int, int] | None = None,
 ) -> dict[int, int]:
     id_map: dict[int, int] = {}
+    channels = channel_map or {}
     for item in items:
         name = (item.get("name") or "").strip()
         if not name:
@@ -438,15 +452,18 @@ async def _import_certificates(
             log.warning("invalid certificate %s: %s", name, exc)
             continue
 
+        domains = _certificate_domains(item, meta["domains"])
+        channel_ids = _remap_ids(_certificate_channel_ids(item), channels) or []
+
         if existing:
-            existing.domains = meta["domains"]
+            existing.domains = domains
             existing.not_before = meta["not_before"]
             existing.not_after = meta["not_after"]
             existing.remark = item.get("remark")
             if "expiry_notify_enabled" in item:
                 existing.expiry_notify_enabled = bool(item.get("expiry_notify_enabled"))
             if "expiry_notify_channel_ids" in item or "expiry_notify_channel_id" in item:
-                existing.expiry_notify_channel_ids = _certificate_channel_ids(item)
+                existing.expiry_notify_channel_ids = channel_ids
             _apply_certificate_acme_fields(existing, item)
             paths = certificate_store.write_cert_files(existing.id, cert_pem, key_pem)
             existing.cert_path, existing.key_path = paths
@@ -456,14 +473,14 @@ async def _import_certificates(
         else:
             cert = Certificate(
                 name=name,
-                domains=meta["domains"],
+                domains=domains,
                 cert_path="",
                 key_path="",
                 not_before=meta["not_before"],
                 not_after=meta["not_after"],
                 remark=item.get("remark"),
                 expiry_notify_enabled=bool(item.get("expiry_notify_enabled")),
-                expiry_notify_channel_ids=_certificate_channel_ids(item),
+                expiry_notify_channel_ids=channel_ids,
             )
             _apply_certificate_acme_fields(cert, item)
             db.add(cert)
@@ -867,6 +884,14 @@ async def apply_import(
     )
     import_ip_groups = "ip_groups" in selected or legacy_ip_groups
 
+    # Channels first so certificate notify / auto-renew channel ids can remap.
+    if "system_settings" in selected:
+        channel_map = await _import_channels(db, data.get("notification_channels") or [])
+        summary["counts"]["notification_channels"] = len(channel_map)
+    else:
+        for row in (await db.execute(select(NotificationChannel))).scalars().all():
+            channel_map[row.id] = row.id
+
     # Same-instance identity maps when related section is not part of this import.
     if "certificates" not in selected:
         for row in (await db.execute(select(Certificate))).scalars().all():
@@ -879,7 +904,9 @@ async def apply_import(
             group_map[row.id] = row.id
 
     if "certificates" in selected:
-        cert_map = await _import_certificates(db, data.get("certificates") or [])
+        cert_map = await _import_certificates(
+            db, data.get("certificates") or [], channel_map
+        )
         summary["counts"]["certificates"] = len(cert_map)
 
     if "sites" in selected:
@@ -945,8 +972,6 @@ async def apply_import(
         )
 
     if "system_settings" in selected:
-        channel_map = await _import_channels(db, data.get("notification_channels") or [])
-        summary["counts"]["notification_channels"] = len(channel_map)
         summary["counts"]["alert_policies"] = await _import_alert_policies(
             db, data.get("alert_policies") or [], channel_map
         )
@@ -956,9 +981,6 @@ async def apply_import(
         summary["counts"]["panel_connections"] = await _import_panel_connections(
             db, data.get("panel_connections") or []
         )
-    else:
-        for row in (await db.execute(select(NotificationChannel))).scalars().all():
-            channel_map[row.id] = row.id
 
     if "ai_config" in selected:
         summary["counts"]["ai_guard_settings"] = int(

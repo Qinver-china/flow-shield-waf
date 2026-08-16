@@ -163,7 +163,7 @@
       :title="drawerTitle"
       :subtitle="drawerSubtitle"
       :mode="drawerMode"
-      :width="extraCreateTabs.length ? 820 : undefined"
+      :width="extraCreateTabs.length ? 760 : undefined"
       :loading="extraCreateTabActive ? extraCreateFooter?.loading : false"
       :confirm-loading="extraCreateTabActive ? !!extraCreateFooter?.confirmLoading : saving"
       :ok-text="extraCreateTabActive ? (extraCreateFooter?.okText || '导入') : undefined"

@@ -63,18 +63,24 @@ async def persist_new_certificate(
     remark: str | None = None,
     expiry_notify_enabled: bool = False,
     expiry_notify_channel_ids: list[int] | None = None,
+    acme_auto_renew: bool = False,
+    acme_provider: str | None = None,
+    renew_domains: list[str] | None = None,
     commit: bool = True,
 ) -> Certificate:
     channel_ids = list(expiry_notify_channel_ids or [])
-    if not expiry_notify_enabled:
+    if not expiry_notify_enabled and not acme_auto_renew:
         channel_ids = []
 
     cert_obj, _key = certificate_store.validate_pem_pair(cert_content, key_content)
     meta = certificate_store.parse_cert_meta(cert_obj)
+    domains = meta["domains"]
+    if acme_auto_renew and renew_domains:
+        domains = ",".join(renew_domains)
 
     cert = Certificate(
         name=name.strip()[:128],
-        domains=meta["domains"],
+        domains=domains,
         cert_path="",
         key_path="",
         not_before=meta["not_before"],
@@ -82,6 +88,8 @@ async def persist_new_certificate(
         remark=remark,
         expiry_notify_enabled=expiry_notify_enabled,
         expiry_notify_channel_ids=channel_ids,
+        acme_auto_renew=bool(acme_auto_renew),
+        acme_provider=acme_provider if acme_auto_renew else None,
     )
     db.add(cert)
     await db.flush()

@@ -1,6 +1,10 @@
 """Backup export/import helpers."""
+from types import SimpleNamespace
+
 from app.services.backup import (
     FORMAT_NAME,
+    _apply_certificate_acme_fields,
+    _certificate_domains,
     _normalize_sections,
     _remap_ids,
     _remap_ip_group_ids_in_conditions,
@@ -64,3 +68,32 @@ def test_remap_ids_and_conditions():
     assert remapped["conditions"][0]["value"] == [70, 80]
     assert remapped["conditions"][1]["value"] == "/"
     assert FORMAT_NAME == "flow-shield-waf-backup"
+
+
+def test_certificate_domains_prefer_exported_renew_sans():
+    assert _certificate_domains({"domains": "a.com,b.com"}, "a.com") == "a.com,b.com"
+    assert _certificate_domains({"domains": "  "}, "pem.com") == "pem.com"
+    assert _certificate_domains({"domains": None}, "pem.com") == "pem.com"
+    assert _certificate_domains({}, "pem.com") == "pem.com"
+
+
+def test_apply_certificate_acme_fields_from_backup():
+    cert = SimpleNamespace(
+        acme_provider=None,
+        acme_auto_renew=False,
+        acme_last_attempt_on=None,
+        acme_last_error=None,
+    )
+    _apply_certificate_acme_fields(
+        cert,
+        {
+            "acme_provider": "letsencrypt",
+            "acme_auto_renew": True,
+            "acme_last_attempt_on": "2026-08-01",
+            "acme_last_error": None,
+        },
+    )
+    assert cert.acme_provider == "letsencrypt"
+    assert cert.acme_auto_renew is True
+    assert cert.acme_last_attempt_on == "2026-08-01"
+    assert cert.acme_last_error is None
