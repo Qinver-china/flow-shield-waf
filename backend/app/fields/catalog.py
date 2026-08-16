@@ -272,7 +272,7 @@ FIELDS: list[dict] = [
     },
     {
         "key": "traffic.site",
-        "label": "当前站点请求量",
+        "label": "命中站点请求量",
         "category": "时间与流量",
         **_TRAFFIC_FIELD_DEF,
     },
@@ -284,7 +284,7 @@ FIELDS: list[dict] = [
     },
     {
         "key": "traffic.origin_site",
-        "label": "当前站点回源请求量",
+        "label": "命中站点回源请求量",
         "category": "时间与流量",
         **_ORIGIN_TRAFFIC_FIELD_DEF,
     },

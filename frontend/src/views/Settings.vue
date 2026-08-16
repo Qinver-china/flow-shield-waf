@@ -112,13 +112,13 @@
                 用于 AI 分析邮件中的「应用规则 / 忽略」链接，请勿带尾部斜杠。首次打开本页时会根据当前访问地址自动填入，可手动修改。
               </div>
             </a-form-item>
-            <a-form-item label="ACME 账户邮箱">
+            <a-form-item label="ACME 账户邮箱" required>
               <a-input
                 v-model:value="displayForm.acme_account_email"
                 placeholder="admin@example.com"
               />
               <div class="hint">
-                用于 Let's Encrypt / ZeroSSL 一键申请与自动续期。申请前必须填写可接收邮件的地址。
+                申请免费证书 / 自动续期前必填。用于向 Let's Encrypt、ZeroSSL 注册 ACME 账户（协议要求），机构一般不验证邮箱能否收信；产品内的申请/续期通知仍走「通知通道」。
               </div>
             </a-form-item>
             <a-form-item>
@@ -1169,12 +1169,21 @@ async function saveDisplay() {
     message.warning("面板地址必须以 http:// 或 https:// 开头");
     return;
   }
+  const acmeEmail = displayForm.acme_account_email.trim();
+  if (!acmeEmail) {
+    message.warning("请填写 ACME 账户邮箱（申请免费证书前必填）");
+    return;
+  }
+  if (!acmeEmail.includes("@") || !acmeEmail.split("@")[1]?.includes(".")) {
+    message.warning("ACME 账户邮箱格式无效");
+    return;
+  }
   displaySaving.value = true;
   try {
     await appSettings.updateDisplay({
       timezone: displayForm.timezone,
       panel_public_url: url,
-      acme_account_email: displayForm.acme_account_email.trim() || null,
+      acme_account_email: acmeEmail,
     });
     displayForm.timezone = appSettings.timezone;
     displayForm.timezone_options = appSettings.timezoneOptions;

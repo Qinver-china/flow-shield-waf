@@ -85,7 +85,7 @@
               message="请先保存站点后再申请免费证书。" />
             <a-form-item label="站点" required>
               <a-select v-model:value="acme.siteId" placeholder="选择已保存的站点" show-search option-filter-prop="label"
-                style="width: 100%" :disabled="Boolean(openedFromSite && !preselectSiteId)"
+                style="width: 100%" :disabled="acmeBusy || Boolean(openedFromSite && !preselectSiteId)"
                 @change="onAcmeSiteChange">
                 <a-select-option v-for="site in sites" :key="site.id" :value="site.id"
                   :label="site.name || site.domain">
@@ -94,7 +94,8 @@
               </a-select>
             </a-form-item>
             <a-form-item label="域名" required>
-              <a-checkbox-group v-if="acmeSiteDomains.length" v-model:value="acme.domains" class="acme-domains">
+              <a-checkbox-group v-if="acmeSiteDomains.length" v-model:value="acme.domains" class="acme-domains"
+                :disabled="acmeBusy">
                 <a-checkbox v-for="domain in acmeSiteDomains" :key="domain" :value="domain">
                   {{ domain }}
                 </a-checkbox>
@@ -102,18 +103,20 @@
               <p v-else class="fs-hint">请先选择站点。</p>
             </a-form-item>
             <a-form-item label="证书机构" required>
-              <a-radio-group v-model:value="acme.provider">
+              <a-radio-group v-model:value="acme.provider" :disabled="acmeBusy">
                 <a-radio value="letsencrypt">Let's Encrypt</a-radio>
                 <a-radio value="zerossl">ZeroSSL</a-radio>
               </a-radio-group>
             </a-form-item>
             <a-form-item label="自动更新">
-              <a-switch v-model:checked="acme.autoRenew" />
-              <p class="fs-hint is-inline">到期前 10 天起每日尝试续期；请先在系统设置填写 ACME 账户邮箱。</p>
+              <a-switch v-model:checked="acme.autoRenew" :disabled="acmeBusy" />
+              <p class="fs-hint is-inline">
+                到期前 10 天起每日尝试续期。请先在「系统设置 → 显示设置」填写 ACME 账户邮箱（机构账户联系用，一般不验证能否收信）。
+              </p>
             </a-form-item>
             <a-form-item v-if="acme.autoRenew" label="通知通道" required>
               <a-select v-model:value="acme.channelIds" mode="multiple" placeholder="选择已配置的通知通道"
-                allow-clear option-filter-prop="label" style="width: 100%">
+                allow-clear option-filter-prop="label" style="width: 100%" :disabled="acmeBusy">
                 <a-select-option v-for="ch in channels" :key="ch.id" :value="ch.id" :label="ch.name"
                   :disabled="!ch.enabled">
                   {{ ch.name }}（{{ channelTypeLabel(ch.channel_type) }}）
@@ -121,6 +124,18 @@
               </a-select>
               <p class="fs-hint is-inline">申请与续期的成功、失败都会发送到所选通道。</p>
             </a-form-item>
+
+            <div v-if="acmeLogs.length || acmeError" class="acme-log-panel">
+              <div class="acme-log-panel__title">申请进度</div>
+              <div ref="acmeLogEl" class="acme-log-panel__body">
+                <div v-for="(line, idx) in acmeLogs" :key="idx" class="acme-log-line"
+                  :class="{ 'is-error': line.level === 'error', 'is-ok': line.level === 'ok' }">
+                  <span class="acme-log-time">{{ line.time }}</span>
+                  <span>{{ line.message }}</span>
+                </div>
+              </div>
+              <a-alert v-if="acmeError" type="error" show-icon class="acme-alert" :message="acmeError" />
+            </div>
           </a-tab-pane>
         </a-tabs>
       </fs-form-section>
@@ -129,13 +144,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { message, type UploadProps } from "ant-design-vue";
 import { api } from "@/api";
 import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import PanelImportForm, { type PanelImportStatus } from "@/components/PanelImportForm.vue";
 import type { SiteOption } from "@/composables/useSiteOptions";
+import { useAppSettingsStore } from "@/stores/appSettings";
 
 export interface CertificateSaved {
   id: number;
@@ -205,22 +221,18 @@ const panelStatus = reactive<PanelImportStatus>({
 });
 const channels = ref<NotificationChannelItem[]>([]);
 const sites = ref<SiteOption[]>([]);
+const appSettings = useAppSettingsStore();
 
-const isPanelImport = computed(
-  () => importMode.value === "baota" || importMode.value === "onepanel",
-);
-const isAcmeIssue = computed(() => importMode.value === "acme");
-const isAcmeCert = computed(() => Boolean(form.acme_provider));
-const drawerOkText = computed(() => {
-  if (isPanelImport.value) return panelStatus.okText;
-  if (isAcmeIssue.value) return "申请证书";
-  return undefined;
-});
-const contentSectionDescription = computed(() => {
-  if (isPanelImport.value) return undefined;
-  if (isAcmeIssue.value) return "通过 Let's Encrypt 或 ZeroSSL 签发并绑定站点";
-  return "支持粘贴 PEM 文本或上传文件";
-});
+interface AcmeLogLine {
+  time: string;
+  message: string;
+  level: "info" | "error" | "ok";
+}
+
+const acmeLogs = ref<AcmeLogLine[]>([]);
+const acmeError = ref("");
+const acmeLogEl = ref<HTMLElement | null>(null);
+const acmeBusy = computed(() => saving.value && importMode.value === "acme");
 
 const form = reactive({
   name: "",
@@ -233,6 +245,22 @@ const form = reactive({
   acme_provider: "" as string,
   acme_auto_renew: false,
   bound_sites: [] as CertificateBoundSite[],
+});
+
+const isPanelImport = computed(
+  () => importMode.value === "baota" || importMode.value === "onepanel",
+);
+const isAcmeIssue = computed(() => importMode.value === "acme");
+const isAcmeCert = computed(() => Boolean(form.acme_provider));
+const drawerOkText = computed(() => {
+  if (isPanelImport.value) return panelStatus.okText;
+  if (isAcmeIssue.value) return "立即申请";
+  return undefined;
+});
+const contentSectionDescription = computed(() => {
+  if (isPanelImport.value) return undefined;
+  if (isAcmeIssue.value) return "通过 Let's Encrypt 或 ZeroSSL 签发并绑定站点";
+  return "支持粘贴 PEM 文本或上传文件";
 });
 
 const acme = reactive({
@@ -290,6 +318,8 @@ function resetForm() {
   acme.provider = "letsencrypt";
   acme.autoRenew = true;
   acme.channelIds = [];
+  acmeLogs.value = [];
+  acmeError.value = "";
   certFile.value = null;
   keyFile.value = null;
   certFileList.value = [];
@@ -478,6 +508,25 @@ function onPanelImported() {
   emit("imported");
 }
 
+function formatAcmeLogTime() {
+  const now = new Date();
+  return [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map((n) => String(n).padStart(2, "0"))
+    .join(":");
+}
+
+async function appendAcmeLog(messageText: string, level: AcmeLogLine["level"] = "info") {
+  acmeLogs.value.push({
+    time: formatAcmeLogTime(),
+    message: messageText,
+    level,
+  });
+  await nextTick();
+  if (acmeLogEl.value) {
+    acmeLogEl.value.scrollTop = acmeLogEl.value.scrollHeight;
+  }
+}
+
 async function submitAcme() {
   if (props.openedFromSite && !props.preselectSiteId) {
     message.warning("请先保存站点后再申请免费证书");
@@ -495,11 +544,31 @@ async function submitAcme() {
     message.warning("开启自动更新时请选择通知通道");
     return;
   }
+  if (!appSettings.loaded) {
+    try {
+      await appSettings.fetch();
+    } catch {
+      // ignore; backend will validate
+    }
+  }
+  if (!appSettings.acmeAccountEmail?.trim()) {
+    message.warning("请先在「系统设置 → 显示设置」填写 ACME 账户邮箱");
+    return;
+  }
+
+  acmeLogs.value = [];
+  acmeError.value = "";
   saving.value = true;
   try {
-    const resp = await api.post<CertificateSaved>(
-      "/api/v1/certificates/acme/issue",
-      {
+    await appendAcmeLog("开始申请免费证书…");
+    const token = localStorage.getItem("waf_access_token");
+    const resp = await fetch("/api/v1/certificates/acme/issue/stream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
         site_id: acme.siteId,
         domains: acme.domains,
         provider: acme.provider,
@@ -507,14 +576,76 @@ async function submitAcme() {
         expiry_notify_channel_ids: acme.autoRenew ? [...acme.channelIds] : [],
         name: form.name.trim() || null,
         replace_certificate_id: props.certificateId || null,
-      },
-      { timeout: 120000 },
-    );
+      }),
+    });
+
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        localStorage.removeItem("waf_access_token");
+        location.href = "/login";
+        return;
+      }
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.message || err.detail || "申请失败");
+    }
+
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error("无法读取申请进度");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finished = false;
+    let saved: CertificateSaved | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const raw = line.slice(6).trim();
+        if (raw === "[DONE]") {
+          finished = true;
+          continue;
+        }
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          continue;
+        }
+        if (parsed.type === "log") {
+          await appendAcmeLog(String(parsed.message || ""));
+        } else if (parsed.type === "error") {
+          const errText = String(parsed.message || "申请失败");
+          acmeError.value = errText;
+          await appendAcmeLog(errText, "error");
+          finished = true;
+        } else if (parsed.type === "done") {
+          saved = (parsed.data || null) as CertificateSaved | null;
+          await appendAcmeLog("证书申请成功", "ok");
+          finished = true;
+        }
+      }
+    }
+
+    if (acmeError.value) {
+      message.error(acmeError.value);
+      return;
+    }
+    if (!finished || !saved) {
+      throw new Error("连接中断，证书申请未完成");
+    }
     message.success("证书申请成功");
     emit("update:open", false);
-    emit("saved", resp.data);
-  } catch {
-    // interceptor shows error
+    emit("saved", saved);
+  } catch (e: unknown) {
+    const errText = e instanceof Error ? e.message : "申请失败";
+    acmeError.value = errText;
+    await appendAcmeLog(errText, "error");
+    message.error(errText);
   } finally {
     saving.value = false;
   }
@@ -600,5 +731,48 @@ async function save() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.acme-log-panel {
+  margin-top: 8px;
+  border: 1px solid var(--fs-border, #e2e8f0);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--fs-surface-muted, #f8fafc);
+}
+
+.acme-log-panel__title {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--fs-border, #e2e8f0);
+}
+
+.acme-log-panel__body {
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.acme-log-line {
+  display: flex;
+  gap: 10px;
+  color: var(--fs-text, #0f172a);
+}
+
+.acme-log-line.is-error {
+  color: #dc2626;
+}
+
+.acme-log-line.is-ok {
+  color: #16a34a;
+}
+
+.acme-log-time {
+  flex: 0 0 auto;
+  color: #94a3b8;
 }
 </style>

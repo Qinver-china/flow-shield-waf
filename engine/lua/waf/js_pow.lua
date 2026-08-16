@@ -245,6 +245,14 @@ function _M.client_script(token_js, cid_js, seed_js, base_difficulty)
     return null;
   }
 
+  function showFail(msg){
+    document.title="访问被拒绝";
+    document.body.style.cssText="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0";
+    document.body.innerHTML='<div style="text-align:center;max-width:420px;padding:0 20px"><h3 style="margin:0 0 12px">访问被拒绝</h3><p style="color:#94a3b8;margin:0"></p></div>';
+    var p=document.body.querySelector("p");
+    if(p)p.textContent=msg||"当前请求未通过安全检查。";
+  }
+
   function submit(nonce,fp){
     var dest=location.href;
     var body="t="+encodeURIComponent(token)
@@ -272,7 +280,6 @@ function _M.client_script(token_js, cid_js, seed_js, base_difficulty)
   function run(){
     var fp=fingerprintScore();
     if(fp>=blockScore){
-      document.querySelector(".box p").textContent="正在确认环境…";
       submit("0",fp);
       return;
     }
@@ -283,7 +290,7 @@ function _M.client_script(token_js, cid_js, seed_js, base_difficulty)
   setTimeout(function(){
     var nonce=solvePow(difficulty);
     if(nonce===null){
-      document.querySelector(".box p").textContent="验证超时，请刷新页面重试。";
+      showFail("验证超时，请刷新页面重试。");
       return;
     }
     submit(nonce,fp);

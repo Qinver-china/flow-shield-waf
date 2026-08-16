@@ -1152,7 +1152,7 @@
     },
     {
       "key": "traffic.site",
-      "label": "当前站点请求量",
+      "label": "命中站点请求量",
       "category": "时间与流量",
       "value_type": "traffic",
       "requires_arg": false,
@@ -1216,7 +1216,7 @@
     },
     {
       "key": "traffic.origin_site",
-      "label": "当前站点回源请求量",
+      "label": "命中站点回源请求量",
       "category": "时间与流量",
       "value_type": "traffic",
       "requires_arg": false,

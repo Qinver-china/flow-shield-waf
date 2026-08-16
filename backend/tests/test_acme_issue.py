@@ -308,3 +308,61 @@ def test_acme_email_html_does_not_escape_line_breaks_as_text():
     )
     assert "&lt;br/&gt;" not in html_body
     assert "失败原因：DNS 未指向" in html_body
+
+
+@pytest.mark.asyncio
+async def test_issue_emits_progress_logs():
+    site = SimpleNamespace(
+        id=1,
+        domain="a.example.com",
+        extra_domains=None,
+        certificate_id=None,
+        listen_https=False,
+    )
+    created = SimpleNamespace(id=9, name="cert", domains="a.example.com")
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=site)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    logs: list[str] = []
+
+    async def on_progress(msg: str) -> None:
+        logs.append(msg)
+
+    with (
+        patch(
+            "app.services.acme_issue.waf_settings.get_or_create",
+            AsyncMock(return_value=SimpleNamespace(acme_account_email="ops@example.com")),
+        ),
+        patch("app.services.acme_issue.ensure_acme_http_ready", AsyncMock()),
+        patch(
+            "app.services.acme_issue.request_certificate_pem",
+            return_value=("CERT", "KEY"),
+        ),
+        patch(
+            "app.services.acme_issue.persist_new_certificate",
+            AsyncMock(return_value=created),
+        ),
+        patch(
+            "app.services.acme_issue.reload_sites_using_certificate",
+            AsyncMock(return_value=True),
+        ),
+        patch(
+            "app.services.acme_issue.get_traffic_timezone",
+            AsyncMock(return_value="Asia/Shanghai"),
+        ),
+        patch("app.services.acme_issue.notify_acme_result", AsyncMock()),
+    ):
+        await issue_for_site(
+            db,
+            site_id=1,
+            domains=["a.example.com"],
+            provider="letsencrypt",
+            auto_renew=False,
+            expiry_notify_channel_ids=[],
+            on_progress=on_progress,
+        )
+    assert any("校验申请参数" in line for line in logs)
+    assert any("刷新引擎配置" in line for line in logs)
+    assert any("写入证书文件" in line for line in logs)
+    assert any("申请完成" in line for line in logs)

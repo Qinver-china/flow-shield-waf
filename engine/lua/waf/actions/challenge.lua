@@ -219,25 +219,22 @@ end
 local JS_CHALLENGE_PAGE_HEAD = [[<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>正在验证您的浏览器…</title>
+<title></title>
 <style>
-body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
-.box{text-align:center}.spin{width:44px;height:44px;border:4px solid #334155;border-top-color:#38bdf8;border-radius:50%;margin:0 auto 20px;animation:s 1s linear infinite}
+html,body{height:100%;margin:0}
+body{display:flex;align-items:center;justify-content:center}
+.spin{width:28px;height:28px;border:2px solid #e5e7eb;border-top-color:#9ca3af;border-radius:50%;opacity:0;animation:s .7s linear infinite,fadein .4s ease-out .4s forwards}
 @keyframes s{to{transform:rotate(360deg)}}
-p{color:#94a3b8}
-.brand{margin-top:24px;color:#64748b;font-size:13px}.brand b,.brand a{color:#38bdf8}.brand a{text-decoration:none}.brand a:hover{text-decoration:underline}
+@keyframes fadein{to{opacity:1}}
 </style></head>
-<body><div class="box">
-<div class="spin"></div>
-<h3>正在验证您的浏览器…</h3>
-<p>请稍候，此过程为自动完成，用于防护恶意流量。</p>
-<div class="brand">由 <a href="https://fswaf.top" target="_blank" rel="noopener noreferrer"><b>流盾WAF</b></a> · Flow Shield WAF 提供防护</div>
+<body>
+<div class="spin" aria-hidden="true"></div>
 <script>
 ]]
 
 local JS_CHALLENGE_PAGE_TAIL = [[
 </script>
-</div></body></html>]]
+</body></html>]]
 
 local function js_deny_html(message, ctx)
     message = message or "当前请求未通过安全检查。"
@@ -254,7 +251,7 @@ local function js_deny_html(message, ctx)
 <style>
 body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 .box{text-align:center;max-width:420px;padding:0 20px}
-h3{margin:0 0 12px}p{color:#94a3b8;margin:0}
+h3{margin: 0 0 12px; margin-bottom: 30px; font-size: 36px; color:rgb(221, 70, 68);}p{color:#94a3b8;margin:0}
 .rid{font-family:monospace;font-size:12px;color:#475569;margin-top:24px;word-break:break-all}
 </style></head>
 <body><div class="box">

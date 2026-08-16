@@ -5,8 +5,10 @@ import asyncio
 import ipaddress
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
+from typing import TypeVar
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -49,9 +51,54 @@ USER_AGENT = "FlowShield-WAF"
 RENEW_DAYS_BEFORE = 10
 _ISSUE_LOCK = asyncio.Lock()
 
+ProgressCallback = Callable[[str], Awaitable[None] | None]
+T = TypeVar("T")
+
 
 class AcmeIssueError(Exception):
     """User-visible ACME issue or renew failure."""
+
+
+async def _emit_progress(on_progress: ProgressCallback | None, message: str) -> None:
+    if not on_progress:
+        return
+    result = on_progress(message)
+    if asyncio.iscoroutine(result):
+        await result
+    elif hasattr(result, "__await__"):
+        await result  # type: ignore[misc]
+
+
+async def _to_thread_with_progress(
+    fn: Callable[..., T],
+    /,
+    *args,
+    on_progress: ProgressCallback | None,
+    **kwargs,
+) -> T:
+    """Run blocking fn in a thread while forwarding sync progress into async callback."""
+    if not on_progress:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    def sync_progress(message: str) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, message)
+
+    async def consumer() -> None:
+        while True:
+            item = await queue.get()
+            if item is None:
+                return
+            await _emit_progress(on_progress, item)
+
+    consumer_task = asyncio.create_task(consumer())
+    try:
+        return await asyncio.to_thread(fn, *args, on_progress=sync_progress, **kwargs)
+    finally:
+        loop.call_soon_threadsafe(queue.put_nowait, None)
+        await consumer_task
 
 
 def http01_dir() -> Path:
@@ -253,13 +300,19 @@ def _zerossl_eab(email: str, provider: str) -> tuple[str, str]:
     return str(kid), str(hmac_key)
 
 
-def request_certificate_pem(provider: str, email: str, domains: list[str]) -> tuple[str, str]:
+def request_certificate_pem(
+    provider: str,
+    email: str,
+    domains: list[str],
+    on_progress: Callable[[str], None] | None = None,
+) -> tuple[str, str]:
     """Blocking ACME HTTP-01 issue. Returns (fullchain_pem, private_key_pem).
 
     Args:
         provider: ``letsencrypt`` or ``zerossl``.
         email: ACME account contact email.
         domains: SAN DNS names (no wildcards).
+        on_progress: Optional sync callback for step messages.
 
     Returns:
         PEM full chain and matching private key.
@@ -274,6 +327,10 @@ def request_certificate_pem(provider: str, email: str, domains: list[str]) -> tu
     if not domains:
         raise AcmeIssueError("请选择至少一个域名")
 
+    def progress(message: str) -> None:
+        if on_progress:
+            on_progress(message)
+
     try:
         from acme import challenges, client, crypto_util, errors, messages
         import josepy as jose
@@ -282,6 +339,7 @@ def request_certificate_pem(provider: str, email: str, domains: list[str]) -> tu
 
     tokens: list[str] = []
     try:
+        progress(f"连接 {provider_label(provider)} …")
         account_key = _load_or_create_account_key(provider, jose)
         net = client.ClientNetwork(account_key, user_agent=USER_AGENT, timeout=30)
         directory = client.ClientV2.get_directory(DIRECTORY_URLS[provider], net)
@@ -289,6 +347,7 @@ def request_certificate_pem(provider: str, email: str, domains: list[str]) -> tu
 
         extra: dict = {}
         if provider == PROVIDER_ZEROSSL:
+            progress("获取 ZeroSSL EAB 凭证…")
             kid, hmac_key = _zerossl_eab(email, provider)
             extra["external_account_binding"] = messages.ExternalAccountBinding.from_data(
                 account_public_key=account_key,
@@ -301,6 +360,7 @@ def request_certificate_pem(provider: str, email: str, domains: list[str]) -> tu
             terms_of_service_agreed=True,
             **extra,
         )
+        progress("注册或复用 ACME 账户…")
         try:
             regr = acme.new_account(new_reg)
         except errors.ConflictError as err:
@@ -312,11 +372,13 @@ def request_certificate_pem(provider: str, email: str, domains: list[str]) -> tu
             regr = acme.query_registration(regr)
         net.account = regr
 
+        progress("生成密钥与证书签名请求…")
         pkey = _new_rsa_key()
         key_pem = _pem_private_key(pkey)
         csr_pem = crypto_util.make_csr(key_pem.encode("utf-8"), domains, must_staple=False)
         order = acme.new_order(csr_pem)
 
+        progress(f"写入 HTTP-01 挑战文件（{', '.join(domains)}）…")
         for authz in order.authorizations:
             http_challenges = [
                 challb
@@ -332,10 +394,12 @@ def request_certificate_pem(provider: str, email: str, domains: list[str]) -> tu
             _write_challenge(token, validation)
             acme.answer_challenge(challb, response)
 
+        progress("等待证书机构验证域名并签发…")
         finalized = acme.poll_and_finalize(order)
         cert_pem = finalized.fullchain_pem
         if not cert_pem:
             raise AcmeIssueError("证书机构未返回证书内容")
+        progress("证书机构已签发，正在下载证书链…")
         return cert_pem, key_pem
     except AcmeIssueError:
         raise
@@ -449,6 +513,7 @@ async def issue_for_site(
     expiry_notify_channel_ids: list[int],
     name: str | None = None,
     replace_certificate_id: int | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> Certificate:
     """Issue an ACME certificate, persist it, bind the site, and notify.
 
@@ -461,6 +526,7 @@ async def issue_for_site(
         expiry_notify_channel_ids: Notify channels (required when auto_renew).
         name: Optional certificate display name.
         replace_certificate_id: Overwrite this row instead of creating.
+        on_progress: Optional async/sync callback for UI progress lines.
 
     Returns:
         Persisted certificate row.
@@ -468,6 +534,7 @@ async def issue_for_site(
     Raises:
         AcmeIssueError: Validation or CA failure (failure is also notified).
     """
+    await _emit_progress(on_progress, "校验申请参数…")
     if provider not in PROVIDERS:
         raise AcmeIssueError("不支持的证书机构")
     channel_ids = list(dict.fromkeys(int(cid) for cid in expiry_notify_channel_ids if cid is not None))
@@ -508,9 +575,14 @@ async def issue_for_site(
 
     async with _ISSUE_LOCK:
         try:
+            await _emit_progress(on_progress, "刷新引擎配置，准备 HTTP-01 挑战路径…")
             await ensure_acme_http_ready(db)
-            cert_pem, key_pem = await asyncio.to_thread(
-                request_certificate_pem, provider, email, names
+            cert_pem, key_pem = await _to_thread_with_progress(
+                request_certificate_pem,
+                provider,
+                email,
+                names,
+                on_progress=on_progress,
             )
         except Exception as exc:  # noqa: BLE001
             err = friendly_acme_error(exc)
@@ -526,6 +598,7 @@ async def issue_for_site(
             )
             raise AcmeIssueError(err) from exc
 
+        await _emit_progress(on_progress, "写入证书文件并绑定站点…")
         timezone_name = await get_traffic_timezone(db)
         today = local_datetime(datetime.utcnow(), timezone_name).date().isoformat()
         if target is None:
@@ -553,7 +626,9 @@ async def issue_for_site(
         await _bind_site_certificate(db, site, cert)
         await db.commit()
         await db.refresh(cert)
+        await _emit_progress(on_progress, "重载引擎配置…")
         await reload_sites_using_certificate(db, cert.id)
+        await _emit_progress(on_progress, "发送结果通知…")
         await notify_acme_result(
             db,
             channel_ids,
@@ -563,6 +638,7 @@ async def issue_for_site(
             domains=cert.domains or domain_label,
             provider=provider,
         )
+        await _emit_progress(on_progress, "申请完成")
         return cert
 
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +17,7 @@ from app.api.listing import (
     get_list_query,
     order_by_fields,
 )
-from app.core.db import get_db
+from app.core.db import SessionLocal, get_db
 from app.models import Certificate, Site, User
 from app.models.notification import NotificationChannel
 from app.schemas.certificate import (
@@ -224,6 +226,77 @@ async def issue_acme_certificate(
         CertificateOut.model_validate(cert).model_copy(
             update={"bound_sites": bound_map.get(cert.id, [])}
         ).model_dump()
+    )
+
+
+@router.post("/acme/issue/stream")
+async def issue_acme_certificate_stream(
+    body: AcmeIssueRequest,
+    _user: User = Depends(get_current_user),
+):
+    """SSE progress log for ACME issue; final event carries the certificate."""
+    if body.expiry_notify_channel_ids:
+        async with SessionLocal() as db:
+            await _ensure_notify_channels(db, body.expiry_notify_channel_ids)
+
+    async def event_gen():
+        queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+        async def on_progress(message: str) -> None:
+            await queue.put({"type": "log", "message": message})
+
+        async def run() -> None:
+            async with SessionLocal() as db:
+                try:
+                    cert = await issue_for_site(
+                        db,
+                        site_id=body.site_id,
+                        domains=body.domains,
+                        provider=body.provider,
+                        auto_renew=body.auto_renew,
+                        expiry_notify_channel_ids=body.expiry_notify_channel_ids,
+                        name=body.name,
+                        replace_certificate_id=body.replace_certificate_id,
+                        on_progress=on_progress,
+                    )
+                    bound_map = await _bound_sites_by_cert_ids(db, [cert.id])
+                    payload = CertificateOut.model_validate(cert).model_copy(
+                        update={"bound_sites": bound_map.get(cert.id, [])}
+                    ).model_dump(mode="json")
+                    await queue.put({"type": "done", "data": payload})
+                except AcmeIssueError as exc:
+                    await db.rollback()
+                    await queue.put({"type": "error", "message": str(exc)})
+                except ValueError as exc:
+                    await db.rollback()
+                    await queue.put({"type": "error", "message": str(exc)})
+                except Exception as exc:  # noqa: BLE001
+                    await db.rollback()
+                    await queue.put(
+                        {"type": "error", "message": f"证书申请失败：{exc}"}
+                    )
+                finally:
+                    await queue.put(None)
+
+        task = asyncio.create_task(run())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+        finally:
+            await task
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
