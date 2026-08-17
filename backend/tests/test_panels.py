@@ -155,12 +155,19 @@ async def test_baota_list_sites_http_mock():
     assert sites[0].has_ssl is False
 
 
+def _assert_onepanel_search_order(body: dict) -> None:
+    """1Panel WebsiteSearch/SSLSearch require orderBy + order (gin required/oneof)."""
+    assert body.get("orderBy") == "created_at"
+    assert body.get("order") == "null"
+
+
 @pytest.mark.asyncio
 async def test_onepanel_list_sites_http_mock():
     def handler(method, url, **kwargs):
         assert method == "POST"
         assert url == "http://host.docker.internal:10086/api/v2/websites/search"
         assert "1Panel-Token" in (kwargs.get("headers") or {})
+        _assert_onepanel_search_order(kwargs.get("json") or {})
         return FakeResponse(
             {
                 "code": 200,
@@ -188,6 +195,38 @@ async def test_onepanel_list_sites_http_mock():
     assert adapter.panel_url == "http://host.docker.internal:10086"
     assert sites[0].key == "9"
     assert "shop.example.com" in sites[0].domains
+
+
+@pytest.mark.asyncio
+async def test_onepanel_test_sends_required_search_order():
+    captured = {}
+
+    def handler(method, url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        return FakeResponse({"code": 200, "data": {"items": []}})
+
+    adapter = OnePanelAdapter(panel_url="http://panel.example:10086", api_key="panel-key")
+    with patch("app.services.panels.onepanel.httpx.AsyncClient", return_value=FakeAsyncClient(handler)):
+        message = await adapter.test()
+    assert message == "已连接到 1Panel"
+    _assert_onepanel_search_order(captured["json"] or {})
+
+
+@pytest.mark.asyncio
+async def test_onepanel_list_certificates_sends_search_order():
+    captured = {}
+
+    def handler(method, url, **kwargs):
+        captured["url"] = url
+        captured["json"] = kwargs.get("json")
+        return FakeResponse({"code": 200, "data": {"items": []}})
+
+    adapter = OnePanelAdapter(panel_url="http://panel.example:10086", api_key="panel-key")
+    with patch("app.services.panels.onepanel.httpx.AsyncClient", return_value=FakeAsyncClient(handler)):
+        certs = await adapter.list_certificates()
+    assert certs == []
+    assert captured["url"].endswith("/api/v2/websites/ssl/search")
+    _assert_onepanel_search_order(captured["json"] or {})
 
 
 @pytest.mark.asyncio

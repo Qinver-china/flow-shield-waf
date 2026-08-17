@@ -167,14 +167,11 @@ async def _create_certificate(
     renew_domains: list[str] | None = None,
 ) -> Certificate:
     channel_ids = list(expiry_notify_channel_ids or [])
-    needs_channels = expiry_notify_enabled or acme_auto_renew
-    if acme_auto_renew and not channel_ids:
-        raise HTTPException(status_code=400, detail="开启自动续期时请选择通知通道")
-    _validate_notify_settings(enabled=needs_channels, channel_ids=channel_ids)
-    if needs_channels:
-        await _ensure_notify_channels(db, channel_ids)
-    else:
+    _validate_notify_settings(enabled=expiry_notify_enabled, channel_ids=channel_ids)
+    if not expiry_notify_enabled and not acme_auto_renew:
         channel_ids = []
+    else:
+        await _ensure_notify_channels(db, channel_ids)
     if acme_auto_renew:
         if not acme_provider:
             raise HTTPException(status_code=400, detail="开启自动续期时请选择证书机构")
@@ -499,12 +496,10 @@ async def update_certificate(
     enabled = bool(cert.expiry_notify_enabled)
     auto_renew = bool(getattr(cert, "acme_auto_renew", False))
     channel_ids = list(cert.expiry_notify_channel_ids or [])
-    if auto_renew and not channel_ids:
-        raise HTTPException(status_code=400, detail="开启自动续期时请选择通知通道")
     if not enabled and not auto_renew:
         channel_ids = []
         cert.expiry_notify_channel_ids = []
-    _validate_notify_settings(enabled=enabled or auto_renew, channel_ids=channel_ids)
+    _validate_notify_settings(enabled=enabled, channel_ids=channel_ids)
     if channel_ids:
         await _ensure_notify_channels(db, channel_ids)
         cert.expiry_notify_channel_ids = channel_ids

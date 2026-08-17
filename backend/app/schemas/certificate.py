@@ -39,10 +39,7 @@ class CertificateCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_notify_and_renew(self) -> "CertificateCreate":
-        needs_channels = self.expiry_notify_enabled or self.acme_auto_renew
-        if needs_channels and not self.expiry_notify_channel_ids:
-            if self.acme_auto_renew:
-                raise ValueError("开启自动续期时请选择通知通道")
+        if self.expiry_notify_enabled and not self.expiry_notify_channel_ids:
             raise ValueError("启用到期前通知时请选择通知通道")
         self.acme_provider = _normalize_acme_provider(self.acme_provider)
         self.renew_domains = _normalize_renew_domains(self.renew_domains)
@@ -92,10 +89,7 @@ class AcmeIssueRequest(BaseModel):
             raise ValueError("请选择 Let's Encrypt 或 ZeroSSL")
         self.provider = provider
         self.renew_domains = _normalize_renew_domains(self.renew_domains)
-        needs_channels = self.auto_renew or self.expiry_notify_enabled
-        if needs_channels and not self.expiry_notify_channel_ids:
-            if self.auto_renew:
-                raise ValueError("开启自动续期时请选择通知通道")
+        if self.expiry_notify_enabled and not self.expiry_notify_channel_ids:
             raise ValueError("启用到期前通知时请选择通知通道")
         if self.auto_renew and self.renew_domains is not None and not self.renew_domains:
             raise ValueError("开启自动续期时请选择绑定域名")

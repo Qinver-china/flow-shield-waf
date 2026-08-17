@@ -5,6 +5,7 @@ import asyncio
 import ipaddress
 import json
 import logging
+import secrets
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
@@ -49,6 +50,7 @@ DIRECTORY_URLS = {
 ZEROSSL_EAB_URL = "https://api.zerossl.com/acme/eab-credentials-email"
 USER_AGENT = "FlowShield-WAF"
 RENEW_DAYS_BEFORE = 10
+ACME_DEFAULT_EMAIL_DOMAIN = "noreply.fswaf.top"
 _ISSUE_LOCK = asyncio.Lock()
 
 ProgressCallback = Callable[[str], Awaitable[None] | None]
@@ -57,6 +59,31 @@ T = TypeVar("T")
 
 class AcmeIssueError(Exception):
     """User-visible ACME issue or renew failure."""
+
+
+def new_acme_account_email() -> str:
+    """Random CA contact email used when the operator has not set one."""
+    return f"acme-{secrets.token_hex(8)}@{ACME_DEFAULT_EMAIL_DOMAIN}"
+
+
+async def ensure_acme_account_email(db: AsyncSession, setting) -> str:
+    """Return the stored ACME email, generating and persisting a default if empty.
+
+    Args:
+        db: Database session.
+        setting: ``WafSetting`` row (or test double with ``acme_account_email``).
+
+    Returns:
+        Non-empty ACME account contact email.
+    """
+    email = (getattr(setting, "acme_account_email", None) or "").strip()
+    if email:
+        return email
+    email = new_acme_account_email()
+    setting.acme_account_email = email
+    await db.commit()
+    await db.refresh(setting)
+    return email
 
 
 async def _emit_progress(on_progress: ProgressCallback | None, message: str) -> None:
@@ -525,8 +552,8 @@ async def issue_for_site(
         domains: SAN names; must be a subset of the site domains.
         provider: ``letsencrypt`` or ``zerossl``.
         auto_renew: Daily renew when within 10 days of expiry.
-        expiry_notify_channel_ids: Notify channels (required when auto_renew
-            or expiry_notify_enabled).
+        expiry_notify_channel_ids: Notify channels (required when
+            expiry_notify_enabled; optional for auto_renew — skip notify if empty).
         expiry_notify_enabled: Persist the certificate expiry-notify switch.
         renew_domains: Optional SAN list stored for auto-renew (overrides PEM
             metadata domains when auto_renew is enabled).
@@ -546,12 +573,8 @@ async def issue_for_site(
     channel_ids = list(dict.fromkeys(int(cid) for cid in expiry_notify_channel_ids if cid is not None))
     notify_enabled = bool(expiry_notify_enabled)
     auto_renew = bool(auto_renew)
-    if (auto_renew or notify_enabled) and not channel_ids:
-        raise AcmeIssueError(
-            "开启自动续期时请选择通知通道"
-            if auto_renew
-            else "启用到期前通知时请选择通知通道"
-        )
+    if notify_enabled and not channel_ids:
+        raise AcmeIssueError("启用到期前通知时请选择通知通道")
     renew_names: list[str] = []
     if renew_domains:
         seen_renew: set[str] = set()
@@ -565,9 +588,7 @@ async def issue_for_site(
         raise AcmeIssueError("开启自动续期时请选择绑定域名")
 
     setting = await waf_settings.get_or_create(db)
-    email = (getattr(setting, "acme_account_email", None) or "").strip()
-    if not email:
-        raise AcmeIssueError("请先在系统设置 → 显示设置中填写 ACME 账户邮箱")
+    email = await ensure_acme_account_email(db, setting)
 
     site = await db.get(Site, site_id)
     if site is None:
@@ -762,7 +783,7 @@ async def run_acme_renewals(db: AsyncSession) -> int:
         return 0
 
     setting = await waf_settings.get_or_create(db)
-    email = (getattr(setting, "acme_account_email", None) or "").strip()
+    email = await ensure_acme_account_email(db, setting)
     today = now_local.date().isoformat()
     rows = (
         await db.execute(
@@ -784,24 +805,6 @@ async def run_acme_renewals(db: AsyncSession) -> int:
             now_utc=now_utc,
             timezone_name=timezone_name,
         ):
-            continue
-        if not email:
-            cert.acme_last_attempt_on = today
-            cert.acme_last_error = "未配置 ACME 账户邮箱，无法续期"
-            await db.commit()
-            channel_ids = [
-                int(cid) for cid in (cert.expiry_notify_channel_ids or []) if cid is not None
-            ]
-            await notify_acme_result(
-                db,
-                channel_ids,
-                success=False,
-                kind="renew",
-                cert_name=cert.name,
-                domains=cert.domains or "",
-                provider=cert.acme_provider,
-                error=cert.acme_last_error,
-            )
             continue
         if await renew_one(
             db, cert, timezone_name=timezone_name, today=today, email=email

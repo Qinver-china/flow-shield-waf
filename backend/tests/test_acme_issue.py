@@ -6,15 +6,50 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pydantic import ValidationError
 
+from app.schemas.certificate import AcmeIssueRequest, CertificateCreate
 from app.services.acme_issue import (
+    ACME_DEFAULT_EMAIL_DOMAIN,
     AcmeIssueError,
     RENEW_DAYS_BEFORE,
+    ensure_acme_account_email,
     issue_for_site,
+    new_acme_account_email,
     normalize_issue_domains,
     should_attempt_renew,
 )
 from app.services.notifications.certificate_expiry import days_until_expiry
+
+
+def test_new_acme_account_email_is_random_and_valid():
+    first = new_acme_account_email()
+    second = new_acme_account_email()
+    suffix = f"@{ACME_DEFAULT_EMAIL_DOMAIN}"
+    assert first.startswith("acme-") and first.endswith(suffix)
+    assert second.startswith("acme-") and second.endswith(suffix)
+    assert first != second
+    local = first[: -len(suffix)]
+    assert local.split("-", 1)[1]
+
+
+@pytest.mark.asyncio
+async def test_ensure_acme_account_email_keeps_existing():
+    db = AsyncMock()
+    setting = SimpleNamespace(acme_account_email="ops@example.com")
+    assert await ensure_acme_account_email(db, setting) == "ops@example.com"
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ensure_acme_account_email_generates_when_empty():
+    db = AsyncMock()
+    setting = SimpleNamespace(acme_account_email="")
+    email = await ensure_acme_account_email(db, setting)
+    assert email.endswith(f"@{ACME_DEFAULT_EMAIL_DOMAIN}")
+    assert setting.acme_account_email == email
+    db.commit.assert_awaited()
+    db.refresh.assert_awaited()
 
 
 def test_normalize_issue_rejects_foreign_domain():
@@ -91,6 +126,169 @@ def test_renew_skips_before_local_10():
         now_utc=now,
         timezone_name="Asia/Shanghai",
     )
+
+
+def test_auto_renew_does_not_require_notify_channels():
+    req = AcmeIssueRequest(
+        site_id=1,
+        domains=["a.example.com"],
+        provider="letsencrypt",
+        auto_renew=True,
+        expiry_notify_channel_ids=[],
+    )
+    assert req.auto_renew is True
+    assert req.expiry_notify_channel_ids == []
+
+    created = CertificateCreate(
+        name="demo",
+        cert_content="CERT",
+        key_content="KEY",
+        acme_auto_renew=True,
+        acme_provider="letsencrypt",
+        renew_domains=["a.example.com"],
+        expiry_notify_channel_ids=[],
+    )
+    assert created.acme_auto_renew is True
+    assert created.expiry_notify_channel_ids == []
+
+
+def test_expiry_notify_still_requires_channels():
+    with pytest.raises(ValidationError, match="启用到期前通知时请选择通知通道"):
+        AcmeIssueRequest(
+            site_id=1,
+            domains=["a.example.com"],
+            provider="letsencrypt",
+            expiry_notify_enabled=True,
+            expiry_notify_channel_ids=[],
+        )
+    with pytest.raises(ValidationError, match="启用到期前通知时请选择通知通道"):
+        CertificateCreate(
+            name="demo",
+            cert_content="CERT",
+            key_content="KEY",
+            expiry_notify_enabled=True,
+            expiry_notify_channel_ids=[],
+        )
+
+
+@pytest.mark.asyncio
+async def test_issue_rejects_notify_without_channels():
+    db = AsyncMock()
+    with pytest.raises(AcmeIssueError, match="启用到期前通知时请选择通知通道"):
+        await issue_for_site(
+            db,
+            site_id=1,
+            domains=["a.example.com"],
+            provider="letsencrypt",
+            auto_renew=True,
+            expiry_notify_enabled=True,
+            expiry_notify_channel_ids=[],
+        )
+
+
+@pytest.mark.asyncio
+async def test_issue_allows_auto_renew_without_channels():
+    site = SimpleNamespace(
+        id=1,
+        domain="a.example.com",
+        extra_domains=None,
+        certificate_id=None,
+        listen_https=False,
+    )
+    created = SimpleNamespace(id=9, name="Let's Encrypt · a.example.com", domains="a.example.com")
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=site)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    with (
+        patch(
+            "app.services.acme_issue.waf_settings.get_or_create",
+            AsyncMock(return_value=SimpleNamespace(acme_account_email="ops@example.com")),
+        ),
+        patch("app.services.acme_issue.ensure_acme_http_ready", AsyncMock()),
+        patch(
+            "app.services.acme_issue.request_certificate_pem",
+            return_value=("CERT", "KEY"),
+        ),
+        patch(
+            "app.services.acme_issue.persist_new_certificate",
+            AsyncMock(return_value=created),
+        ),
+        patch(
+            "app.services.acme_issue.reload_sites_using_certificate",
+            AsyncMock(return_value=True),
+        ),
+        patch(
+            "app.services.acme_issue.get_traffic_timezone",
+            AsyncMock(return_value="Asia/Shanghai"),
+        ),
+        patch("app.services.acme_issue.notify_acme_result", AsyncMock()) as notify,
+    ):
+        cert = await issue_for_site(
+            db,
+            site_id=1,
+            domains=["a.example.com"],
+            provider="letsencrypt",
+            auto_renew=True,
+            expiry_notify_channel_ids=[],
+        )
+    assert cert is created
+    assert created.acme_auto_renew is True
+    assert created.expiry_notify_channel_ids == []
+    notify.assert_awaited()
+    assert notify.await_args.args[1] == []
+
+
+@pytest.mark.asyncio
+async def test_issue_generates_default_email_when_unset():
+    site = SimpleNamespace(
+        id=1,
+        domain="a.example.com",
+        extra_domains=None,
+        certificate_id=None,
+        listen_https=False,
+    )
+    created = SimpleNamespace(id=9, name="cert", domains="a.example.com")
+    setting = SimpleNamespace(acme_account_email=None)
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=site)
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    with (
+        patch(
+            "app.services.acme_issue.waf_settings.get_or_create",
+            AsyncMock(return_value=setting),
+        ),
+        patch("app.services.acme_issue.ensure_acme_http_ready", AsyncMock()),
+        patch(
+            "app.services.acme_issue.request_certificate_pem",
+            return_value=("CERT", "KEY"),
+        ) as request_pem,
+        patch(
+            "app.services.acme_issue.persist_new_certificate",
+            AsyncMock(return_value=created),
+        ),
+        patch(
+            "app.services.acme_issue.reload_sites_using_certificate",
+            AsyncMock(return_value=True),
+        ),
+        patch(
+            "app.services.acme_issue.get_traffic_timezone",
+            AsyncMock(return_value="Asia/Shanghai"),
+        ),
+        patch("app.services.acme_issue.notify_acme_result", AsyncMock()),
+    ):
+        await issue_for_site(
+            db,
+            site_id=1,
+            domains=["a.example.com"],
+            provider="letsencrypt",
+            auto_renew=False,
+            expiry_notify_channel_ids=[],
+        )
+    assert setting.acme_account_email.endswith(f"@{ACME_DEFAULT_EMAIL_DOMAIN}")
+    used_email = request_pem.call_args.args[1]
+    assert used_email == setting.acme_account_email
 
 
 @pytest.mark.asyncio

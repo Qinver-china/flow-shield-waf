@@ -115,7 +115,7 @@ class OnePanelAdapter:
         await self._request(
             "POST",
             "/api/v2/websites/search",
-            json_body={"page": 1, "pageSize": 1},
+            json_body=_page_search(page=1, page_size=1),
         )
         return "已连接到 1Panel"
 
@@ -123,7 +123,7 @@ class OnePanelAdapter:
         data = await self._request(
             "POST",
             "/api/v2/websites/search",
-            json_body={"page": 1, "pageSize": 1000, "name": ""},
+            json_body=_page_search(page=1, page_size=1000, name=""),
         )
         rows = _items(data)
         out: list[RawPanelSite] = []
@@ -166,7 +166,7 @@ class OnePanelAdapter:
         data = await self._request(
             "POST",
             "/api/v2/websites/ssl/search",
-            json_body={"page": 1, "pageSize": 1000},
+            json_body=_page_search(page=1, page_size=1000),
         )
         rows = _items(data)
         out: list[RawPanelCert] = []
@@ -210,6 +210,21 @@ class OnePanelAdapter:
         if pair is None:
             raise PanelError(f"未能从 1Panel 读取证书：{cert_key}")
         return pair
+
+
+def _page_search(page: int, page_size: int, **extra: Any) -> dict[str, Any]:
+    """Build a 1Panel list-search body.
+
+    WebsiteSearch requires orderBy/order (gin ``required`` + ``oneof``). SSL search
+    made them optional later, but older panels still reject a missing pair.
+    """
+    return {
+        "page": page,
+        "pageSize": page_size,
+        "orderBy": "created_at",
+        "order": "null",
+        **extra,
+    }
 
 
 def _items(payload: Any) -> list[dict[str, Any]]:

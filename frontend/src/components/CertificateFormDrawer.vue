@@ -160,8 +160,8 @@
                 </a-checkbox-group>
                 <p v-else class="fs-hint">请先选择站点。</p>
               </a-form-item>
-              <a-form-item label="通知通道" required>
-                <a-select v-model:value="form.expiry_notify_channel_ids" mode="multiple" placeholder="选择自动续签的结果通知通道"
+              <a-form-item label="通知通道">
+                <a-select v-model:value="form.expiry_notify_channel_ids" mode="multiple" placeholder="可选，不选则续期结果不发送通知"
                   allow-clear option-filter-prop="label" style="width: 100%">
                   <a-select-option v-for="ch in channels" :key="ch.id" :value="ch.id" :label="ch.name"
                     :disabled="!ch.enabled">
@@ -186,7 +186,6 @@ import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import PanelImportForm, { type PanelImportStatus } from "@/components/PanelImportForm.vue";
 import type { SiteOption } from "@/composables/useSiteOptions";
-import { useAppSettingsStore } from "@/stores/appSettings";
 
 export interface CertificateSaved {
   id: number;
@@ -256,7 +255,6 @@ const panelStatus = reactive<PanelImportStatus>({
 });
 const channels = ref<NotificationChannelItem[]>([]);
 const sites = ref<SiteOption[]>([]);
-const appSettings = useAppSettingsStore();
 
 interface AcmeLogLine {
   time: string;
@@ -553,10 +551,6 @@ function validateAutoRenewSettings(): boolean {
     message.warning("开启自动续期时请勾选至少一个域名");
     return false;
   }
-  if (!form.expiry_notify_channel_ids.length) {
-    message.warning("开启自动续期时请选择通知通道");
-    return false;
-  }
   return true;
 }
 
@@ -620,17 +614,6 @@ async function submitAcme() {
     return;
   }
   if (!validateAutoRenewSettings()) return;
-  if (!appSettings.loaded) {
-    try {
-      await appSettings.fetch();
-    } catch {
-      // ignore; backend will validate
-    }
-  }
-  if (!appSettings.acmeAccountEmail?.trim()) {
-    message.warning("请先在「系统设置 → 显示设置」填写 ACME 账户邮箱");
-    return;
-  }
 
   // Editing: persist notify/renew settings first so they survive even if issue fails later.
   if (props.certificateId) {

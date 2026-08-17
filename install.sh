@@ -7,7 +7,7 @@
 # 官网：https://fswaf.top
 set -euo pipefail
 
-FSWAF_VERSION="1.0.4"
+FSWAF_VERSION="1.0.5"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.top"
@@ -2410,7 +2410,7 @@ _onepanel_bin() {
 }
 
 _bootstrap_onepanel_account() {
-  local bin db_path url key port entrance scheme ssl_raw info
+  local bin db_path url key port scheme ssl_raw info
   bin="$(_onepanel_bin)" || return 1
   db_path=""
   if [[ -f /opt/1panel/db/core.db ]]; then
@@ -2428,7 +2428,6 @@ _bootstrap_onepanel_account() {
     fi
   fi
   port=""
-  entrance=""
   scheme="http"
   key=""
   if [[ -n "$db_path" ]] && info="$(_host_python - "$db_path" <<'PY'
@@ -2454,17 +2453,15 @@ def pick(*names):
     return ""
 
 port = pick("ServerPort", "server_port") or "10086"
-entrance = pick("SecurityEntrance", "security_entrance")
 ssl = pick("SSL", "ssl").lower()
 api_status = pick("ApiInterfaceStatus", "api_interface_status").lower()
 api_key = pick("ApiKey", "api_key")
 if api_status not in {"enable", "enabled", "true", "1"}:
     api_key = ""
-print(json.dumps({"port": port, "entrance": entrance, "ssl": ssl, "api_key": api_key}, ensure_ascii=False))
+print(json.dumps({"port": port, "ssl": ssl, "api_key": api_key}, ensure_ascii=False))
 PY
   )"; then
     port="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("port") or "")' "$info" 2>/dev/null || true)"
-    entrance="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("entrance") or "")' "$info" 2>/dev/null || true)"
     ssl_raw="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("ssl") or "")' "$info" 2>/dev/null || true)"
     key="$(_host_python -c 'import json,sys; print(json.loads(sys.argv[1]).get("api_key") or "")' "$info" 2>/dev/null || true)"
     case "$ssl_raw" in
@@ -2475,15 +2472,10 @@ PY
     local ui
     ui="$("$bin" user-info 2>/dev/null || true)"
     port="$(printf '%s\n' "$ui" | awk -F': *' 'BEGIN{IGNORECASE=1} $1 ~ /^(port|端口)$/ {gsub(/[[:space:]]/,"",$2); print $2; exit}')"
-    entrance="$(printf '%s\n' "$ui" | awk -F': *' 'BEGIN{IGNORECASE=1} $1 ~ /^(entrance|安全入口)$/ {gsub(/[[:space:]]/,"",$2); print $2; exit}')"
   fi
   [[ -n "$port" ]] || port="10086"
-  case "$entrance" in
-  "" | "/") entrance="" ;;
-  /*) ;;
-  *) entrance="/${entrance}" ;;
-  esac
-  url="${scheme}://host.docker.internal:${port}${entrance}"
+  # API 只要协议+主机+端口；安全入口是浏览器 UI 路径，写入后反而干扰展示。
+  url="${scheme}://host.docker.internal:${port}"
   _write_local_panel_account "onepanel" "本机 1Panel" "$url" "$key" "" "由一键安装自动检测"
 }
 

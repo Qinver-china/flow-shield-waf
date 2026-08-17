@@ -101,3 +101,11 @@ def test_display_settings_normalizes_acme_email():
         acme_account_email="  Ops@Example.COM  ",
     )
     assert settings.acme_account_email == "ops@example.com"
+
+
+def test_display_settings_allows_empty_acme_email():
+    settings = DisplaySettings(
+        panel_public_url="http://127.0.0.1:9000",
+        acme_account_email="  ",
+    )
+    assert settings.acme_account_email is None

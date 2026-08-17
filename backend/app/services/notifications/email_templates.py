@@ -661,10 +661,7 @@ def build_acme_result_email(
             f"覆盖域名：{domain_text}\n"
             f"失败原因：{err_text}"
         )
-        hint = (
-            "请确认域名 A/AAAA 已指向本机、公网可访问 80 端口，"
-            "且系统设置中已填写 ACME 账户邮箱后重试。"
-        )
+        hint = "请确认域名 A/AAAA 已指向本机、公网可访问 80 端口后重试。"
     plain = build_plain_email(
         title=title,
         subtitle=subtitle,
