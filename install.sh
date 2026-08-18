@@ -2163,6 +2163,27 @@ compose() {
   run_compose "$@"
 }
 
+prune_docker_build_artifacts() {
+  local out
+  info "清理多余的构建缓存与悬空镜像..."
+  if out="$(run_docker builder prune -f 2>&1)"; then
+    if [[ -n "$out" ]]; then
+      echo "$out" | sed 's/^/  /'
+    fi
+    ok "构建缓存已清理"
+  else
+    warn "构建缓存清理失败（可稍后手动执行：docker builder prune -f）"
+  fi
+  if out="$(run_docker image prune -f 2>&1)"; then
+    if [[ -n "$out" ]]; then
+      echo "$out" | sed 's/^/  /'
+    fi
+    ok "悬空镜像已清理"
+  else
+    warn "悬空镜像清理失败（可稍后手动执行：docker image prune -f）"
+  fi
+}
+
 build_and_start() {
   sanitize_docker_registry_mirrors || true
   prepare_build_mirror_env
@@ -2172,6 +2193,7 @@ build_and_start() {
     die "docker compose up 失败"
   fi
   ok "容器已启动"
+  prune_docker_build_artifacts
 }
 
 wait_healthy() {
