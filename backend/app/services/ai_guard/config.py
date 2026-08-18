@@ -1,13 +1,14 @@
 """Load AI Guard runtime configuration."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_guard import AiGuardSetting
 from app.services.ai_guard.crypto import decrypt_secret
+from app.services.ai_guard.mode_guide import normalize_apply_mode
 
 SETTING_ID = 1
 
@@ -22,6 +23,7 @@ class AiGuardRuntimeConfig:
     max_tokens: int
     chat_enabled: bool
     defense_enabled: bool
+    defense_web_search_enabled: bool
     default_apply_mode: str
     max_logs_per_analysis: int
     analysis_cooldown_sec: int
@@ -49,7 +51,8 @@ async def load_runtime_config(db: AsyncSession) -> AiGuardRuntimeConfig:
         max_tokens=int(row.max_tokens or 4096),
         chat_enabled=bool(row.chat_enabled),
         defense_enabled=bool(row.defense_enabled),
-        default_apply_mode=row.default_apply_mode or "suggest_only",
+        defense_web_search_enabled=bool(getattr(row, "defense_web_search_enabled", False)),
+        default_apply_mode=normalize_apply_mode(row.default_apply_mode),
         max_logs_per_analysis=int(row.max_logs_per_analysis or 200),
         analysis_cooldown_sec=int(row.analysis_cooldown_sec or 300),
         auto_block_min_confidence=float(row.auto_block_min_confidence or 0.85),

@@ -1,8 +1,10 @@
 """OpenAI function tool definitions for chat."""
+
 from __future__ import annotations
 
 from app.services.ai_guard.log_query import LOG_FILTER_OPS, LOG_SCALAR_FIELDS
 from app.services.logging.query_clickhouse import STATS_DIMENSIONS
+
 _BLOCK_PAGE_PROPERTIES = {
     "custom_block_page_enabled": {
         "type": "boolean",
@@ -249,8 +251,9 @@ TOOL_DEFINITIONS: list[dict] = [
         "function": {
             "name": "create_rule",
             "description": (
-                "创建自定义防护规则（URI/Header/Body/Bot/流量/TLS 等特征匹配，"
-                "可选 observe/block/验证码；不含 CC 限速，也不是黑/白名单。"
+                "创建自定义防护规则（URI/Header/Body/Bot/流量/TLS 等特征匹配。"
+                "mode 仅 observe/block/js_challenge/slide_captcha。"
+                "字符串条件优先 contains/not_contains，不要轻易用 regex。"
                 "用户要黑名单请用 create_blacklist_entry；要白名单用 create_whitelist_entry；"
                 "要防护例外用 create_exception。需用户确认后才会写入）"
             ),
@@ -260,7 +263,7 @@ TOOL_DEFINITIONS: list[dict] = [
                     "name": {"type": "string"},
                     "mode": {
                         "type": "string",
-                        "enum": ["observe", "block", "captcha", "js_challenge", "slide_captcha"],
+                        "enum": ["observe", "block", "js_challenge", "slide_captcha"],
                     },
                     "priority": {"type": "integer"},
                     "site_ids": {"type": "array", "items": {"type": "integer"}},
@@ -304,7 +307,7 @@ TOOL_DEFINITIONS: list[dict] = [
                     },
                     "mode": {
                         "type": "string",
-                        "enum": ["observe", "block", "captcha", "js_challenge", "slide_captcha"],
+                        "enum": ["observe", "block", "js_challenge", "slide_captcha"],
                     },
                     "priority": {"type": "integer"},
                     "site_ids": {"type": "array", "items": {"type": "integer"}},
@@ -399,6 +402,176 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "web_search",
+            "description": (
+                "联网搜索公开资料（攻击特征、已知 Bot UA、官方文档）。"
+                "仅作辅助，不能替代本机日志证据。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "description": "不含令牌、Cookie、完整请求参数等敏感信息的搜索词",
+                    },
+                    "limit": {"type": "integer", "default": 5, "description": "返回条数，最大 8"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_rule",
+            "description": "启用或停用已有自定义规则，也可修改防护动作。需用户确认后才会写入",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "规则 ID"},
+                    "enabled": {"type": "boolean", "description": "是否启用"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["observe", "block", "js_challenge", "slide_captcha"],
+                    },
+                },
+                "required": ["id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_bots",
+            "description": "列出 Bot 库条目",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_bot",
+            "description": "创建 Bot 库条目（按 UA 模式识别）。需用户确认后才会写入",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "categories": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "分类 slug，须为知识上下文 bot_category_values 中的值",
+                    },
+                    "ua_patterns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "UA 子串或 /regex/ 模式",
+                    },
+                    "site_ids": {"type": "array", "items": {"type": "integer"}},
+                    "enabled": {"type": "boolean"},
+                    "verify_dns_suffix": {"type": "string"},
+                    "remark": {"type": "string"},
+                },
+                "required": ["name", "ua_patterns"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_bot",
+            "description": "更新 Bot 库（含启用开关、UA 模式）。需用户确认后才会写入",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "name": {"type": "string"},
+                    "categories": {"type": "array", "items": {"type": "string"}},
+                    "ua_patterns": {"type": "array", "items": {"type": "string"}},
+                    "enabled": {"type": "boolean"},
+                    "site_ids": {"type": "array", "items": {"type": "integer"}},
+                    "verify_dns_suffix": {"type": "string"},
+                    "remark": {"type": "string"},
+                },
+                "required": ["id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_ip_groups",
+            "description": "列出 IP 组（IP 库）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_ip_group",
+            "description": "创建 IP 组。需用户确认后才会写入",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "entries": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "IPv4/IPv6 地址或 CIDR",
+                    },
+                    "remark": {"type": "string"},
+                },
+                "required": ["name", "entries"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_ip_group",
+            "description": "更新 IP 组名称或整表替换条目。需用户确认后才会写入",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "name": {"type": "string"},
+                    "entries": {"type": "array", "items": {"type": "string"}},
+                    "remark": {"type": "string"},
+                },
+                "required": ["id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_ip_group_entries",
+            "description": "向已有 IP 组追加 IP/CIDR。需用户确认后才会写入",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "entries": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["id", "entries"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "preview_rule",
             "description": "校验自定义规则条件是否合法，不写入数据库",
             "parameters": {
@@ -443,21 +616,32 @@ TOOL_DEFINITIONS: list[dict] = [
     },
 ]
 
-WRITE_TOOLS = frozenset({
-    "create_site",
-    "create_rule",
-    "create_rate_limit",
-    "create_blacklist_entry",
-    "create_whitelist_entry",
-    "create_exception",
-})
+WRITE_TOOLS = frozenset(
+    {
+        "create_site",
+        "create_rule",
+        "create_rate_limit",
+        "create_blacklist_entry",
+        "create_whitelist_entry",
+        "create_exception",
+        "update_rule",
+        "create_bot",
+        "update_bot",
+        "create_ip_group",
+        "update_ip_group",
+        "add_ip_group_entries",
+    }
+)
 
-DEFENSE_READ_TOOL_NAMES = frozenset({
-    "query_logs",
-    "get_log_stats",
-    "query_log_stats_group",
-    "list_rules",
-})
+DEFENSE_READ_TOOL_NAMES = frozenset(
+    {
+        "query_logs",
+        "get_log_stats",
+        "query_log_stats_group",
+        "list_rules",
+        "web_search",
+    }
+)
 
 _SUBMIT_ANALYSIS_TOOL = {
     "type": "function",
@@ -496,7 +680,7 @@ _SUBMIT_ANALYSIS_TOOL = {
                         "name": {"type": "string"},
                         "mode": {
                             "type": "string",
-                            "enum": ["observe", "block", "captcha", "js_challenge", "slide_captcha"],
+                            "enum": ["observe", "block", "js_challenge", "slide_captcha"],
                         },
                         "priority": {"type": "integer"},
                         "site_ids": {"type": "array", "items": {"type": "integer"}},
@@ -524,5 +708,20 @@ _SUBMIT_ANALYSIS_TOOL = {
 DEFENSE_TOOL_DEFINITIONS: list[dict] = [
     tool
     for tool in TOOL_DEFINITIONS
-    if tool.get("function", {}).get("name") in DEFENSE_READ_TOOL_NAMES
+    if tool.get("function", {}).get("name") in (DEFENSE_READ_TOOL_NAMES - {"web_search"})
 ] + [_SUBMIT_ANALYSIS_TOOL]
+
+
+def defense_tool_definitions(*, allow_web_search: bool) -> list[dict]:
+    """Return automated-defense tools, optionally including external search.
+
+    @param allow_web_search: Whether the administrator opted into external search.
+    @return: Tool definitions safe for the current automated-defense run.
+    """
+    if not allow_web_search:
+        return DEFENSE_TOOL_DEFINITIONS
+    return [
+        tool
+        for tool in TOOL_DEFINITIONS
+        if tool.get("function", {}).get("name") in DEFENSE_READ_TOOL_NAMES
+    ] + [_SUBMIT_ANALYSIS_TOOL]

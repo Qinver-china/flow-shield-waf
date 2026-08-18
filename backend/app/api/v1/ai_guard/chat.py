@@ -12,7 +12,10 @@ from app.models import User
 from app.schemas.ai_guard import ChatRequest, ConfirmActionRequest
 from app.schemas.common import ok
 from app.services.ai_guard.chat import session_store
-from app.services.ai_guard.chat.service import chat_service
+from app.services.ai_guard.chat.service import (
+    chat_service,
+    enrich_pending_created_rules_batch,
+)
 
 router = APIRouter()
 
@@ -55,10 +58,7 @@ async def list_sessions(
     user: User = Depends(get_current_user),
 ):
     rows = await session_store.list_sessions(db, user_id=user.id)
-    return ok([
-        {"id": r.id, "title": r.title, "created_at": r.created_at}
-        for r in rows
-    ])
+    return ok([{"id": r.id, "title": r.title, "created_at": r.created_at} for r in rows])
 
 
 @router.get("/sessions/{session_id}/messages")
@@ -68,17 +68,20 @@ async def get_session_messages(
     _user: User = Depends(get_current_user),
 ):
     rows = await chat_service.get_session_messages(db, user_id=_user.id, session_id=session_id)
-    return ok([
-        {
-            "id": r.id,
-            "role": r.role,
-            "content": r.content,
-            "pending_action": r.pending_action,
-            "action_status": r.action_status,
-            "created_at": r.created_at,
-        }
-        for r in rows
-    ])
+    pending_actions = await enrich_pending_created_rules_batch(db, [r.pending_action for r in rows])
+    items = []
+    for r, pending_action in zip(rows, pending_actions):
+        items.append(
+            {
+                "id": r.id,
+                "role": r.role,
+                "content": r.content,
+                "pending_action": pending_action,
+                "action_status": r.action_status,
+                "created_at": r.created_at,
+            }
+        )
+    return ok(items)
 
 
 @router.delete("/sessions")

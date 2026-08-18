@@ -10,6 +10,7 @@ from app.services.ai_guard.config import get_or_create_setting, load_runtime_con
 from app.services.ai_guard.crypto import PASSWORD_MASK, encrypt_secret
 from app.services.ai_guard.llm.client import LlmClient
 from app.services.ai_guard.llm.errors import format_llm_error
+from app.services.ai_guard.mode_guide import normalize_apply_mode
 
 router = APIRouter()
 
@@ -25,7 +26,8 @@ def _out(row) -> dict:
         chat_enabled=row.chat_enabled,
         floating_chat_enabled=bool(getattr(row, "floating_chat_enabled", True)),
         defense_enabled=row.defense_enabled,
-        default_apply_mode=row.default_apply_mode,
+        defense_web_search_enabled=bool(getattr(row, "defense_web_search_enabled", False)),
+        default_apply_mode=normalize_apply_mode(row.default_apply_mode),
         max_logs_per_analysis=row.max_logs_per_analysis,
         analysis_cooldown_sec=row.analysis_cooldown_sec,
         auto_block_min_confidence=row.auto_block_min_confidence,

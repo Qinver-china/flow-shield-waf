@@ -1,4 +1,5 @@
 """AI Guard module persistence models."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -8,8 +9,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
 
-APPLY_MODES = ("suggest_only", "auto_observe", "auto_block")
-INCIDENT_STATUSES = ("pending", "analyzing", "suggested", "analyzed", "applied", "failed", "dismissed")
+APPLY_MODES = ("suggest_only", "auto_observe", "auto_handle")
+INCIDENT_STATUSES = (
+    "pending",
+    "analyzing",
+    "suggested",
+    "analyzed",
+    "applied",
+    "failed",
+    "dismissed",
+)
 MESSAGE_ROLES = ("user", "assistant", "system", "tool")
 
 
@@ -28,7 +37,8 @@ class AiGuardSetting(Base, TimestampMixin):
     chat_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     floating_chat_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     defense_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    default_apply_mode: Mapped[str] = mapped_column(String(24), default="suggest_only")
+    defense_web_search_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    default_apply_mode: Mapped[str] = mapped_column(String(24), default="auto_handle")
     max_logs_per_analysis: Mapped[int] = mapped_column(Integer, default=200)
     analysis_cooldown_sec: Mapped[int] = mapped_column(Integer, default=300)
     auto_block_min_confidence: Mapped[float] = mapped_column(Float, default=0.85)
@@ -44,7 +54,7 @@ class AiGuardPolicy(Base, TimestampMixin):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     trigger_type: Mapped[str] = mapped_column(String(64), index=True)
     trigger_params: Mapped[dict] = mapped_column(JSON, default=dict)
-    apply_mode: Mapped[str] = mapped_column(String(24), default="suggest_only")
+    apply_mode: Mapped[str] = mapped_column(String(24), default="auto_handle")
     notify_on: Mapped[list] = mapped_column(JSON, default=list)
     channel_ids: Mapped[list] = mapped_column(JSON, default=list)
     condition_filter: Mapped[dict | None] = mapped_column(JSON, nullable=True)

@@ -14,6 +14,7 @@ from app.constants.alert_conditions import (
     TRAFFIC_WINDOWS,
 )
 from app.models.ai_guard import APPLY_MODES
+from app.services.ai_guard.mode_guide import normalize_apply_mode
 from app.services.notifications.validators import validate_condition_params
 
 TRIGGER_TYPES: list[dict] = [deepcopy(item) for item in ALERT_CONDITION_TYPES]
@@ -36,10 +37,11 @@ __all__ = (
 
 
 def validate_apply_mode(mode: str) -> str:
-    if mode not in APPLY_MODES:
+    normalized = normalize_apply_mode(mode, default="")
+    if normalized not in APPLY_MODES:
         allowed = ", ".join(APPLY_MODES)
         raise ValueError(f"无效的应用模式 {mode}，可选: {allowed}")
-    return mode
+    return normalized
 
 
 def normalize_legacy_trigger_params(

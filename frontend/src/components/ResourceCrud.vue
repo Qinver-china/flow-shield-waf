@@ -15,7 +15,7 @@
     <slot v-if="$slots.list" name="list" :rows="rows" :loading="loading" :open-view="openView" :open-edit="openEdit"
       :open-duplicate="openDuplicate" :remove="remove" :toggle-enabled="toggleEnabled" :toggling-id="togglingId"
       :allow-delete="allowDelete" :name-actions="nameActions" :duplicatable="duplicatable" :pagination="pagination"
-      :on-table-change="onTableChange" :sort-field="sortField" :sort-order="sortOrder" />
+      :on-table-change="onTableChange" :sort-field="sortField" :sort-order="sortOrder" :on-refresh="refreshListAndNotify" />
 
     <a-table v-else-if="!isMobile" :columns="tableColumns" :data-source="rows" :loading="loading"
       :pagination="pagination" :row-selection="rowSelection" row-key="id" size="middle" bordered
@@ -350,6 +350,12 @@ async function fetchList() {
   }
 }
 
+// 自定义列表（如 FsDataTable）批量操作后：重拉列表并通知父级缓存失效
+async function refreshListAndNotify() {
+  await fetchList();
+  notifyMutated();
+}
+
 const {
   selectedCount,
   batchProcessing,
@@ -372,10 +378,7 @@ const {
   rows,
   batch: batchConfig,
   hasEnabledColumn,
-  onRefresh: async () => {
-    await fetchList();
-    notifyMutated();
-  },
+  onRefresh: refreshListAndNotify,
 });
 
 function onBatchExecute(action: import("@/types/batch").BatchActionKey, mode?: string) {

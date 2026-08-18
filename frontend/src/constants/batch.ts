@@ -49,5 +49,5 @@ export const commonBatchEditFields = {
 export const applyModeOptions = [
   { label: "仅建议", value: "suggest_only" },
   { label: "自动观察", value: "auto_observe" },
-  { label: "自动拦截", value: "auto_block" },
+  { label: "自动分析并处理", value: "auto_handle" },
 ];

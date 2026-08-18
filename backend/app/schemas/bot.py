@@ -84,6 +84,7 @@ class BotProfileUpdate(BaseModel):
     site_ids: list[int] | None = None
     verify_dns_suffix: str | None = None
     remark: str | None = None
+    enabled: bool | None = None
 
     @model_validator(mode="before")
     @classmethod

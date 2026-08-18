@@ -58,12 +58,18 @@ async def add_message(
 
 
 async def update_message_action(
-    db: AsyncSession, message_id: int, *, action_status: str
+    db: AsyncSession,
+    message_id: int,
+    *,
+    action_status: str,
+    pending_action: dict | None = None,
 ) -> AiGuardChatMessage | None:
     row = await db.get(AiGuardChatMessage, message_id)
     if row is None:
         return None
     row.action_status = action_status
+    if pending_action is not None:
+        row.pending_action = pending_action
     await db.commit()
     await db.refresh(row)
     return row

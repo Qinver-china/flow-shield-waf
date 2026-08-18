@@ -1,7 +1,7 @@
 <template>
   <page-shell
     title="IP 组管理"
-    description="创建可复用的 IP / 网段集合，在防护条件中通过「包含 IP 组」「不包含 IP 组」引用"
+    description="创建可复用的 IPv4 / IPv6 地址或网段集合，在防护条件中通过「包含 IP 组」「不包含 IP 组」引用"
   >
     <template #actions>
       <a-button type="primary" @click="crudRef?.openCreate()">新增 IP 组</a-button>
@@ -67,7 +67,7 @@
                 v-model:value="record._entriesText"
                 :rows="10"
                 class="entry-editor"
-                placeholder="每行一个 IP 或 CIDR，例如：&#10;1.2.3.4&#10;10.0.0.0/8&#10;# 以 # 开头的行会被忽略&#10;&#10;可直接增删行；保存时将覆盖全部条目"
+                placeholder="每行一个 IPv4 / IPv6 或 CIDR，例如：&#10;1.2.3.4&#10;10.0.0.0/8&#10;2001:db8::1&#10;2001:db8::/32&#10;# 以 # 开头的行会被忽略&#10;&#10;可直接增删行；保存时覆盖全部条目"
               />
             </a-tab-pane>
             <a-tab-pane key="import" tab="导入文件">
@@ -82,7 +82,7 @@
                 已导入：{{ record._importFileName }}（当前共 {{ displayEntries(record).length }} 条，保存后生效）
               </p>
               <p class="fs-hint">
-                文件编码需为 UTF-8，每行一个 IP 或网段；导入内容会合并进上方列表（去重），不会立刻覆盖已有条目，请检查后点保存
+                文件编码需为 UTF-8，每行一个 IPv4 / IPv6 地址或网段；导入内容会合并进上方列表（去重），不会立刻覆盖已有条目，请检查后点保存
               </p>
             </a-tab-pane>
           </a-tabs>

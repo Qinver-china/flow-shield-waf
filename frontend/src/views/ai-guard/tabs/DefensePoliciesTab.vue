@@ -153,7 +153,7 @@ const defaultForm = () => ({
   enabled: true,
   trigger_type: "traffic.baseline_gt",
   trigger_params: { window_sec: 300, percent: 50 } as Record<string, unknown>,
-  apply_mode: "suggest_only",
+  apply_mode: "auto_handle",
   notify_on: ["trigger", "result"],
   channel_ids: [] as number[],
   cooldown_sec: 300,
@@ -209,7 +209,8 @@ function applyModeLabel(m: string) {
   const map: Record<string, string> = {
     suggest_only: "仅建议",
     auto_observe: "自动观察",
-    auto_block: "自动拦截",
+    auto_handle: "自动分析并处理",
+    auto_block: "自动分析并处理",
   };
   return map[m] || m;
 }

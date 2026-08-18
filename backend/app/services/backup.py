@@ -1,4 +1,5 @@
 """Export / import WAF configuration as a portable JSON backup."""
+
 from __future__ import annotations
 
 import logging
@@ -319,12 +320,8 @@ async def build_export(db: AsyncSession, sections: list[str] | None = None) -> d
         data["rules"] = [_serialize_row(r) for r in rules]
 
         iplists = (await db.execute(select(IpList).order_by(IpList.id))).scalars().all()
-        data["blacklist"] = [
-            _serialize_row(r) for r in iplists if r.list_type == "black"
-        ]
-        data["whitelist"] = [
-            _serialize_row(r) for r in iplists if r.list_type == "white"
-        ]
+        data["blacklist"] = [_serialize_row(r) for r in iplists if r.list_type == "black"]
+        data["whitelist"] = [_serialize_row(r) for r in iplists if r.list_type == "white"]
 
         exceptions = (await db.execute(select(Exception_).order_by(Exception_.id))).scalars().all()
         data["exceptions"] = [_serialize_row(r) for r in exceptions]
@@ -351,24 +348,24 @@ async def build_export(db: AsyncSession, sections: list[str] | None = None) -> d
 
     if "ai_policies" in selected:
         policies = (
-            await db.execute(select(AiGuardPolicy).order_by(AiGuardPolicy.id))
-        ).scalars().all()
+            (await db.execute(select(AiGuardPolicy).order_by(AiGuardPolicy.id))).scalars().all()
+        )
         data["ai_guard_policies"] = [_serialize_row(r) for r in policies]
 
     if "system_settings" in selected:
         waf = (await db.execute(select(WafSetting).where(WafSetting.id == 1))).scalar_one_or_none()
         data["waf_settings"] = _serialize_row(waf) if waf else None
         channels = (
-            await db.execute(select(NotificationChannel).order_by(NotificationChannel.id))
-        ).scalars().all()
+            (await db.execute(select(NotificationChannel).order_by(NotificationChannel.id)))
+            .scalars()
+            .all()
+        )
         data["notification_channels"] = [_serialize_row(r) for r in channels]
-        alerts = (
-            await db.execute(select(AlertPolicy).order_by(AlertPolicy.id))
-        ).scalars().all()
+        alerts = (await db.execute(select(AlertPolicy).order_by(AlertPolicy.id))).scalars().all()
         data["alert_policies"] = [_serialize_row(r) for r in alerts]
         panels = (
-            await db.execute(select(PanelConnection).order_by(PanelConnection.id))
-        ).scalars().all()
+            (await db.execute(select(PanelConnection).order_by(PanelConnection.id))).scalars().all()
+        )
         data["panel_connections"] = [_serialize_row(r) for r in panels]
 
     return {
@@ -431,9 +428,7 @@ def _apply_certificate_acme_fields(cert, item: dict[str, Any]) -> None:
         cert.panel_push_targets = list(item.get("panel_push_targets") or [])
 
 
-def _remap_panel_push_targets(
-    targets: object, panel_map: dict[int, int]
-) -> list[dict[str, Any]]:
+def _remap_panel_push_targets(targets: object, panel_map: dict[int, int]) -> list[dict[str, Any]]:
     """Rewrite stored panel connection IDs after a backup import.
 
     Args:
@@ -470,9 +465,7 @@ def _remap_panel_push_targets(
     return out
 
 
-def _finalize_certificate_panel_push(
-    cert, item: dict[str, Any], panel_map: dict[int, int]
-) -> None:
+def _finalize_certificate_panel_push(cert, item: dict[str, Any], panel_map: dict[int, int]) -> None:
     """Remap panel-push connection IDs and drop targets that no longer exist."""
     if "panel_push_targets" not in item and "panel_push_enabled" not in item:
         return
@@ -592,9 +585,7 @@ async def _import_sites(
     return id_map
 
 
-def _remap_ip_group_ids_in_conditions(
-    node: Any, group_map: dict[int, int]
-) -> Any:
+def _remap_ip_group_ids_in_conditions(node: Any, group_map: dict[int, int]) -> Any:
     if not isinstance(node, dict):
         return node
     out = deepcopy(node)
@@ -621,9 +612,7 @@ def _remap_ip_group_ids_in_conditions(
     return out
 
 
-async def _import_ip_groups(
-    db: AsyncSession, items: list[dict[str, Any]]
-) -> dict[int, int]:
+async def _import_ip_groups(db: AsyncSession, items: list[dict[str, Any]]) -> dict[int, int]:
     id_map: dict[int, int] = {}
     for item in items:
         name = (item.get("name") or "").strip()
@@ -749,9 +738,7 @@ async def _import_bots(
     return count
 
 
-async def _import_channels(
-    db: AsyncSession, items: list[dict[str, Any]]
-) -> dict[int, int]:
+async def _import_channels(db: AsyncSession, items: list[dict[str, Any]]) -> dict[int, int]:
     id_map: dict[int, int] = {}
     for item in items:
         name = (item.get("name") or "").strip()
@@ -773,7 +760,9 @@ async def _import_channels(
     return id_map
 
 
-async def _import_panel_connections(db: AsyncSession, items: list[dict[str, Any]]) -> dict[int, int]:
+async def _import_panel_connections(
+    db: AsyncSession, items: list[dict[str, Any]]
+) -> dict[int, int]:
     id_map: dict[int, int] = {}
     for item in items:
         name = (item.get("name") or "").strip()
@@ -847,6 +836,7 @@ async def _import_ai_settings(db: AsyncSession, item: dict[str, Any] | None) -> 
         "chat_enabled",
         "floating_chat_enabled",
         "defense_enabled",
+        "defense_web_search_enabled",
         "default_apply_mode",
         "max_logs_per_analysis",
         "analysis_cooldown_sec",
@@ -923,14 +913,14 @@ async def apply_import(
     if not isinstance(data, dict):
         raise ValueError("备份缺少 data 字段")
 
-    file_sections = _expand_section_aliases(
-        list(payload.get("sections") or list(ALL_SECTIONS))
-    )
+    file_sections = _expand_section_aliases(list(payload.get("sections") or list(ALL_SECTIONS)))
     requested = _normalize_sections(sections or file_sections)
     # only import sections that both requested and present in file sections metadata
-    selected = [s for s in requested if s in set(file_sections) or any(
-        bag in data for bag in SECTION_DEFS[s]["bags"]
-    )]
+    selected = [
+        s
+        for s in requested
+        if s in set(file_sections) or any(bag in data for bag in SECTION_DEFS[s]["bags"])
+    ]
 
     summary: dict[str, Any] = {"sections": selected, "counts": {}}
     cert_map: dict[int, int] = {}
@@ -1036,9 +1026,7 @@ async def apply_import(
         summary["counts"]["bot_categories"] = await _import_bot_categories(
             db, data.get("bot_categories") or []
         )
-        summary["counts"]["bots"] = await _import_bots(
-            db, data.get("bots") or [], site_map
-        )
+        summary["counts"]["bots"] = await _import_bots(db, data.get("bots") or [], site_map)
 
     if "system_settings" in selected:
         summary["counts"]["alert_policies"] = await _import_alert_policies(

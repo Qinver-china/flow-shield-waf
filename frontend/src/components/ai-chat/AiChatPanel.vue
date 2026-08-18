@@ -73,7 +73,13 @@
                   @confirmed="onActionDone" @cancelled="clearPending" />
                 <div v-else-if="item.action_status === 'executed'"
                   class="ai-chat-action-result ai-chat-action-result--executed">
-                  已确认执行该操作
+                  <span>已确认执行该操作</span>
+                  <a
+                    v-for="rule in createdRules(item.pending_action)"
+                    :key="rule.id"
+                    class="ai-chat-view-rule"
+                    @click="openCreatedRule(rule.id)"
+                  >查看规则</a>
                 </div>
                 <div v-else-if="item.action_status === 'cancelled'"
                   class="ai-chat-action-result ai-chat-action-result--cancelled">
@@ -104,6 +110,7 @@
 
 <script setup lang="ts">
 import { computed, h, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import {
   MenuFoldOutlined,
   PlusOutlined,
@@ -142,6 +149,7 @@ const props = withDefaults(
 
 const siderVisible = ref(true);
 const floatingStore = useFloatingAiChatStore();
+const router = useRouter();
 const { width } = useBreakpoint();
 
 const isNarrowLayout = computed(() => width.value <= 900);
@@ -206,6 +214,25 @@ function onConversationSelect(key: string) {
   if (effectiveCollapsibleSider.value) {
     siderVisible.value = false;
   }
+}
+
+function createdRules(action: Record<string, unknown> | null | undefined) {
+  const created = action?.created;
+  if (!Array.isArray(created)) return [];
+  const rows: { id: number }[] = [];
+  for (const item of created) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { tool?: string; id?: unknown; exists?: boolean };
+    const id = Number(row.id);
+    if (row.tool === "create_rule" && row.exists === true && Number.isFinite(id)) {
+      rows.push({ id });
+    }
+  }
+  return rows;
+}
+
+function openCreatedRule(id: number) {
+  void router.push({ path: "/rules", query: { id: String(id), drawer: "view" } });
 }
 </script>
 
@@ -633,6 +660,14 @@ function onConversationSelect(key: string) {
   color: #389e0d;
   background: color-mix(in srgb, #52c41a 10%, var(--fs-bg-surface));
   border-color: color-mix(in srgb, #52c41a 28%, var(--fs-border));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-chat-view-rule {
+  cursor: pointer;
 }
 
 .ai-chat-action-result--cancelled {

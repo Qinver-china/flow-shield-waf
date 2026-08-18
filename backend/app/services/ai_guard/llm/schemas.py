@@ -1,7 +1,9 @@
 """Structured LLM output schemas."""
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.models.rule import AI_ACTION_MODES
 
 
 class EvidenceItem(BaseModel):
@@ -16,6 +18,16 @@ class RuleDraft(BaseModel):
     site_ids: list[int] = Field(default_factory=list)
     enabled: bool = True
     conditions: dict = Field(default_factory=lambda: {"logic": "and", "conditions": []})
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _coerce_mode(cls, value: object) -> str:
+        raw = str(value or "observe").strip() or "observe"
+        if raw == "captcha":
+            return "js_challenge"
+        if raw not in AI_ACTION_MODES:
+            raise ValueError(f"无效的防护方式: {raw}，可选: {', '.join(AI_ACTION_MODES)}")
+        return raw
 
 
 class AttackAnalysis(BaseModel):

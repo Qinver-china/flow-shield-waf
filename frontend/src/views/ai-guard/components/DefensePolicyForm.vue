@@ -109,8 +109,11 @@
         <a-select v-model:value="model.apply_mode">
           <a-select-option value="suggest_only">仅生成建议</a-select-option>
           <a-select-option value="auto_observe">自动创建（观察）</a-select-option>
-          <a-select-option value="auto_block">自动创建（拦截）</a-select-option>
+          <a-select-option value="auto_handle">自动分析并处理</a-select-option>
         </a-select>
+        <p class="fs-hint is-inline">
+          「自动分析并处理」由 AI 在观察、拦截、JS 挑战、滑动验证中选择；不是一律拦截。
+        </p>
       </a-form-item>
 
       <a-form-item label="通知阶段">

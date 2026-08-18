@@ -1,4 +1,5 @@
 """Chat orchestration: LLM + tool calls + pending actions."""
+
 from __future__ import annotations
 
 import json
@@ -6,9 +7,11 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_guard import AiGuardChatSession
+from app.models.rule import Rule
 from app.services.ai_guard.chat import session_store
 from app.services.ai_guard.config import load_runtime_config
 from app.services.ai_guard.context.builder import build_knowledge_snapshot
@@ -19,6 +22,74 @@ from app.services.ai_guard.llm.prompts import CHAT_SYSTEM
 from app.services.ai_guard.ports import writer
 
 log = logging.getLogger("waf.ai_guard.chat")
+
+
+def _created_rule_items(tool: str, result: dict) -> list[dict]:
+    if tool != "create_rule" or not isinstance(result, dict) or not result.get("id"):
+        return []
+    return [{"tool": tool, "id": int(result["id"]), "name": result.get("name")}]
+
+
+async def enrich_pending_created_rules_batch(
+    db: AsyncSession,
+    pending_actions: list[dict | None],
+) -> list[dict | None]:
+    """Attach rule existence to pending actions with one database query.
+
+    @param db: Active database session.
+    @param pending_actions: Pending-action payloads in response order.
+    @return: Copied payloads enriched with current rule names and existence.
+    """
+    rule_ids: set[int] = set()
+    for pending in pending_actions:
+        created = pending.get("created") if isinstance(pending, dict) else None
+        if not isinstance(created, list):
+            continue
+        for item in created:
+            if not isinstance(item, dict) or item.get("tool") != "create_rule":
+                continue
+            try:
+                rule_ids.add(int(item["id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+
+    rules_by_id: dict[int, Rule] = {}
+    if rule_ids:
+        rows = (await db.execute(select(Rule).where(Rule.id.in_(rule_ids)))).scalars().all()
+        rules_by_id = {int(rule.id): rule for rule in rows}
+
+    enriched_actions: list[dict | None] = []
+    for pending in pending_actions:
+        if not isinstance(pending, dict) or not isinstance(pending.get("created"), list):
+            enriched_actions.append(pending)
+            continue
+        enriched: list[dict] = []
+        for item in pending["created"]:
+            if not isinstance(item, dict):
+                continue
+            row = dict(item)
+            if row.get("tool") == "create_rule":
+                try:
+                    rule = rules_by_id.get(int(row.get("id")))
+                except (TypeError, ValueError):
+                    rule = None
+                row["exists"] = rule is not None
+                if rule is not None:
+                    row["name"] = rule.name
+            enriched.append(row)
+        out = dict(pending)
+        out["created"] = enriched
+        enriched_actions.append(out)
+    return enriched_actions
+
+
+async def enrich_pending_created_rules(
+    db: AsyncSession,
+    pending_action: dict | None,
+) -> dict | None:
+    """Attach current rule existence to one pending-action payload."""
+    return (await enrich_pending_created_rules_batch(db, [pending_action]))[0]
+
 
 # Cap tool rounds to bound latency and upstream cost.
 _MAX_TOOL_ROUNDS = 5
@@ -42,6 +113,15 @@ _TOOL_LABELS: dict[str, str] = {
     "create_blacklist_entry": "创建黑名单",
     "create_whitelist_entry": "创建白名单",
     "create_exception": "创建防护例外",
+    "create_bot": "创建 Bot 库",
+    "update_bot": "更新 Bot 库",
+    "create_ip_group": "创建 IP 组",
+    "update_ip_group": "更新 IP 组",
+    "add_ip_group_entries": "向 IP 组追加地址",
+    "update_rule": "更新防护规则",
+    "web_search": "联网搜索",
+    "list_bots": "列出 Bot 库",
+    "list_ip_groups": "列出 IP 组",
     "preview_rule": "校验防护规则",
     "preview_rate_limit": "校验限速策略",
 }
@@ -71,6 +151,13 @@ def _summarize_tool_result(tool: str, raw_content: str) -> str:
         return f"共 {len(data.get('rules') or [])} 条规则"
     if tool == "list_rate_limits":
         return f"共 {len(data.get('rate_limits') or [])} 条策略"
+    if tool == "web_search":
+        items = data.get("results") or []
+        return f"找到 {len(items)} 条公开资料"
+    if tool == "list_bots":
+        return f"共 {len(data.get('bots') or [])} 条 Bot"
+    if tool == "list_ip_groups":
+        return f"共 {len(data.get('ip_groups') or [])} 个 IP 组"
     if tool in WRITE_TOOLS:
         return "已生成待确认草案"
     return "已完成"
@@ -387,7 +474,9 @@ async def _stream_complete_with_tools(
 
 class ChatService:
     @staticmethod
-    def _ensure_session_owner(sess: AiGuardChatSession | None, user_id: int | None) -> AiGuardChatSession:
+    def _ensure_session_owner(
+        sess: AiGuardChatSession | None, user_id: int | None
+    ) -> AiGuardChatSession:
         if sess is None:
             raise ValueError("会话不存在")
         if user_id is not None and sess.user_id not in (None, user_id):
@@ -466,7 +555,8 @@ class ChatService:
             {"role": "system", "content": CHAT_SYSTEM},
             {
                 "role": "system",
-                "content": "知识上下文：\n" + json.dumps(snapshot, ensure_ascii=False)[:_KNOWLEDGE_SNAPSHOT_MAX_CHARS],
+                "content": "知识上下文：\n"
+                + json.dumps(snapshot, ensure_ascii=False)[:_KNOWLEDGE_SNAPSHOT_MAX_CHARS],
             },
             *_history_to_messages(history),
         ]
@@ -534,7 +624,8 @@ class ChatService:
             {"role": "system", "content": CHAT_SYSTEM},
             {
                 "role": "system",
-                "content": "知识上下文：\n" + json.dumps(snapshot, ensure_ascii=False)[:_KNOWLEDGE_SNAPSHOT_MAX_CHARS],
+                "content": "知识上下文：\n"
+                + json.dumps(snapshot, ensure_ascii=False)[:_KNOWLEDGE_SNAPSHOT_MAX_CHARS],
             },
             *_history_to_messages(history),
         ]
@@ -598,16 +689,22 @@ class ChatService:
             await session_store.update_message_action(db, message_id, action_status="cancelled")
             return {"status": "cancelled"}
 
-        pending = row.pending_action
+        pending = dict(row.pending_action)
         if "actions" in pending:
             results = []
+            created: list[dict] = []
             for act in pending["actions"]:
                 args = act.get("arguments", {})
                 await writer.validate_tool_arguments(act["tool"], args)
                 res = await writer.execute_tool(db, act["tool"], args)
                 results.append(res)
-            await session_store.update_message_action(db, message_id, action_status="executed")
-            return {"status": "executed", "results": results}
+                created.extend(_created_rule_items(act["tool"], res))
+            pending["created"] = created
+            await session_store.update_message_action(
+                db, message_id, action_status="executed", pending_action=pending
+            )
+            created = (await enrich_pending_created_rules(db, pending) or {}).get("created") or []
+            return {"status": "executed", "results": results, "created": created}
 
         tool = pending.get("tool")
         args = edited_payload if edited_payload is not None else pending.get("arguments", {})
@@ -615,8 +712,12 @@ class ChatService:
             raise ValueError("无效待确认操作")
         await writer.validate_tool_arguments(tool, args)
         result = await writer.execute_tool(db, tool, args)
-        await session_store.update_message_action(db, message_id, action_status="executed")
-        return {"status": "executed", "result": result}
+        pending["created"] = _created_rule_items(tool, result)
+        await session_store.update_message_action(
+            db, message_id, action_status="executed", pending_action=pending
+        )
+        created = (await enrich_pending_created_rules(db, pending) or {}).get("created") or []
+        return {"status": "executed", "result": result, "created": created}
 
 
 chat_service = ChatService()

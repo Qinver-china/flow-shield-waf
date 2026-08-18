@@ -33,6 +33,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_waf_setting_panel_public_url(conn)
     await _drop_waf_setting_admin_credentials_set(conn)
     await _ensure_ai_guard_floating_chat_enabled(conn)
+    await _ensure_ai_guard_defense_web_search_enabled(conn)
     await _ensure_ai_guard_policy_custom_prompt(conn)
     await _ensure_rule_remark(conn)
     await _ensure_certificate_expiry_notify(conn)
@@ -105,19 +106,14 @@ async def _ensure_site_client_ip_source(conn) -> None:
 async def _ensure_site_force_https(conn) -> None:
     if await _column_exists(conn, "site", "force_https"):
         return
-    await conn.execute(
-        text("ALTER TABLE site ADD COLUMN force_https BOOLEAN NOT NULL DEFAULT 0")
-    )
+    await conn.execute(text("ALTER TABLE site ADD COLUMN force_https BOOLEAN NOT NULL DEFAULT 0"))
     log.info("schema patch applied: site.force_https")
 
 
 async def _ensure_site_custom_listen_ports(conn) -> None:
     if not await _column_exists(conn, "site", "custom_listen_ports"):
         await conn.execute(
-            text(
-                "ALTER TABLE site "
-                "ADD COLUMN custom_listen_ports BOOLEAN NOT NULL DEFAULT 0"
-            )
+            text("ALTER TABLE site " "ADD COLUMN custom_listen_ports BOOLEAN NOT NULL DEFAULT 0")
         )
         log.info("schema patch applied: site.custom_listen_ports")
     if not await _column_exists(conn, "site", "listen_http_ports"):
@@ -142,10 +138,7 @@ async def _ensure_site_disable_content_buffering(conn) -> None:
     if await _column_exists(conn, "site", "disable_content_buffering"):
         return
     await conn.execute(
-        text(
-            "ALTER TABLE site "
-            "ADD COLUMN disable_content_buffering BOOLEAN NOT NULL DEFAULT 0"
-        )
+        text("ALTER TABLE site " "ADD COLUMN disable_content_buffering BOOLEAN NOT NULL DEFAULT 0")
     )
     log.info("schema patch applied: site.disable_content_buffering")
 
@@ -166,10 +159,7 @@ async def _ensure_waf_setting_ratelimit_fail_open(conn) -> None:
     if await _column_exists(conn, "waf_setting", "ratelimit_fail_open"):
         return
     await conn.execute(
-        text(
-            "ALTER TABLE waf_setting "
-            "ADD COLUMN ratelimit_fail_open BOOLEAN NOT NULL DEFAULT 1"
-        )
+        text("ALTER TABLE waf_setting " "ADD COLUMN ratelimit_fail_open BOOLEAN NOT NULL DEFAULT 1")
     )
     log.info("schema patch applied: waf_setting.ratelimit_fail_open")
 
@@ -244,6 +234,19 @@ async def _ensure_ai_guard_floating_chat_enabled(conn) -> None:
     log.info("schema patch applied: ai_guard_setting.floating_chat_enabled")
 
 
+async def _ensure_ai_guard_defense_web_search_enabled(conn) -> None:
+    """Add the opt-in switch for external search during automated defense."""
+    if await _column_exists(conn, "ai_guard_setting", "defense_web_search_enabled"):
+        return
+    await conn.execute(
+        text(
+            "ALTER TABLE ai_guard_setting "
+            "ADD COLUMN defense_web_search_enabled BOOLEAN NOT NULL DEFAULT 0"
+        )
+    )
+    log.info("schema patch applied: ai_guard_setting.defense_web_search_enabled")
+
+
 async def _ensure_ai_guard_policy_custom_prompt(conn) -> None:
     if await _column_exists(conn, "ai_guard_policy", "custom_prompt"):
         return
@@ -304,9 +307,7 @@ async def _ensure_certificate_expiry_notify_channel_ids(conn) -> None:
             )
         )
         try:
-            await conn.execute(
-                text("ALTER TABLE certificate DROP COLUMN expiry_notify_channel_id")
-            )
+            await conn.execute(text("ALTER TABLE certificate DROP COLUMN expiry_notify_channel_id"))
             log.info("schema patch applied: dropped certificate.expiry_notify_channel_id")
         except Exception:  # noqa: BLE001
             log.warning("could not drop legacy column certificate.expiry_notify_channel_id")
@@ -329,10 +330,7 @@ async def _ensure_certificate_acme_columns(conn) -> None:
         log.info("schema patch applied: certificate.acme_provider")
     if not await _column_exists(conn, "certificate", "acme_auto_renew"):
         await conn.execute(
-            text(
-                "ALTER TABLE certificate "
-                "ADD COLUMN acme_auto_renew BOOLEAN NOT NULL DEFAULT 0"
-            )
+            text("ALTER TABLE certificate " "ADD COLUMN acme_auto_renew BOOLEAN NOT NULL DEFAULT 0")
         )
         log.info("schema patch applied: certificate.acme_auto_renew")
     if not await _column_exists(conn, "certificate", "acme_last_attempt_on"):
@@ -358,9 +356,7 @@ async def _ensure_certificate_panel_push_columns(conn) -> None:
         )
         log.info("schema patch applied: certificate.panel_push_enabled")
     if not await _column_exists(conn, "certificate", "panel_push_targets"):
-        await conn.execute(
-            text("ALTER TABLE certificate ADD COLUMN panel_push_targets JSON")
-        )
+        await conn.execute(text("ALTER TABLE certificate ADD COLUMN panel_push_targets JSON"))
         log.info("schema patch applied: certificate.panel_push_targets")
     await conn.execute(
         text(

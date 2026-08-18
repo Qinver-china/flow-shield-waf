@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from jwt import ExpiredSignatureError, InvalidTokenError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Pagination, get_current_user
 from app.core.db import get_db
-from app.models import User
+from app.models import Rule, User
 from app.schemas.ai_guard import AiGuardIncidentOut, ApplyIncidentRequest
 from app.schemas.common import ok
 from app.services.ai_guard.defense.pipeline import (
@@ -22,7 +23,7 @@ router = APIRouter()
 _incidents = IncidentStore()
 
 
-def _incident_out(rec) -> dict:
+def _incident_out(rec, *, applied_rule_exists: bool = False) -> dict:
     return AiGuardIncidentOut(
         id=rec.incident_id,
         policy_id=rec.policy_id,
@@ -33,6 +34,7 @@ def _incident_out(rec) -> dict:
         analysis_report=rec.analysis_report,
         suggested_rule=rec.suggested_rule,
         applied_rule_id=rec.applied_rule_id,
+        applied_rule_exists=applied_rule_exists,
         apply_mode=rec.apply_mode,
         error_detail=rec.error_detail,
         created_at=rec.created_at,
@@ -70,11 +72,19 @@ async def apply_incident_via_token(
             render_action_page(title="应用失败", message=str(exc), success=False),
             status_code=400,
         )
+    if not row.applied_rule_id:
+        return HTMLResponse(
+            render_action_page(title="应用失败", message="规则未能创建", success=False),
+            status_code=400,
+        )
     rule_name = (row.suggested_rule or {}).get("name") or f"规则 #{row.applied_rule_id}"
     return HTMLResponse(
         render_action_page(
             title="规则已应用",
-            message=f"事件 #{incident_id} 的建议规则「{rule_name}」已成功创建。",
+            message=(
+                f"事件 #{incident_id} 的建议规则「{rule_name}」已成功创建"
+                f"（规则 #{row.applied_rule_id}）。"
+            ),
             success=True,
         )
     )
@@ -123,12 +133,28 @@ async def list_incidents(
         offset=pg.offset,
         limit=pg.page_size,
     )
-    return ok({
-        "total": total,
-        "items": [_incident_out(r) for r in rows],
-        "page": pg.page,
-        "page_size": pg.page_size,
-    })
+    rule_ids = {int(r.applied_rule_id) for r in rows if r.applied_rule_id}
+    existing_rule_ids: set[int] = set()
+    if rule_ids:
+        existing_rule_ids = set(
+            (await db.execute(select(Rule.id).where(Rule.id.in_(rule_ids)))).scalars().all()
+        )
+    return ok(
+        {
+            "total": total,
+            "items": [
+                _incident_out(
+                    r,
+                    applied_rule_exists=bool(
+                        r.applied_rule_id and r.applied_rule_id in existing_rule_ids
+                    ),
+                )
+                for r in rows
+            ],
+            "page": pg.page,
+            "page_size": pg.page_size,
+        }
+    )
 
 
 @router.get("/{incident_id}")
@@ -140,7 +166,8 @@ async def get_incident(
     row = await _incidents.get(incident_id)
     if row is None:
         raise HTTPException(status_code=404, detail="事件不存在")
-    return ok(_incident_out(row))
+    rule_exists = bool(row.applied_rule_id and await db.get(Rule, row.applied_rule_id))
+    return ok(_incident_out(row, applied_rule_exists=rule_exists))
 
 
 @router.post("/{incident_id}/apply")
@@ -151,12 +178,10 @@ async def apply_incident(
     _user: User = Depends(get_current_user),
 ):
     try:
-        row = await apply_incident_rule(
-            db, incident_id, apply_mode=body.apply_mode
-        )
+        row = await apply_incident_rule(db, incident_id, apply_mode=body.apply_mode)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return ok(_incident_out(row))
+    return ok(_incident_out(row, applied_rule_exists=bool(row.applied_rule_id)))
 
 
 @router.post("/{incident_id}/dismiss")

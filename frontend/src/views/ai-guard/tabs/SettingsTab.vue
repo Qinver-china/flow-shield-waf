@@ -47,12 +47,21 @@
       <a-form-item label="启用自动化防护">
         <a-switch v-model:checked="form.defense_enabled" />
       </a-form-item>
+      <a-form-item label="允许自动防护联网搜索">
+        <a-switch v-model:checked="form.defense_web_search_enabled" />
+        <div class="hint warning-hint">
+          开启后，AI 自动防护可将脱敏后的搜索词发送至第三方公开搜索服务。外部内容可能不准确或包含提示词注入，请仅在接受数据外发与自动决策风险时启用。
+        </div>
+      </a-form-item>
       <a-form-item label="默认规则应用模式">
         <a-select v-model:value="form.default_apply_mode">
           <a-select-option value="suggest_only">仅生成建议</a-select-option>
-          <a-select-option value="auto_observe">自动创建（观察模式）</a-select-option>
-          <a-select-option value="auto_block">自动创建（拦截，需高置信度）</a-select-option>
+          <a-select-option value="auto_observe">自动创建（观察）</a-select-option>
+          <a-select-option value="auto_handle">自动分析并处理</a-select-option>
         </a-select>
+        <div class="hint">
+          「自动分析并处理」由 AI 在观察、拦截、JS 挑战、滑动验证中选择动作；非观察动作需达到下方最低置信度，否则降为观察。旧选项「自动创建拦截」已并入本模式。
+        </div>
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="12">
@@ -66,8 +75,9 @@
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item label="自动拦截最低置信度">
+      <a-form-item label="非观察动作最低置信度">
         <a-slider v-model:value="form.auto_block_min_confidence" :min="0.5" :max="1" :step="0.05" />
+        <div class="hint">自动分析并处理时，拦截 / JS 挑战 / 滑动验证须达到该置信度，否则改为观察。</div>
       </a-form-item>
       <a-space>
         <a-button type="primary" :loading="saving" @click="save">保存配置</a-button>
@@ -101,7 +111,8 @@ const form = reactive({
   chat_enabled: true,
   floating_chat_enabled: true,
   defense_enabled: true,
-  default_apply_mode: "suggest_only",
+  defense_web_search_enabled: false,
+  default_apply_mode: "auto_handle",
   max_logs_per_analysis: 200,
   analysis_cooldown_sec: 300,
   auto_block_min_confidence: 0.85,
@@ -176,5 +187,9 @@ onMounted(load);
   color: #64748b;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.warning-hint {
+  color: #d97706;
 }
 </style>

@@ -10,6 +10,7 @@ from app.models.ai_guard import AiGuardPolicy
 from app.services.ai_guard.config import AiGuardRuntimeConfig, load_runtime_config
 from app.services.ai_guard.defense.applier import apply_rule_draft, check_rule_conflicts
 from app.services.ai_guard.defense.rule_generator import analyze_and_suggest
+from app.services.ai_guard.mode_guide import normalize_apply_mode
 from app.services.ai_guard.ports import (
     DEFENSE_INITIAL_MAX_ROWS,
     DEFENSE_INITIAL_WINDOW_MIN,
@@ -34,7 +35,7 @@ async def run_defense_for_policy(
     if not cfg.enabled or not cfg.defense_enabled or not cfg.api_key:
         raise ValueError("AI 防护未启用或未配置 API Key")
 
-    apply_mode = policy.apply_mode or cfg.default_apply_mode
+    apply_mode = normalize_apply_mode(policy.apply_mode or cfg.default_apply_mode)
     window_min = int(policy.trigger_params.get("window_min") or trigger_snapshot.get("window_min") or 5)
 
     policy.last_triggered_at = datetime.utcnow()
@@ -134,7 +135,17 @@ async def run_defense_for_policy(
             trigger_snapshot=trigger_snapshot,
         )
         report = analysis.model_dump()
-        report["blocked_ratio"] = meta.get("blocked_count", 0) / max(meta.get("sampled", 1), 1)
+        try:
+            win_stats = await log_sampler.window_block_stats(
+                window_min=DEFENSE_INITIAL_WINDOW_MIN,
+                site_id=site_id,
+            )
+            report["blocked_ratio"] = float(win_stats["blocked_ratio"])
+            report["window_request_count"] = int(win_stats["total"])
+            report["window_blocked_count"] = int(win_stats["blocked"])
+        except Exception:  # noqa: BLE001
+            log.exception("ai guard window block stats failed policy=%s", policy.id)
+            report["blocked_ratio"] = 0.0
         incident.analysis_report = report
 
         rule_id = None
@@ -246,16 +257,21 @@ async def apply_incident_rule(
 
     cfg = await load_runtime_config(db)
     mode = apply_mode or incident.apply_mode or cfg.default_apply_mode
-    rule_id, _ = await apply_rule_draft(
+    # 面板/邮件「应用」必须真正建规则；suggest_only 仅约束自动流水线。
+    if mode == "suggest_only":
+        mode = "auto_handle"
+    rule_id, effective_mode = await apply_rule_draft(
         db,
         incident.suggested_rule,
         apply_mode=mode,
         config=cfg,
         analysis=incident.analysis_report,
     )
+    if not rule_id:
+        raise ValueError("规则未能创建")
     incident.applied_rule_id = rule_id
     incident.status = "applied"
-    incident.apply_mode = mode
+    incident.apply_mode = effective_mode
     return await _incidents.upsert(incident)
 
 

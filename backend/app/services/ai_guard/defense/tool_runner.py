@@ -1,4 +1,5 @@
 """Tool execution for automated defense analysis (read-only + submit)."""
+
 from __future__ import annotations
 
 import json
@@ -27,10 +28,21 @@ def _encode_tool_result(data: Any) -> str:
 async def run_defense_tool_calls(
     db: AsyncSession,
     tool_calls: list[dict],
+    *,
+    allow_web_search: bool = False,
 ) -> tuple[list[dict], AttackAnalysis | None]:
-    """Run defense-phase tools; returns tool messages and optional final analysis."""
+    """Run enabled defense-phase tools and return messages plus optional analysis.
+
+    @param db: Active database session.
+    @param tool_calls: Tool calls returned by the model.
+    @param allow_web_search: Whether external search is enabled for this run.
+    @return: Encoded tool messages and an optional submitted analysis.
+    """
     results: list[dict] = []
     analysis: AttackAnalysis | None = None
+    allowed_tools = DEFENSE_READ_TOOL_NAMES
+    if not allow_web_search:
+        allowed_tools = allowed_tools - {"web_search"}
 
     for tc in tool_calls:
         fn = tc.get("function") or {}
@@ -64,7 +76,7 @@ async def run_defense_tool_calls(
                 )
             continue
 
-        if name not in DEFENSE_READ_TOOL_NAMES:
+        if name not in allowed_tools:
             results.append(
                 {
                     "role": "tool",

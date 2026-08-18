@@ -30,6 +30,8 @@
         <template v-else-if="column.key === 'actions'">
           <a v-if="record.status === 'suggested'" @click="apply(record.id)">应用规则</a>
           <a-divider v-if="record.status === 'suggested'" type="vertical" />
+          <a v-if="record.applied_rule_exists" @click="viewRule(record.applied_rule_id)">查看规则</a>
+          <a-divider v-if="record.applied_rule_exists" type="vertical" />
           <a v-if="record.applied_rule_id" @click="rollback(record.id)">回滚</a>
           <a-divider v-if="record.applied_rule_id" type="vertical" />
           <a @click="showDetail(record)">详情</a>
@@ -71,6 +73,8 @@
         <template v-else-if="column.key === 'actions'">
           <a v-if="record.status === 'suggested'" @click="apply(record.id)">应用规则</a>
           <a-divider v-if="record.status === 'suggested'" type="vertical" />
+          <a v-if="record.applied_rule_exists" @click="viewRule(record.applied_rule_id)">查看规则</a>
+          <a-divider v-if="record.applied_rule_exists" type="vertical" />
           <a v-if="record.applied_rule_id" @click="rollback(record.id)">回滚</a>
           <a-divider v-if="record.applied_rule_id" type="vertical" />
           <a @click="showDetail(record)">详情</a>
@@ -116,6 +120,7 @@
 <script setup lang="ts">
 import { message, Modal } from "ant-design-vue";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRouter } from "vue-router";
 import { api } from "@/api";
 import FsDetailDrawer from "@/components/FsDetailDrawer.vue";
 import FsDetailKv from "@/components/FsDetailKv.vue";
@@ -131,6 +136,7 @@ const page = ref(1);
 const pageSize = ref(20);
 const drawerOpen = ref(false);
 const detail = ref<any>(null);
+const router = useRouter();
 
 const { isMobile, withPaginationSize } = useResponsivePagination();
 
@@ -225,11 +231,16 @@ async function apply(id: number) {
   Modal.confirm({
     title: "应用 AI 建议的规则？",
     onOk: async () => {
-      await api.post(`/api/v1/ai-guard/incidents/${id}/apply`, {});
-      message.success("规则已应用");
+      const res = await api.post(`/api/v1/ai-guard/incidents/${id}/apply`, {});
+      const ruleId = res.data?.applied_rule_id;
+      message.success(ruleId ? `规则已应用（#${ruleId}）` : "规则已应用");
       await load();
     },
   });
+}
+
+function viewRule(ruleId: number) {
+  void router.push({ path: "/rules", query: { id: String(ruleId), drawer: "view" } });
 }
 
 async function rollback(id: number) {

@@ -19,7 +19,7 @@
         </a-tooltip>
       </template>
       <template
-        #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate, pagination, onTableChange, sortField, sortOrder }">
+        #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate, pagination, onTableChange, sortField, sortOrder, onRefresh }">
         <fs-data-table
           v-if="listStyle === 'table'"
           :columns="siteTableColumns(sortField, sortOrder)"
@@ -33,6 +33,7 @@
           :mobile-exclude-keys="siteTableMobileExcludeKeys"
           :scroll="{ x: 1280 }"
           @change="onTableChange"
+          @refresh="onRefresh"
         >
           <template #head="{ record }">
             <a class="site-mobile-title" @click="openView(record)">

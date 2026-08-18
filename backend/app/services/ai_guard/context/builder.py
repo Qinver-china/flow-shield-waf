@@ -8,7 +8,8 @@ from app.constants.response_pages import ALLOWED_BLOCK_STATUS_CODES
 from app.fields.catalog import catalog_compact_for_llm
 from app.models import RateLimit, Rule, Site
 from app.models.ai_guard import APPLY_MODES
-from app.models.rule import MODES
+from app.models.rule import AI_ACTION_MODES
+from app.services.ai_guard.mode_guide import PROTECTION_MODES
 from app.services.ai_guard.defense.triggers import TRIGGER_TYPES
 from app.services.ai_guard.log_query import log_query_catalog_for_llm
 from app.services.bot_catalog import category_options
@@ -29,7 +30,7 @@ def _rule_resource_fields() -> dict:
             "block_page_status_code",
             "block_page_html",
         ],
-        "modes": list(MODES),
+        "modes": list(AI_ACTION_MODES),
         "block_page_status_codes": sorted(ALLOWED_BLOCK_STATUS_CODES),
     }
 
@@ -38,10 +39,11 @@ def _defense_knowledge() -> dict:
     return {
         "apply_modes": {
             "suggest_only": "仅生成建议规则，需面板或邮件链接手动应用",
-            "auto_observe": "自动创建 observe 模式规则",
-            "auto_block": "高置信度且拦截占比高时自动 block，否则 observe",
+            "auto_observe": "自动创建规则，强制观察模式",
+            "auto_handle": "自动分析并处理：采用 AI 选择的 observe/block/js_challenge/slide_captcha；非观察动作需达到最低置信度，否则降为观察。旧值 auto_block 等同本模式",
         },
         "apply_mode_values": list(APPLY_MODES),
+        "protection_modes": PROTECTION_MODES,
         "trigger_types": [
             {
                 "type": item["type"],
@@ -65,7 +67,10 @@ def _defense_knowledge() -> dict:
             "流量条件写 traffic.global/traffic.site/traffic.origin_global/traffic.origin_site + op=compare，禁止 traffic.global.request_count",
             "CC/频率攻击应建议 create_rate_limit，不要用 traffic 字段",
             "访问控制封禁（国家/IP）应建议 create_blacklist_entry，不要用 create_rule",
-            "建议先 mode=observe，高置信度再 block",
+            "字符串条件优先 contains / not_contains / starts_with，仅不够精准时用 regex",
+            "mode 由 AI 在 observe/block/js_challenge/slide_captcha 中选择；证据不足必须 observe 或 create_rule=false",
+            "宁可漏报不可误拦；禁止只凭 URL 或单一字段下结论",
+            "误报/正常尖峰/过宽条件时 create_rule=false",
         ],
     }
 
@@ -80,6 +85,7 @@ def knowledge_for_defense(field_catalog: dict | None = None) -> dict:
         "system_value": catalog.get("system_value"),
         "fields": catalog.get("fields"),
         "operators_by_type": catalog.get("operators_by_type"),
+        "protection_modes": PROTECTION_MODES,
     }
 
 
@@ -105,7 +111,7 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
     return {
         "product": "流盾 WAF (Flow Shield WAF)",
         "field_catalog": field_catalog,
-        "modes": list(MODES),
+        "modes": list(AI_ACTION_MODES),
         "policy_types": {
             "blacklist": {
                 "tool": "create_blacklist_entry",
@@ -132,7 +138,7 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                 "tool": "create_rule",
                 "label": "自定义规则",
                 "when": "用户要自定义规则/观察规则/按 URI·Header·Body·Bot·流量等特征匹配",
-                "effect": "按条件匹配并执行 mode（observe/block/验证码等），不含频率统计",
+                "effect": "按条件匹配并执行 mode（observe/block/js_challenge/slide_captcha），不含频率统计",
                 "do_not_use": "create_blacklist_entry（黑名单没有 observe；封禁访问控制用黑名单）",
             },
             "rate_limit": {
@@ -141,6 +147,18 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                 "when": "用户要 CC、限速、频率限制",
                 "effect": "时间窗口内按 keys 计数，超限执行 mode",
                 "do_not_use": "create_rule + traffic 字段模拟限速",
+            },
+            "bot": {
+                "tool": "create_bot",
+                "label": "Bot 库",
+                "when": "按 UA 识别已知 Bot，供规则 bot 字段引用",
+                "effect": "维护 UA 模式与分类；可用 update_bot 开关",
+            },
+            "ip_group": {
+                "tool": "create_ip_group",
+                "label": "IP 组",
+                "when": "一组可复用的 IP/CIDR",
+                "effect": "供规则 in_ip_group 引用；可用 add_ip_group_entries 追加",
             },
         },
         "resource_fields": {
@@ -178,12 +196,24 @@ async def build_knowledge_snapshot(db: AsyncSession) -> dict:
                     "scope=rules 仅跳过自定义规则；scope=ratelimit 仅跳过限速",
                 ],
             },
+            "bot": {
+                "required": ["name", "ua_patterns"],
+                "optional": ["categories", "site_ids", "enabled", "verify_dns_suffix", "remark"],
+            },
+            "ip_group": {
+                "required": ["name", "entries"],
+                "optional": ["remark"],
+            },
         },
+        "protection_modes": PROTECTION_MODES,
         "tools_available": [
             "list_sites", "list_rules", "list_rate_limits",
-            "query_logs", "get_log_stats", "query_log_stats_group",
-            "create_site", "create_rule", "create_rate_limit",
+            "query_logs", "get_log_stats", "query_log_stats_group", "web_search",
+            "list_bots", "list_ip_groups",
+            "create_site", "create_rule", "update_rule", "create_rate_limit",
             "create_blacklist_entry", "create_whitelist_entry", "create_exception",
+            "create_bot", "update_bot", "create_ip_group", "update_ip_group",
+            "add_ip_group_entries",
             "preview_rule", "preview_rate_limit",
         ],
         "log_query": log_query_catalog_for_llm(),

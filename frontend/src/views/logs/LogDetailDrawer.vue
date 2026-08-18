@@ -32,29 +32,15 @@
       </fs-detail-section>
 
       <fs-detail-section v-if="queryRows.length" :title="`查询参数（${queryRows.length}）`">
-        <a-table
-          :columns="kvColumns"
-          :data-source="queryRows"
-          :pagination="false"
-          size="middle"
-          row-key="key"
-          bordered
-        />
+        <fs-detail-kv :items="queryKvItems" />
       </fs-detail-section>
 
-      <fs-detail-section v-if="evaluatedRows.length" :title="`规则判定扩展字段（${evaluatedRows.length}）`">
-        <a-table
-          :columns="evaluatedColumns"
-          :data-source="evaluatedRows"
-          :pagination="false"
-          size="middle"
-          row-key="key"
-          bordered
-        />
+      <fs-detail-section v-if="evaluatedKvItems.length" :title="`规则判定扩展字段（${evaluatedKvItems.length}）`">
+        <fs-detail-kv :items="evaluatedKvItems" />
       </fs-detail-section>
 
       <a-empty
-        v-if="!headerRows.length && !cookieRows.length && !queryRows.length && !evaluatedRows.length"
+        v-if="!headerRows.length && !cookieRows.length && !queryRows.length && !evaluatedKvItems.length"
         description="暂无请求快照（旧日志或未命中采样）"
         style="margin-top: 8px"
       />
@@ -88,18 +74,6 @@ function displayValue(value: unknown): string {
   if (value == null || value === "") return "-";
   return String(value);
 }
-
-const evaluatedColumns = [
-  { title: "分类", dataIndex: "category", width: 120 },
-  { title: "字段", dataIndex: "label", width: 180 },
-  { title: "参数", dataIndex: "arg", width: 120 },
-  { title: "取值", dataIndex: "value", ellipsis: true },
-];
-
-const kvColumns = [
-  { title: "名称", dataIndex: "name", width: 220, ellipsis: true },
-  { title: "取值", dataIndex: "value", ellipsis: true },
-];
 
 function buildFullUrl(d: Record<string, unknown> | null | undefined): string {
   if (!d) return "-";
@@ -211,6 +185,10 @@ const cookieKvItems = computed(() =>
   cookieRows.value.map((row) => ({ label: row.name, value: row.value })),
 );
 
+const queryKvItems = computed(() =>
+  queryRows.value.map((row) => ({ label: row.name, value: row.value })),
+);
+
 function fieldLabel(field: string, arg?: string | null) {
   const meta = fieldMeta.value[field];
   const base = meta?.label || field;
@@ -227,17 +205,17 @@ function fieldLabel(field: string, arg?: string | null) {
   return base;
 }
 
-const evaluatedRows = computed(() => {
+const evaluatedKvItems = computed(() => {
   const list = detail.value?.payload?.evaluated;
   if (!Array.isArray(list)) return [];
   return list.map((item: any, idx: number) => {
     const field = item.field || "";
     const meta = fieldMeta.value[field];
+    const category = meta?.category || "-";
+    const label = fieldLabel(field, item.arg);
     return {
       key: `${field}|${item.arg || ""}|${idx}`,
-      category: meta?.category || "-",
-      label: fieldLabel(field, item.arg),
-      arg: item.arg || "-",
+      label: category !== "-" ? `${category} · ${label}` : label,
       value: item.value == null || item.value === "" ? "-" : String(item.value),
     };
   });

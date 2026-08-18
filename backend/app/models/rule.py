@@ -5,6 +5,8 @@ from app.models.base import Base, TimestampMixin
 
 # mode: observe | block | captcha | js_challenge | slide_captcha
 MODES = ("observe", "block", "captcha", "js_challenge", "slide_captcha")
+# AI 可自主选择的防护动作（不含数学验证码 captcha）
+AI_ACTION_MODES = ("observe", "block", "js_challenge", "slide_captcha")
 
 
 class Rule(Base, TimestampMixin):

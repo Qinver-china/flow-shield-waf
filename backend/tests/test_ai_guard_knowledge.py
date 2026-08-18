@@ -3,6 +3,7 @@
 from app.constants.traffic_windows import TRAFFIC_BASELINE_MIN_WINDOW_SEC, TRAFFIC_WINDOWS_SEC
 from app.fields.catalog import catalog_compact_for_llm
 from app.services.ai_guard.context.builder import _defense_knowledge, knowledge_for_defense
+from app.services.ai_guard.context.tools import defense_tool_definitions
 
 
 def test_catalog_compact_traffic_windows_match_engine():
@@ -61,6 +62,7 @@ def test_knowledge_for_defense_exports_rule_fields():
     assert any(f["key"] == "system.cpu" for f in defense["fields"])
     assert defense["operators_by_type"]["traffic"] == ["compare"]
     assert defense["operators_by_type"]["system"] == ["compare"]
+    assert defense["protection_modes"]["block"]["label"] == "拦截"
 
 
 def test_defense_knowledge_includes_trigger_types():
@@ -76,4 +78,16 @@ def test_defense_knowledge_includes_trigger_types():
     assert "system.load_per_core_gt" not in types
     assert "traffic_intel.anomaly" not in types
     assert "suggest_only" in defense["apply_mode_values"]
+    assert "auto_handle" in defense["apply_mode_values"]
+    assert "observe" in defense["protection_modes"]
+    assert "js_challenge" in defense["protection_modes"]
     assert any("blacklist" in note for note in defense["rule_generation_notes"])
+
+
+def test_defense_web_search_requires_explicit_opt_in():
+    disabled = {
+        tool["function"]["name"] for tool in defense_tool_definitions(allow_web_search=False)
+    }
+    enabled = {tool["function"]["name"] for tool in defense_tool_definitions(allow_web_search=True)}
+    assert "web_search" not in disabled
+    assert "web_search" in enabled

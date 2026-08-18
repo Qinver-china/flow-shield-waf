@@ -1,12 +1,29 @@
 """Pydantic schemas for AI Guard API."""
+
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ApplyMode = Literal["suggest_only", "auto_observe", "auto_block"]
+from app.services.ai_guard.mode_guide import APPLY_MODE_ALIASES, normalize_apply_mode
+
+ApplyMode = Literal["suggest_only", "auto_observe", "auto_handle", "auto_block"]
+
+
+def _norm_apply_mode(value: object) -> object:
+    if value is None or value == "":
+        return value
+    return normalize_apply_mode(str(value))
+
+
+def _alias_apply_mode_only(value: object) -> object:
+    """Map legacy auto_block without rewriting engine action modes (observe/block/...)."""
+    if value is None or value == "":
+        return value
+    raw = str(value).strip()
+    return APPLY_MODE_ALIASES.get(raw, raw)
 
 
 class AiGuardSettingOut(BaseModel):
@@ -19,10 +36,16 @@ class AiGuardSettingOut(BaseModel):
     chat_enabled: bool = True
     floating_chat_enabled: bool = True
     defense_enabled: bool = True
-    default_apply_mode: ApplyMode = "suggest_only"
+    defense_web_search_enabled: bool = False
+    default_apply_mode: ApplyMode = "auto_handle"
     max_logs_per_analysis: int = 200
     analysis_cooldown_sec: int = 300
     auto_block_min_confidence: float = 0.85
+
+    @field_validator("default_apply_mode", mode="before")
+    @classmethod
+    def _coerce_default_apply_mode(cls, value: object) -> object:
+        return _norm_apply_mode(value) or "auto_handle"
 
 
 class AiGuardSettingUpdate(BaseModel):
@@ -35,10 +58,16 @@ class AiGuardSettingUpdate(BaseModel):
     chat_enabled: bool | None = None
     floating_chat_enabled: bool | None = None
     defense_enabled: bool | None = None
+    defense_web_search_enabled: bool | None = None
     default_apply_mode: ApplyMode | None = None
     max_logs_per_analysis: int | None = Field(default=None, ge=10, le=2000)
     analysis_cooldown_sec: int | None = Field(default=None, ge=30, le=86400)
     auto_block_min_confidence: float | None = Field(default=None, ge=0, le=1)
+
+    @field_validator("default_apply_mode", mode="before")
+    @classmethod
+    def _coerce_default_apply_mode(cls, value: object) -> object:
+        return _norm_apply_mode(value)
 
 
 class AiGuardPolicyBase(BaseModel):
@@ -46,13 +75,18 @@ class AiGuardPolicyBase(BaseModel):
     enabled: bool = True
     trigger_type: str
     trigger_params: dict[str, Any] = Field(default_factory=dict)
-    apply_mode: ApplyMode = "suggest_only"
+    apply_mode: ApplyMode = "auto_handle"
     notify_on: list[str] = Field(default_factory=lambda: ["trigger", "result"])
     channel_ids: list[int] = Field(default_factory=list)
     condition_filter: dict[str, Any] | None = None
     cooldown_sec: int = 300
     remark: str | None = None
     custom_prompt: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("apply_mode", mode="before")
+    @classmethod
+    def _coerce_apply_mode(cls, value: object) -> object:
+        return _norm_apply_mode(value) or "auto_handle"
 
 
 class AiGuardPolicyCreate(AiGuardPolicyBase):
@@ -72,6 +106,11 @@ class AiGuardPolicyUpdate(BaseModel):
     remark: str | None = None
     custom_prompt: str | None = Field(default=None, max_length=4000)
 
+    @field_validator("apply_mode", mode="before")
+    @classmethod
+    def _coerce_apply_mode(cls, value: object) -> object:
+        return _norm_apply_mode(value)
+
 
 class AiGuardPolicyOut(AiGuardPolicyBase):
     model_config = ConfigDict(from_attributes=True)
@@ -90,9 +129,15 @@ class AiGuardIncidentOut(BaseModel):
     analysis_report: dict | None
     suggested_rule: dict | None
     applied_rule_id: int | None
+    applied_rule_exists: bool = False
     apply_mode: str | None
     error_detail: str | None
     created_at: datetime | None
+
+    @field_validator("apply_mode", mode="before")
+    @classmethod
+    def _coerce_apply_mode(cls, value: object) -> object:
+        return _alias_apply_mode_only(value)
 
 
 class ChatRequest(BaseModel):
@@ -126,3 +171,8 @@ class ConfirmActionRequest(BaseModel):
 
 class ApplyIncidentRequest(BaseModel):
     apply_mode: ApplyMode | None = None
+
+    @field_validator("apply_mode", mode="before")
+    @classmethod
+    def _coerce_apply_mode(cls, value: object) -> object:
+        return _norm_apply_mode(value)

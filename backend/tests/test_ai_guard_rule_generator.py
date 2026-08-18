@@ -1,4 +1,5 @@
 """Tests for AI Guard defense rule generator (multi-turn)."""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ def _test_config() -> AiGuardRuntimeConfig:
         max_tokens=4096,
         chat_enabled=True,
         defense_enabled=True,
+        defense_web_search_enabled=False,
         default_apply_mode="suggest_only",
         max_logs_per_analysis=200,
         analysis_cooldown_sec=300,
@@ -51,24 +53,32 @@ async def test_analyze_and_suggest_multiround_with_submit():
         "evidence": [],
     }
 
-    with patch(
-        "app.services.ai_guard.defense.rule_generator.build_knowledge_snapshot",
-        new_callable=AsyncMock,
-        return_value={
-            "field_catalog": {},
-            "defense": {},
-            "sites": [{"id": 7, "name": "demo", "domains": ["demo.test"]}],
-        },
-    ), patch(
-        "app.services.ai_guard.defense.rule_generator.build_defense_traffic_overview",
-        new_callable=AsyncMock,
-        return_value={
-            "global": {"windows": [{"window_sec": 60, "requests": 120, "qps": 2.0}]},
-            "sites": [{"site_id": 7, "name": "demo", "windows": [{"window_sec": 60, "requests": 100, "qps": 1.67}]}],
-        },
-    ), patch(
-        "app.services.ai_guard.defense.rule_generator.LlmClient"
-    ) as client_cls:
+    with (
+        patch(
+            "app.services.ai_guard.defense.rule_generator.build_knowledge_snapshot",
+            new_callable=AsyncMock,
+            return_value={
+                "field_catalog": {},
+                "defense": {},
+                "sites": [{"id": 7, "name": "demo", "domains": ["demo.test"]}],
+            },
+        ),
+        patch(
+            "app.services.ai_guard.defense.rule_generator.build_defense_traffic_overview",
+            new_callable=AsyncMock,
+            return_value={
+                "global": {"windows": [{"window_sec": 60, "requests": 120, "qps": 2.0}]},
+                "sites": [
+                    {
+                        "site_id": 7,
+                        "name": "demo",
+                        "windows": [{"window_sec": 60, "requests": 100, "qps": 1.67}],
+                    }
+                ],
+            },
+        ),
+        patch("app.services.ai_guard.defense.rule_generator.LlmClient") as client_cls,
+    ):
         client = client_cls.return_value
         client.chat_completion = AsyncMock(
             side_effect=[
@@ -124,6 +134,8 @@ async def test_analyze_and_suggest_multiround_with_submit():
     assert result.create_rule is False
     assert result.suggested_rule is None
     assert client.chat_completion.await_count == 2
+    first_tools = client.chat_completion.await_args_list[0].kwargs["tools"]
+    assert all(tool["function"]["name"] != "web_search" for tool in first_tools)
     first_messages = client.chat_completion.await_args_list[0].args[0]
     payload = json.loads(first_messages[1]["content"])
     assert payload["custom_prompt"] == "勿封 CDN"
@@ -153,22 +165,25 @@ async def test_analyze_and_suggest_submit_with_rule():
         "evidence": [],
     }
 
-    with patch(
-        "app.services.ai_guard.defense.rule_generator.build_knowledge_snapshot",
-        new_callable=AsyncMock,
-        return_value={"field_catalog": {}, "defense": {}, "sites": []},
-    ), patch(
-        "app.services.ai_guard.defense.rule_generator.build_defense_traffic_overview",
-        new_callable=AsyncMock,
-        return_value={"global": {"windows": []}, "sites": []},
-    ), patch(
-        "app.services.ai_guard.defense.rule_generator.LlmClient"
-    ) as client_cls, patch(
-        "app.services.ai_guard.defense.rule_generator.run_defense_tool_calls",
-        new_callable=AsyncMock,
-        return_value=(
-            [{"role": "tool", "tool_call_id": "call_submit", "content": "{}"}],
-            AttackAnalysis.model_validate(submit_args),
+    with (
+        patch(
+            "app.services.ai_guard.defense.rule_generator.build_knowledge_snapshot",
+            new_callable=AsyncMock,
+            return_value={"field_catalog": {}, "defense": {}, "sites": []},
+        ),
+        patch(
+            "app.services.ai_guard.defense.rule_generator.build_defense_traffic_overview",
+            new_callable=AsyncMock,
+            return_value={"global": {"windows": []}, "sites": []},
+        ),
+        patch("app.services.ai_guard.defense.rule_generator.LlmClient") as client_cls,
+        patch(
+            "app.services.ai_guard.defense.rule_generator.run_defense_tool_calls",
+            new_callable=AsyncMock,
+            return_value=(
+                [{"role": "tool", "tool_call_id": "call_submit", "content": "{}"}],
+                AttackAnalysis.model_validate(submit_args),
+            ),
         ),
     ):
         client = client_cls.return_value
