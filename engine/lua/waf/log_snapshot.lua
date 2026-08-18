@@ -10,6 +10,7 @@ local MAX_VALUE = 4096
 -- Fields already covered by the baseline snapshot; omit from evaluated list.
 local BASELINE_COVERED = {
     ["ip.src"] = true,
+    ["ip.tcp"] = true,
     ["ip.src.is_private"] = true,
     ["net.src_port"] = true,
     ["net.dst_port"] = true,
@@ -225,9 +226,11 @@ function _M.capture_baseline(ext, trace)
     end
 
     local client_ip = _M.resolve_client_ip(ext, trace)
+    local tcp_ip = util.tcp_ip() or ""
 
     return {
         client_ip = client_ip,
+        tcp_ip = tcp_ip,
         client = {
             ip = client_ip,
             port = tonumber(ngx.var.remote_port),
@@ -278,6 +281,7 @@ function _M.summary_columns(trace, ext, captured)
         or trace_pick(trace, "http.ua")
     return {
         client_ip = baseline.client_ip,
+        tcp_ip = baseline.tcp_ip,
         geo_country = trace_pick(trace, "geo.country"),
         ua = ua and truncate(tostring(ua)) or nil,
     }

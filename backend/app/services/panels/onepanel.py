@@ -211,6 +211,53 @@ class OnePanelAdapter:
             raise PanelError(f"未能从 1Panel 读取证书：{cert_key}")
         return pair
 
+    async def push_site_cert(self, site_key: str, cert_pem: str, key_pem: str) -> None:
+        """Deploy a PEM pair onto a 1Panel website HTTPS config.
+
+        Args:
+            site_key: 1Panel website id as a string.
+            cert_pem: Certificate chain in PEM format.
+            key_pem: Matching private key in PEM format.
+
+        Raises:
+            PanelError: If the website id is invalid or the API rejects the cert.
+        """
+        try:
+            site_id = int(site_key)
+        except (TypeError, ValueError) as exc:
+            raise PanelError(f"无效的 1Panel 站点：{site_key}") from exc
+        https: dict[str, Any] = {}
+        try:
+            payload = await self._request("GET", f"/api/v2/websites/{site_id}/https")
+            if isinstance(payload, dict):
+                https = payload
+        except PanelError:
+            https = {}
+        http_config = str(https.get("httpConfig") or https.get("HttpConfig") or "").strip()
+        ssl_protocol = https.get("SSLProtocol") or https.get("sslProtocol")
+        if not isinstance(ssl_protocol, list) or not ssl_protocol:
+            ssl_protocol = ["TLSv1.2", "TLSv1.3"]
+        algorithm = str(https.get("algorithm") or https.get("Algorithm") or "")
+        hsts = bool(https.get("hsts") or https.get("HSTS") or False)
+        http3 = bool(https.get("http3") or https.get("Http3") or False)
+        await self._request(
+            "POST",
+            f"/api/v2/websites/{site_id}/https",
+            json_body={
+                "websiteId": site_id,
+                "enable": True,
+                "type": "import",
+                "importType": "paste",
+                "privateKey": key_pem,
+                "certificate": cert_pem,
+                "httpConfig": http_config or "HTTPAlso",
+                "SSLProtocol": ssl_protocol,
+                "algorithm": algorithm,
+                "hsts": hsts,
+                "http3": http3,
+            },
+        )
+
 
 def _page_search(page: int, page_size: int, **extra: Any) -> dict[str, Any]:
     """Build a 1Panel list-search body.

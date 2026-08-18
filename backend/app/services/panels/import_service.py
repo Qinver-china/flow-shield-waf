@@ -72,11 +72,13 @@ def _domains_set(value: str | list[str] | None) -> set[str]:
     return _normalize_domain_set(parts)
 
 
-async def preview_sites(db: AsyncSession, row: PanelConnection) -> list[PanelSitePreview]:
+async def preview_sites(
+    db: AsyncSession, row: PanelConnection, *, purpose: str | None = None
+) -> list[PanelSitePreview]:
     adapter = adapter_for(row)
     raw_sites = await adapter.list_sites()
-    existing = (await db.execute(select(Site))).scalars().all()
-    taken = _occupied_domains(existing)
+    for_sync = (purpose or "").strip().lower() == "sync"
+    taken = {} if for_sync else _occupied_domains((await db.execute(select(Site))).scalars().all())
     items: list[PanelSitePreview] = []
     for site in raw_sites:
         http_port, https_port = remap_listen_ports(
@@ -92,12 +94,15 @@ async def preview_sites(db: AsyncSession, row: PanelConnection) -> list[PanelSit
                 domains = site.domains
             else:
                 site.domains = domains
-                conflicts = [d for d in domains if d in taken]
-                if conflicts:
-                    already = True
-                    skip = f"域名已存在：{'、'.join(conflicts)}"
+                if not for_sync:
+                    conflicts = [d for d in domains if d in taken]
+                    if conflicts:
+                        already = True
+                        skip = f"域名已存在：{'、'.join(conflicts)}"
+                    elif not domains:
+                        skip = "没有可导入的域名"
                 elif not domains:
-                    skip = "没有可导入的域名"
+                    skip = "没有可同步的域名"
         items.append(
             PanelSitePreview(
                 key=site.key,

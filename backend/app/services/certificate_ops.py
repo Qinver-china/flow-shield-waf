@@ -66,11 +66,15 @@ async def persist_new_certificate(
     acme_auto_renew: bool = False,
     acme_provider: str | None = None,
     renew_domains: list[str] | None = None,
+    panel_push_enabled: bool = False,
+    panel_push_targets: list | None = None,
     commit: bool = True,
 ) -> Certificate:
     channel_ids = list(expiry_notify_channel_ids or [])
     if not expiry_notify_enabled and not acme_auto_renew:
         channel_ids = []
+    push_enabled = bool(acme_auto_renew and panel_push_enabled)
+    push_targets = list(panel_push_targets or []) if push_enabled else []
 
     cert_obj, _key = certificate_store.validate_pem_pair(cert_content, key_content)
     meta = certificate_store.parse_cert_meta(cert_obj)
@@ -90,6 +94,8 @@ async def persist_new_certificate(
         expiry_notify_channel_ids=channel_ids,
         acme_auto_renew=bool(acme_auto_renew),
         acme_provider=acme_provider if acme_auto_renew else None,
+        panel_push_enabled=push_enabled,
+        panel_push_targets=push_targets,
     )
     db.add(cert)
     await db.flush()

@@ -33,6 +33,9 @@
       @change="(pag) => emit('change', pag, {}, {})"
       @select="onMobileSelect"
     >
+      <template v-if="$slots.head" #head="slotData">
+        <slot name="head" v-bind="slotData ?? {}" />
+      </template>
       <template v-if="hasEnabledColumn" #headExtra="{ record }">
         <slot name="bodyCell" :column="enabledColumn" :record="record" :text="record.enabled" />
       </template>

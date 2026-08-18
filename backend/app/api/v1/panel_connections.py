@@ -196,12 +196,13 @@ async def test_connection(
 @router.get("/{connection_id}/sites")
 async def list_panel_sites(
     connection_id: int,
+    purpose: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
     row = await _get_enabled(db, connection_id)
     try:
-        items = await import_service.preview_sites(db, row)
+        items = await import_service.preview_sites(db, row, purpose=purpose)
     except PanelError as exc:
         raise _http_error(exc) from exc
     return ok(

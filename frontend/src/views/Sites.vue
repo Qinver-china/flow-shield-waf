@@ -6,10 +6,104 @@
     <resource-crud ref="crudRef" embedded title="站点管理" api-base="/api/v1/sites" :columns="columns" :filters="filters"
       :default-record="defaultRecord" :prepare-payload="preparePayload" :batch="batchConfig" name-field="name"
       detail-actions duplicatable :extra-create-tabs="panelImportTabs" :extra-create-footer="panelImportFooter"
+      :hide-list-pagination="listStyle === 'table'"
       @mutated="invalidateSiteOptions" @extra-create-ok="onPanelImportOk">
+      <template #filter-extra>
+        <a-tooltip :title="listStyle === 'card' ? '切换为表格' : '切换为卡片'">
+          <a-button :aria-label="listStyle === 'card' ? '切换为表格' : '切换为卡片'" @click="toggleListStyle">
+            <template #icon>
+              <unordered-list-outlined v-if="listStyle === 'card'" />
+              <appstore-outlined v-else />
+            </template>
+          </a-button>
+        </a-tooltip>
+      </template>
       <template
-        #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate }">
-        <a-spin :spinning="loading || (metricsLoading && !Object.keys(metricsMap).length)">
+        #list="{ rows, loading, openView, openEdit, openDuplicate, remove, toggleEnabled, togglingId, allowDelete, nameActions, duplicatable: canDuplicate, pagination, onTableChange, sortField, sortOrder }">
+        <fs-data-table
+          v-if="listStyle === 'table'"
+          :columns="siteTableColumns(sortField, sortOrder)"
+          :data-source="rows"
+          :loading="loading || (metricsLoading && !Object.keys(metricsMap).length)"
+          :pagination="pagination"
+          api-base="/api/v1/sites"
+          :batch="batchConfig"
+          has-enabled-column
+          mobile-title-key="name"
+          :mobile-exclude-keys="siteTableMobileExcludeKeys"
+          :scroll="{ x: 1280 }"
+          @change="onTableChange"
+        >
+          <template #head="{ record }">
+            <a class="site-mobile-title" @click="openView(record)">
+              {{ record.name }}
+              <a-tag v-if="metricsMap[String(record.id)]?.anomaly" color="error">异常流量</a-tag>
+            </a>
+          </template>
+          <template #bodyCell="{ column, record, text }">
+            <template v-if="column.dataIndex === 'name'">
+              <div class="site-table-name">
+                <resource-name-cell
+                  :text="String(text ?? '')"
+                  :actions="nameActions(record)"
+                  @view="openView(record)"
+                />
+                <a-tag v-if="metricsMap[String(record.id)]?.anomaly" color="error">异常流量</a-tag>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'domains'">
+              {{ record.domains_display || (record.domains || []).join("、") || "—" }}
+            </template>
+            <template v-else-if="column.key === 'listen'">
+              <template v-if="listenTags(record).length">
+                <a-tag v-for="tag in listenTags(record)" :key="tag.text" :color="tag.color">{{ tag.text }}</a-tag>
+              </template>
+              <template v-else>—</template>
+            </template>
+            <template v-else-if="column.key === 'certificate'">
+              {{ record.certificate_name || "未绑定" }}
+            </template>
+            <template v-else-if="column.key === 'client_ip'">
+              {{ clientIpSourceLabel(record.client_ip_source) }}
+            </template>
+            <template v-else-if="column.key === 'requests_24h'">
+              {{ formatMetricCount(metricsMap[String(record.id)]?.requests_24h) }}
+            </template>
+            <template v-else-if="column.key === 'blocked_24h'">
+              {{ formatMetricCount(metricsMap[String(record.id)]?.blocked_24h) }}
+            </template>
+            <template v-else-if="column.key === 'enabled'">
+              <a-switch
+                :checked="record.enabled"
+                :loading="togglingId === record.id"
+                @change="(checked: boolean) => onTableEnabledChange(record, checked, toggleEnabled)"
+              />
+            </template>
+            <template v-else-if="column.key === 'actions'">
+              <a-button size="small" type="primary" ghost @click="openEdit(record)">编辑</a-button>
+              <a-button v-if="canDuplicate" size="small" @click="openDuplicate(record)">复制</a-button>
+              <span v-if="tableMobileMoreActions(record, nameActions).length" class="mobile-card-more">
+                <a-dropdown :arrow="true">
+                  <a-button size="small">更多</a-button>
+                  <template #overlay>
+                    <a-menu :selectable="false">
+                      <template v-for="(action, index) in tableMobileMoreActions(record, nameActions)" :key="action.key">
+                        <a-menu-divider v-if="action.divided && index > 0" />
+                        <a-menu-item :danger="action.danger" @click="() => runAction(action)">
+                          {{ action.label }}
+                        </a-menu-item>
+                      </template>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+              </span>
+            </template>
+            <template v-else>
+              {{ text ?? "—" }}
+            </template>
+          </template>
+        </fs-data-table>
+        <a-spin v-else :spinning="loading || (metricsLoading && !Object.keys(metricsMap).length)">
           <a-empty v-if="!rows.length" description="暂无站点，点击右上角新增" />
           <div v-else class="site-card-grid">
             <site-card v-for="site in rows" :key="site.id" :site="site" :metrics="metricsMap[String(site.id)]"
@@ -221,21 +315,25 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, onMounted, onUnmounted, reactive, ref } from "vue";
-import { PlusOutlined } from "@ant-design/icons-vue";
+import { Modal } from "ant-design-vue";
+import { AppstoreOutlined, PlusOutlined, UnorderedListOutlined } from "@ant-design/icons-vue";
 import PageShell from "@/components/PageShell.vue";
 import ResourceCrud from "@/components/ResourceCrud.vue";
 import FormEnabledSwitch from "@/components/FormEnabledSwitch.vue";
+import FsDataTable from "@/components/FsDataTable.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import OriginHostInput from "@/components/OriginHostInput.vue";
 import CertificateFormDrawer, { type CertificateSaved } from "@/components/CertificateFormDrawer.vue";
 import PanelImportForm, { type PanelImportStatus } from "@/components/PanelImportForm.vue";
+import ResourceNameCell from "@/components/ResourceNameCell.vue";
 import SiteCard, { type SiteCardMetrics } from "@/components/SiteCard.vue";
 import { enabledFilterOptions } from "@/constants/resourceList";
 import { commonBatchEditFields } from "@/constants/batch";
-import { CLIENT_IP_SOURCE_OPTIONS } from "@/constants/clientIpSource";
+import { CLIENT_IP_SOURCE_OPTIONS, clientIpSourceLabel } from "@/constants/clientIpSource";
 import { useLogNavigation } from "@/composables/useLogNavigation";
+import { useResponsivePagination } from "@/composables/useResponsivePagination";
 import { invalidateSiteOptions } from "@/composables/useSiteOptions";
-import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
+import { useResourceQuickActions, type ResourceQuickAction } from "@/composables/useResourceQuickActions";
 import { api } from "@/api";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import type { BatchConfig } from "@/types/batch";
@@ -260,6 +358,8 @@ interface CertOption {
 }
 
 const { goToLogs } = useLogNavigation();
+const { runAction } = useResourceQuickActions();
+const { isMobile } = useResponsivePagination();
 const appSettings = useAppSettingsStore();
 const crudRef = ref<InstanceType<typeof ResourceCrud> | null>(null);
 const certOptions = ref<CertOption[]>([]);
@@ -289,6 +389,22 @@ const panelImportFooter = computed(() => ({
 const metricsLoading = ref(false);
 const metricsMap = reactive<Record<string, SiteCardMetrics>>({});
 let metricsTimer: ReturnType<typeof setInterval> | null = null;
+const LIST_STYLE_KEY = "fs-sites-list-style";
+
+/**
+ * 读取上次保存的站点列表样式；无效或读失败时用卡片。
+ *
+ * @return card 或 table
+ */
+function readListStyle(): "card" | "table" {
+  try {
+    return localStorage.getItem(LIST_STYLE_KEY) === "table" ? "table" : "card";
+  } catch {
+    return "card";
+  }
+}
+
+const listStyle = ref<"card" | "table">(readListStyle());
 
 const protocolOptions = [
   { value: "follow", label: "跟随协议" },
@@ -323,6 +439,104 @@ const columns: ResourceColumn[] = [
   { title: "源站", dataIndex: "origin_display" },
   { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true },
 ];
+
+/**
+ * 把当前排序状态映射成 Ant Design 列的 sortOrder。
+ *
+ * @param sortField 当前排序字段
+ * @param sortOrder 当前排序方向
+ * @param key 列字段
+ * @return ascend / descend / undefined
+ */
+function sortOrderOf(sortField: unknown, sortOrder: unknown, key: string) {
+  if (sortField !== key || !sortOrder) return undefined;
+  return sortOrder === "asc" ? "ascend" : "descend";
+}
+
+/**
+ * 表格模式列：对齐站点卡片上的常用信息。
+ *
+ * @param sortField 当前排序字段
+ * @param sortOrder 当前排序方向
+ * @return 表格列
+ */
+function siteTableColumns(sortField: unknown, sortOrder: unknown) {
+  const cols: any[] = [
+    {
+      title: "名称",
+      dataIndex: "name",
+      sorter: true,
+      sortOrder: sortOrderOf(sortField, sortOrder, "name"),
+      width: 180,
+    },
+    { title: "域名", key: "domains", dataIndex: "domains_display", ellipsis: true, sorter: true, sortOrder: sortOrderOf(sortField, sortOrder, "domains_display") },
+    { title: "源站", dataIndex: "origin_display", ellipsis: true },
+    { title: "监听", key: "listen", width: 180 },
+    { title: "证书", key: "certificate", ellipsis: true, width: 140 },
+    { title: "客户端 IP", key: "client_ip", width: 160, ellipsis: true },
+    { title: "24H请求量", key: "requests_24h", width: 110 },
+    { title: "24H拦截量", key: "blocked_24h", width: 110 },
+    { title: "状态", key: "enabled", dataIndex: "enabled", width: 90, sorter: true, sortOrder: sortOrderOf(sortField, sortOrder, "enabled") },
+  ];
+  if (isMobile.value) {
+    cols.push({ title: "操作", key: "actions" });
+  }
+  return cols;
+}
+
+const siteTableMobileExcludeKeys = ["actions", "enabled"];
+
+/**
+ * 移动端表格卡片底部「更多」：去掉已单独展示的编辑、复制。
+ *
+ * @param site 站点行
+ * @param nameActions ResourceCrud 名称菜单生成函数
+ * @return 更多菜单项
+ */
+function tableMobileMoreActions(
+  site: Record<string, any>,
+  nameActions: (row: Record<string, any>) => ResourceQuickAction[],
+) {
+  return nameActions(site).filter((action) => action.key !== "edit" && action.key !== "duplicate");
+}
+
+// 在卡片 / 表格两种列表样式之间切换，并写入浏览器本地
+function toggleListStyle() {
+  listStyle.value = listStyle.value === "card" ? "table" : "card";
+  try {
+    localStorage.setItem(LIST_STYLE_KEY, listStyle.value);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 站点监听方式标签，与卡片一致。
+ *
+ * @param site 站点行
+ * @return 监听标签
+ */
+function listenTags(site: Record<string, any>) {
+  const tags: { text: string; color?: string }[] = [];
+  if (site.listen_http) tags.push({ text: "HTTP" });
+  if (site.listen_https && !site.force_https) tags.push({ text: "HTTPS", color: "blue" });
+  if (site.force_https) tags.push({ text: "强制HTTPS", color: "purple" });
+  return tags;
+}
+
+/**
+ * 压缩展示 24 小时指标。
+ *
+ * @param value 计数
+ * @return 展示文本
+ */
+function formatMetricCount(value: number | null | undefined) {
+  if (value == null) return "—";
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 10_000) return `${(value / 1000).toFixed(1)}k`;
+  if (value >= 1000) return `${(value / 1000).toFixed(2)}k`;
+  return String(value);
+}
 
 const certSelectOptions = computed(() =>
   certOptions.value.map((c) => ({
@@ -542,6 +756,32 @@ function goSiteLogs(site: Record<string, any>) {
   goToLogs({ tab: "detail", preset: "24h", site_id: Number(site.id) });
 }
 
+/**
+ * 表格中切换启用状态；停用前确认，避免只当关闭检测。
+ *
+ * @param site 站点行
+ * @param enabled 目标状态
+ * @param toggleEnabled ResourceCrud 提供的持久化函数
+ */
+function onTableEnabledChange(
+  site: Record<string, any>,
+  enabled: boolean,
+  toggleEnabled: (row: Record<string, any>, enabled: boolean) => void,
+) {
+  if (enabled) {
+    toggleEnabled(site, true);
+    return;
+  }
+  Modal.confirm({
+    title: "确认停用站点？",
+    content: "停用后将从引擎移除 Nginx 配置，该域名将无法访问（并非仅关闭 WAF 检测）。",
+    okText: "确认停用",
+    okType: "danger",
+    cancelText: "取消",
+    onOk: () => toggleEnabled(site, false),
+  });
+}
+
 function cardMoreActions(
   site: Record<string, any>,
   ctx: {
@@ -594,6 +834,29 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
+}
+
+.site-table-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.site-mobile-title {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--fs-color-primary);
+  word-break: break-word;
+}
+
+.mobile-card-more {
+  margin-left: auto;
 }
 
 .site-listen-addon {

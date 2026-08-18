@@ -198,6 +198,7 @@ CATEGORY_ORDER: list[str] = [
 FIELDS: list[dict] = [
     # client & network
     _f("ip.src", "客户端 IP", "网络与地理", IP),
+    _f("ip.tcp", "直连 IP", "网络与地理", IP),
     _f("ip.src.is_private", "IP 是否内网", "网络与地理", BOOL),
     _f("net.src_port", "客户端端口", "网络与地理", NUMBER),
     _f("net.dst_port", "服务端口", "网络与地理", NUMBER),

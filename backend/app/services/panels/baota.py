@@ -245,6 +245,22 @@ class BaotaAdapter:
             raise PanelError(f"未能从宝塔读取证书：{cert_key}")
         return pair
 
+    async def push_site_cert(self, site_key: str, cert_pem: str, key_pem: str) -> None:
+        """Deploy a PEM pair onto a BaoTa website via SetSSL.
+
+        Args:
+            site_key: BaoTa site name (``RawPanelSite.key``).
+            cert_pem: Certificate chain in PEM format.
+            key_pem: Matching private key in PEM format.
+
+        Raises:
+            PanelError: If the BaoTa API rejects the certificate.
+        """
+        await self._post(
+            "/site?action=SetSSL",
+            {"siteName": site_key, "key": key_pem, "csr": cert_pem},
+        )
+
 
 def _extract_rows(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):

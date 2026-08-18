@@ -635,10 +635,12 @@ def build_acme_result_email(
     domains: str,
     ca_name: str,
     error: str | None = None,
+    extra_note: str | None = None,
 ) -> tuple[str, str]:
     """Return (plain_text, html_body) for ACME issue or renew notifications."""
     action = "续期" if kind == "renew" else "申请"
     domain_text = domains.strip() or "（无域名）"
+    extra = (extra_note or "").strip()
     if success:
         title = f"证书{action}成功 · {cert_name}"
         subtitle = f"已通过 {ca_name} 完成{action}，站点 HTTPS 将使用新证书。"
@@ -647,6 +649,8 @@ def build_acme_result_email(
             f"证书机构：{ca_name}\n"
             f"覆盖域名：{domain_text}"
         )
+        if extra:
+            message = f"{message}\n{extra}"
         hint = (
             "证书已写入并绑定站点。若站点已开启 HTTPS，引擎会自动重载；"
             "请抽空确认站点访问正常。"
@@ -661,6 +665,8 @@ def build_acme_result_email(
             f"覆盖域名：{domain_text}\n"
             f"失败原因：{err_text}"
         )
+        if extra:
+            message = f"{message}\n{extra}"
         hint = "请确认域名 A/AAAA 已指向本机、公网可访问 80 端口后重试。"
     plain = build_plain_email(
         title=title,

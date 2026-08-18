@@ -95,6 +95,16 @@ function _M.client_ip()
     return normalize_ip(ngx.var.remote_addr)
 end
 
+-- TCP peer address (CDN / proxy node). Survives ngx_http_realip rewriting
+-- of $remote_addr; falls back to $remote_addr when realip is unused.
+function _M.tcp_ip()
+    local ip = ngx.var.realip_remote_addr
+    if not ip or ip == "" then
+        ip = ngx.var.remote_addr
+    end
+    return normalize_ip(ip)
+end
+
 -- Convert IPv4 string to integer, nil if not IPv4
 function _M.ipv4_to_int(ip)
     if not ip then return nil end

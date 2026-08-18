@@ -132,6 +132,10 @@ code,
     border-radius: 10px;
 }
 
+.ant-checkbox-wrapper-disabled {
+    opacity: .5;
+}
+
 .ant-btn-primary,
 .ant-btn-default,
 .ant-btn-dashed,

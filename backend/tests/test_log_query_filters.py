@@ -14,6 +14,7 @@ def test_where_clause_supports_extended_filters():
         http_version="1.1",
         ip_is_private=True,
         xff_first="203.0.113.1",
+        tcp_ip="198.51.100.1",
         geo_region="California",
         geo_city="Los Angeles",
         geo_isp="Example ISP",
@@ -31,6 +32,7 @@ def test_where_clause_supports_extended_filters():
     assert "waf_logs.http_version = {http_version:String}" in where
     assert "waf_logs.ip_is_private = {ip_is_private:UInt8}" in where
     assert "waf_logs.xff_first = {xff_first:String}" in where
+    assert "waf_logs.tcp_ip = {tcp_ip:String}" in where
     assert "waf_logs.geo_region = {geo_region:String}" in where
     assert "waf_logs.geo_city = {geo_city:String}" in where
     assert "waf_logs.geo_isp = {geo_isp:String}" in where
@@ -40,7 +42,20 @@ def test_where_clause_supports_extended_filters():
     assert "positionCaseInsensitive(waf_logs.rule_name, {rule_name:String}) > 0" in where
     assert params["uri_path"] == "/api/test"
     assert params["ip_is_private"] == 1
+    assert params["tcp_ip"] == "198.51.100.1"
     assert params["geo_asn"] == 13335
+
+
+def test_clickhouse_row_includes_tcp_ip():
+    from app.services.logging.clickhouse_store import _COLUMNS, _row_from_enriched
+
+    row = _row_from_enriched({
+        "client_ip": "203.0.113.1",
+        "tcp_ip": "198.51.100.1",
+    })
+    assert len(row) == len(_COLUMNS)
+    assert row[_COLUMNS.index("client_ip")] == "203.0.113.1"
+    assert row[_COLUMNS.index("tcp_ip")] == "198.51.100.1"
 
 
 def test_where_clause_json_blocked_filter_uses_qualified_column():

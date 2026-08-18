@@ -1,5 +1,5 @@
 <template>
-  <div :class="['cond-group', { 'cond-group-nested': depth > 0 }]">
+  <div :class="['cond-group', { 'cond-group-nested': depth > 0 }, 'logic-type-' + group.logic]">
     <div class="logic-row">
       <div class="logic-left">
         <span v-if="depth > 0" class="group-tag">条件组</span>
@@ -115,16 +115,6 @@ export default {
   flex-shrink: 0;
 }
 
-.group-tag {
-  display: inline-block;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: rgba(37, 99, 235, 0.2);
-  color: #2563eb;
-  font-size: 12px;
-  line-height: 20px;
-}
-
 .add-group-btn {
   color: #2563eb;
   border-color: rgba(104, 174, 255, 0.5);
@@ -133,6 +123,45 @@ export default {
 .add-group-btn:hover {
   color: #1d4ed8;
   border-color: #60a5fa;
+}
+
+.logic-type-and {
+  --fs-logic-type-color: color-mix(in srgb, #e9550a var(--fs-logic-type-color-ratio, 100%), #c92ce4);
+}
+
+.logic-type-or {
+  --fs-logic-type-color: color-mix(in srgb, #09ae0e var(--fs-logic-type-color-ratio, 100%), #1a5edb);
+}
+
+.cond-children {
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--fs-logic-type-color) 60%, transparent);
+}
+
+.group-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fs-logic-type-color) 10%, transparent);
+  color: var(--fs-logic-type-color);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.logic-select :deep(.ant-select-selection-item) {
+  color: var(--fs-logic-type-color);
+}
+
+.cond-children>.cond-group {
+  --fs-logic-type-color-ratio: 63%;
+}
+
+.cond-children>.cond-group .cond-children>.cond-group {
+  --fs-logic-type-color-ratio: 33%;
+}
+
+.cond-children>.cond-group .cond-children>.cond-group .cond-children>.cond-group {
+  --fs-logic-type-color-ratio: 0%;
 }
 
 </style>

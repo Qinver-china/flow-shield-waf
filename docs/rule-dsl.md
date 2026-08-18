@@ -83,11 +83,14 @@
 | key | 说明 | 类型 |
 | --- | --- | --- |
 | ip.src | 客户端 IP | ip |
+| ip.tcp | 直连 IP（TCP 连接地址） | ip |
 | ip.src.is_private | IP 是否内网 | bool |
 | net.src_port | 客户端端口 | number |
 | net.dst_port | 服务端口 | number |
 | net.scheme | 协议 | enum |
 | http.version | HTTP 版本 | enum |
+
+**客户端 IP**和**直连 IP**的区别主要是当上游有CDN的时候，那么**直连IP**则为cdn的来源IP地址，如果上游没有cdn并则**客户端 IP**和**直连 IP**完全相同
 
 ### 地理位置与情报（需启用 GeoIP2，见 architecture.md）
 

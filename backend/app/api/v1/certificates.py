@@ -18,7 +18,7 @@ from app.api.listing import (
     order_by_fields,
 )
 from app.core.db import SessionLocal, get_db
-from app.models import Certificate, Site, User
+from app.models import Certificate, PanelConnection, Site, User
 from app.models.notification import NotificationChannel
 from app.schemas.certificate import (
     AcmeIssueRequest,
@@ -27,7 +27,9 @@ from app.schemas.certificate import (
     CertificateDetail,
     CertificateOption,
     CertificateOut,
+    CertificatePanelSyncRequest,
     CertificateUpdate,
+    apply_panel_push_rules,
 )
 from app.schemas.common import ok
 from app.services import certificate_store
@@ -37,6 +39,8 @@ from app.services.certificate_ops import (
     persist_new_certificate,
     reload_sites_using_certificate,
 )
+from app.services.panels.push_service import push_certificate_to_panels
+from app.services.panels.types import PanelError
 
 router = APIRouter()
 
@@ -91,6 +95,55 @@ def _parse_form_renew_domains(value: str | list[str] | None) -> list[str] | None
     return [str(v) for v in parsed]
 
 
+def _parse_form_panel_push_targets(value: str | list | None) -> list[dict] | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, list):
+        return list(value)
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="面板推送目标格式无效") from exc
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=400, detail="面板推送目标格式无效")
+    return parsed
+
+
+def _targets_as_dicts(targets) -> list[dict]:
+    out: list[dict] = []
+    for item in targets or []:
+        if hasattr(item, "model_dump"):
+            out.append(item.model_dump())
+        elif isinstance(item, dict):
+            out.append(item)
+    return out
+
+
+def _issue_panel_push_kwargs(body: AcmeIssueRequest) -> dict:
+    """Pass panel-push fields to ACME issue only when the client sent them.
+
+    Args:
+        body: Parsed ACME issue request.
+
+    Returns:
+        Keyword arguments for ``issue_for_site``, or empty to keep existing
+        push settings when replacing a certificate.
+    """
+    specified = (
+        "panel_push_enabled" in body.model_fields_set
+        or "panel_push_targets" in body.model_fields_set
+    )
+    if not specified:
+        return {}
+    return {
+        "panel_push_enabled": body.panel_push_enabled,
+        "panel_push_targets": _targets_as_dicts(body.panel_push_targets),
+    }
+
+
 def _apply_acme_renew_settings(
     cert: Certificate,
     *,
@@ -108,12 +161,38 @@ def _apply_acme_renew_settings(
         cert.domains = ",".join(renew_domains) if renew_domains else None
 
     if not cert.acme_auto_renew:
+        cert.panel_push_enabled = False
+        cert.panel_push_targets = []
         return
     if not cert.acme_provider:
         raise HTTPException(status_code=400, detail="开启自动续期时请选择证书机构")
     names = [n.strip() for n in (cert.domains or "").split(",") if n.strip()]
     if not names:
         raise HTTPException(status_code=400, detail="开启自动续期时请选择绑定域名")
+
+
+def _apply_panel_push_settings(
+    cert: Certificate,
+    *,
+    panel_push_enabled: bool | None = None,
+    panel_push_targets: list | None = None,
+    enabled_provided: bool = False,
+    targets_provided: bool = False,
+) -> None:
+    """Persist panel-push flags; turning off auto-renew always clears them."""
+    auto_renew = bool(cert.acme_auto_renew)
+    enabled = bool(panel_push_enabled) if enabled_provided else bool(cert.panel_push_enabled)
+    targets = panel_push_targets if targets_provided else list(cert.panel_push_targets or [])
+    try:
+        new_enabled, new_targets = apply_panel_push_rules(
+            auto_renew=auto_renew,
+            panel_push_enabled=enabled,
+            panel_push_targets=targets,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    cert.panel_push_enabled = new_enabled
+    cert.panel_push_targets = new_targets
 
 
 async def _ensure_notify_channels(db: AsyncSession, channel_ids: list[int]) -> None:
@@ -129,6 +208,28 @@ async def _ensure_notify_channels(db: AsyncSession, channel_ids: list[int]) -> N
     ).scalar_one()
     if cnt != len(unique_ids):
         raise HTTPException(status_code=400, detail="通知通道不存在")
+
+
+async def _ensure_panel_connections(db: AsyncSession, targets: list) -> None:
+    """Reject panel-push targets that point at missing or disabled accounts."""
+    ids: list[int] = []
+    for item in _targets_as_dicts(targets):
+        try:
+            ids.append(int(item.get("connection_id")))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="请选择要推送的面板账号") from exc
+    unique_ids = list(dict.fromkeys(ids))
+    if not unique_ids:
+        return
+    rows = (
+        await db.execute(select(PanelConnection).where(PanelConnection.id.in_(unique_ids)))
+    ).scalars().all()
+    found = {int(row.id): row for row in rows}
+    if len(found) != len(unique_ids):
+        raise HTTPException(status_code=400, detail="面板账号不存在")
+    for row in found.values():
+        if not row.enabled:
+            raise HTTPException(status_code=400, detail="该面板账号已停用")
 
 
 async def _bound_sites_by_cert_ids(
@@ -165,6 +266,8 @@ async def _create_certificate(
     acme_auto_renew: bool = False,
     acme_provider: str | None = None,
     renew_domains: list[str] | None = None,
+    panel_push_enabled: bool = False,
+    panel_push_targets: list | None = None,
 ) -> Certificate:
     channel_ids = list(expiry_notify_channel_ids or [])
     _validate_notify_settings(enabled=expiry_notify_enabled, channel_ids=channel_ids)
@@ -177,6 +280,16 @@ async def _create_certificate(
             raise HTTPException(status_code=400, detail="开启自动续期时请选择证书机构")
         if not renew_domains:
             raise HTTPException(status_code=400, detail="开启自动续期时请选择绑定域名")
+    try:
+        push_enabled, push_targets = apply_panel_push_rules(
+            auto_renew=acme_auto_renew,
+            panel_push_enabled=panel_push_enabled,
+            panel_push_targets=panel_push_targets,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if push_enabled:
+        await _ensure_panel_connections(db, push_targets)
 
     return await persist_new_certificate(
         db,
@@ -189,6 +302,8 @@ async def _create_certificate(
         acme_auto_renew=acme_auto_renew,
         acme_provider=acme_provider,
         renew_domains=renew_domains,
+        panel_push_enabled=push_enabled,
+        panel_push_targets=push_targets,
         commit=True,
     )
 
@@ -257,6 +372,9 @@ async def issue_acme_certificate(
 ):
     if body.expiry_notify_channel_ids:
         await _ensure_notify_channels(db, body.expiry_notify_channel_ids)
+    push_kwargs = _issue_panel_push_kwargs(body)
+    if push_kwargs.get("panel_push_enabled"):
+        await _ensure_panel_connections(db, body.panel_push_targets)
     try:
         cert = await issue_for_site(
             db,
@@ -269,6 +387,7 @@ async def issue_acme_certificate(
             renew_domains=body.renew_domains,
             name=body.name,
             replace_certificate_id=body.replace_certificate_id,
+            **push_kwargs,
         )
     except AcmeIssueError as exc:
         await db.rollback()
@@ -293,6 +412,10 @@ async def issue_acme_certificate_stream(
     if body.expiry_notify_channel_ids:
         async with SessionLocal() as db:
             await _ensure_notify_channels(db, body.expiry_notify_channel_ids)
+    push_kwargs = _issue_panel_push_kwargs(body)
+    if push_kwargs.get("panel_push_enabled"):
+        async with SessionLocal() as db:
+            await _ensure_panel_connections(db, body.panel_push_targets)
 
     async def event_gen():
         queue: asyncio.Queue[dict | None] = asyncio.Queue()
@@ -315,6 +438,7 @@ async def issue_acme_certificate_stream(
                         name=body.name,
                         replace_certificate_id=body.replace_certificate_id,
                         on_progress=on_progress,
+                        **push_kwargs,
                     )
                     bound_map = await _bound_sites_by_cert_ids(db, [cert.id])
                     payload = CertificateOut.model_validate(cert).model_copy(
@@ -403,6 +527,8 @@ async def create_certificate(
             acme_auto_renew=body.acme_auto_renew,
             acme_provider=body.acme_provider,
             renew_domains=body.renew_domains,
+            panel_push_enabled=body.panel_push_enabled,
+            panel_push_targets=_targets_as_dicts(body.panel_push_targets),
         )
     except ValueError as exc:
         await db.rollback()
@@ -419,6 +545,8 @@ async def upload_certificate(
     acme_auto_renew: str | None = Form(None),
     acme_provider: str | None = Form(None),
     renew_domains: str | None = Form(None),
+    panel_push_enabled: str | None = Form(None),
+    panel_push_targets: str | None = Form(None),
     cert_file: UploadFile = File(...),
     key_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -441,6 +569,8 @@ async def upload_certificate(
             acme_auto_renew=_parse_form_bool(acme_auto_renew),
             acme_provider=provider,
             renew_domains=_parse_form_renew_domains(renew_domains),
+            panel_push_enabled=_parse_form_bool(panel_push_enabled),
+            panel_push_targets=_parse_form_panel_push_targets(panel_push_targets),
         )
     except ValueError as exc:
         await db.rollback()
@@ -465,8 +595,12 @@ async def update_certificate(
     acme_auto_renew = data.pop("acme_auto_renew", None)
     acme_provider = data.pop("acme_provider", None)
     renew_domains = data.pop("renew_domains", None)
+    panel_push_enabled = data.pop("panel_push_enabled", None)
+    panel_push_targets = data.pop("panel_push_targets", None)
     provider_provided = "acme_provider" in body.model_fields_set
     renew_domains_provided = "renew_domains" in body.model_fields_set
+    push_enabled_provided = "panel_push_enabled" in body.model_fields_set
+    push_targets_provided = "panel_push_targets" in body.model_fields_set
 
     for k, v in data.items():
         setattr(cert, k, v)
@@ -489,9 +623,18 @@ async def update_certificate(
             provider_provided=provider_provided,
             renew_domains_provided=renew_domains_provided,
         )
+        _apply_panel_push_settings(
+            cert,
+            panel_push_enabled=panel_push_enabled,
+            panel_push_targets=panel_push_targets,
+            enabled_provided=push_enabled_provided,
+            targets_provided=push_targets_provided,
+        )
     except HTTPException:
         await db.rollback()
         raise
+    if cert.panel_push_enabled:
+        await _ensure_panel_connections(db, cert.panel_push_targets)
 
     enabled = bool(cert.expiry_notify_enabled)
     auto_renew = bool(getattr(cert, "acme_auto_renew", False))
@@ -508,6 +651,42 @@ async def update_certificate(
     await db.refresh(cert)
     await reload_sites_using_certificate(db, cert.id)
     return ok(CertificateOut.model_validate(cert).model_dump())
+
+
+@router.post("/{cert_id}/sync-to-panels")
+async def sync_certificate_to_panels(
+    cert_id: int,
+    body: CertificatePanelSyncRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Push the stored PEM to configured BaoTa / 1Panel sites for a test sync."""
+    cert = await db.get(Certificate, cert_id)
+    if cert is None:
+        raise HTTPException(status_code=404, detail="证书不存在")
+    payload = body or CertificatePanelSyncRequest()
+    targets = _targets_as_dicts(payload.targets) if payload.targets is not None else None
+    if targets is not None:
+        if not targets:
+            raise HTTPException(status_code=400, detail="请选择要同步的面板站点")
+        await _ensure_panel_connections(db, targets)
+    elif not cert.panel_push_enabled or not (cert.panel_push_targets or []):
+        raise HTTPException(status_code=400, detail="请先配置要同步的面板站点")
+    try:
+        result = await push_certificate_to_panels(db, cert, targets=targets)
+    except PanelError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    pushed = len(result.get("pushed") or [])
+    failed = len(result.get("failed") or [])
+    if failed and not pushed:
+        message = "同步失败"
+    elif failed:
+        message = f"已同步 {pushed} 个站点，失败 {failed} 个"
+    else:
+        message = f"已同步 {pushed} 个站点"
+    return ok(result, message=message)
 
 
 @router.delete("/{cert_id}")

@@ -425,15 +425,74 @@ def _apply_certificate_acme_fields(cert, item: dict[str, Any]) -> None:
         cert.acme_last_attempt_on = item.get("acme_last_attempt_on") or None
     if "acme_last_error" in item:
         cert.acme_last_error = item.get("acme_last_error") or None
+    if "panel_push_enabled" in item:
+        cert.panel_push_enabled = bool(item.get("panel_push_enabled"))
+    if "panel_push_targets" in item:
+        cert.panel_push_targets = list(item.get("panel_push_targets") or [])
+
+
+def _remap_panel_push_targets(
+    targets: object, panel_map: dict[int, int]
+) -> list[dict[str, Any]]:
+    """Rewrite stored panel connection IDs after a backup import.
+
+    Args:
+        targets: Exported ``panel_push_targets`` JSON.
+        panel_map: Old panel-connection id to newly imported id.
+
+    Returns:
+        Targets whose connection still exists after remap.
+    """
+    out: list[dict[str, Any]] = []
+    if not isinstance(targets, list):
+        return out
+    for item in targets:
+        if not isinstance(item, dict):
+            continue
+        try:
+            old_id = int(item.get("connection_id"))
+        except (TypeError, ValueError):
+            continue
+        new_id = panel_map.get(old_id)
+        if new_id is None:
+            continue
+        keys: list[str] = []
+        seen: set[str] = set()
+        for key in item.get("site_keys") or []:
+            site_key = str(key or "").strip()
+            if not site_key or site_key in seen:
+                continue
+            seen.add(site_key)
+            keys.append(site_key)
+        if not keys:
+            continue
+        out.append({"connection_id": new_id, "site_keys": keys})
+    return out
+
+
+def _finalize_certificate_panel_push(
+    cert, item: dict[str, Any], panel_map: dict[int, int]
+) -> None:
+    """Remap panel-push connection IDs and drop targets that no longer exist."""
+    if "panel_push_targets" not in item and "panel_push_enabled" not in item:
+        return
+    remapped = _remap_panel_push_targets(getattr(cert, "panel_push_targets", None), panel_map)
+    cert.panel_push_targets = remapped
+    if not remapped or not bool(getattr(cert, "acme_auto_renew", False)):
+        cert.panel_push_enabled = False
+        if not bool(getattr(cert, "acme_auto_renew", False)):
+            cert.panel_push_targets = []
 
 
 async def _import_certificates(
     db: AsyncSession,
     items: list[dict[str, Any]],
     channel_map: dict[int, int] | None = None,
+    panel_map: dict[int, int] | None = None,
 ) -> dict[int, int]:
     id_map: dict[int, int] = {}
     channels = channel_map or {}
+    panels = panel_map or {}
     for item in items:
         name = (item.get("name") or "").strip()
         if not name:
@@ -465,6 +524,7 @@ async def _import_certificates(
             if "expiry_notify_channel_ids" in item or "expiry_notify_channel_id" in item:
                 existing.expiry_notify_channel_ids = channel_ids
             _apply_certificate_acme_fields(existing, item)
+            _finalize_certificate_panel_push(existing, item, panels)
             paths = certificate_store.write_cert_files(existing.id, cert_pem, key_pem)
             existing.cert_path, existing.key_path = paths
             await db.flush()
@@ -483,6 +543,7 @@ async def _import_certificates(
                 expiry_notify_channel_ids=channel_ids,
             )
             _apply_certificate_acme_fields(cert, item)
+            _finalize_certificate_panel_push(cert, item, panels)
             db.add(cert)
             await db.flush()
             paths = certificate_store.write_cert_files(cert.id, cert_pem, key_pem)
@@ -712,8 +773,8 @@ async def _import_channels(
     return id_map
 
 
-async def _import_panel_connections(db: AsyncSession, items: list[dict[str, Any]]) -> int:
-    count = 0
+async def _import_panel_connections(db: AsyncSession, items: list[dict[str, Any]]) -> dict[int, int]:
+    id_map: dict[int, int] = {}
     for item in items:
         name = (item.get("name") or "").strip()
         if not name:
@@ -723,6 +784,7 @@ async def _import_panel_connections(db: AsyncSession, items: list[dict[str, Any]
             _apply_fields(existing, item, _PANEL_CONNECTION_FIELDS)
             if not isinstance(existing.extra, dict):
                 existing.extra = {}
+            row = existing
         else:
             row = PanelConnection(
                 name=name,
@@ -732,9 +794,11 @@ async def _import_panel_connections(db: AsyncSession, items: list[dict[str, Any]
             if not isinstance(row.extra, dict):
                 row.extra = {}
             db.add(row)
-        count += 1
+        await db.flush()
+        if item.get("id") is not None:
+            id_map[int(item["id"])] = row.id
     await db.flush()
-    return count
+    return id_map
 
 
 async def _import_alert_policies(
@@ -884,13 +948,18 @@ async def apply_import(
     )
     import_ip_groups = "ip_groups" in selected or legacy_ip_groups
 
-    # Channels first so certificate notify / auto-renew channel ids can remap.
+    # Channels / panel accounts first so certificate notify and push IDs can remap.
+    panel_map: dict[int, int] = {}
     if "system_settings" in selected:
         channel_map = await _import_channels(db, data.get("notification_channels") or [])
         summary["counts"]["notification_channels"] = len(channel_map)
+        panel_map = await _import_panel_connections(db, data.get("panel_connections") or [])
+        summary["counts"]["panel_connections"] = len(panel_map)
     else:
         for row in (await db.execute(select(NotificationChannel))).scalars().all():
             channel_map[row.id] = row.id
+        for row in (await db.execute(select(PanelConnection))).scalars().all():
+            panel_map[row.id] = row.id
 
     # Same-instance identity maps when related section is not part of this import.
     if "certificates" not in selected:
@@ -905,7 +974,7 @@ async def apply_import(
 
     if "certificates" in selected:
         cert_map = await _import_certificates(
-            db, data.get("certificates") or [], channel_map
+            db, data.get("certificates") or [], channel_map, panel_map
         )
         summary["counts"]["certificates"] = len(cert_map)
 
@@ -977,9 +1046,6 @@ async def apply_import(
         )
         summary["counts"]["waf_settings"] = int(
             await _import_waf_settings(db, data.get("waf_settings"))
-        )
-        summary["counts"]["panel_connections"] = await _import_panel_connections(
-            db, data.get("panel_connections") or []
         )
 
     if "ai_config" in selected:

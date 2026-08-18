@@ -2,18 +2,10 @@
   <div class="fs-mobile-table">
     <a-spin :spinning="loading">
       <a-empty v-if="!dataSource.length" description="暂无数据" />
-      <div
-        v-for="row in dataSource"
-        :key="String(row[rowKey])"
-        class="mobile-card fs-card"
-      >
+      <div v-for="row in dataSource" :key="String(row[rowKey])" class="mobile-card fs-card">
         <div class="mobile-card-head">
-          <a-checkbox
-            v-if="selectable"
-            :checked="isSelected(row[rowKey])"
-            class="mobile-card-check"
-            @change="(e) => onSelect(row[rowKey], e.target.checked)"
-          />
+          <a-checkbox v-if="selectable" :checked="isSelected(row[rowKey])" class="mobile-card-check"
+            @change="(e) => onSelect(row[rowKey], e.target.checked)" />
           <div class="mobile-card-head-main">
             <slot name="head" :record="row">
               <span class="mobile-card-title">{{ titleText(row) }}</span>
@@ -25,11 +17,7 @@
         </div>
 
         <div v-if="bodyColumns.length" class="mobile-card-body">
-          <div
-            v-for="col in bodyColumns"
-            :key="columnKey(col)"
-            class="mobile-field"
-          >
+          <div v-for="col in bodyColumns" :key="columnKey(col)" class="mobile-field">
             <span class="mobile-field-label">{{ col.title }}</span>
             <span class="mobile-field-value">
               <slot name="cell" :column="col" :record="row" :text="cellText(row, col)">
@@ -45,17 +33,11 @@
       </div>
 
       <div v-if="showPagination" class="mobile-pagination">
-        <a-pagination
-          :current="pagination?.current || 1"
-          :page-size="pagination?.pageSize || DEFAULT_PAGE_SIZE"
-          :total="pagination?.total || 0"
-          :size="pagination?.size || 'small'"
+        <a-pagination :current="pagination?.current || 1" :page-size="pagination?.pageSize || DEFAULT_PAGE_SIZE"
+          :total="pagination?.total || 0" :size="pagination?.size || 'small'"
           :show-size-changer="pagination?.showSizeChanger"
-          :page-size-options="pagination?.pageSizeOptions || DEFAULT_PAGE_SIZE_OPTIONS"
-          :show-total="showTotal"
-          @change="onPageChange"
-          @show-size-change="onPageSizeChange"
-        />
+          :page-size-options="pagination?.pageSizeOptions || DEFAULT_PAGE_SIZE_OPTIONS" :show-total="showTotal"
+          @change="onPageChange" @show-size-change="onPageSizeChange" />
       </div>
     </a-spin>
   </div>
@@ -168,7 +150,8 @@ function showTotal(total: number) {
 .mobile-card {
   padding: 14px;
 }
-.mobile-card + .mobile-card {
+
+.mobile-card+.mobile-card {
   margin-top: 12px;
 }
 
@@ -181,7 +164,6 @@ function showTotal(total: number) {
 
 .mobile-card-check {
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
 .mobile-card-head-main {
@@ -226,13 +208,22 @@ function showTotal(total: number) {
   text-align: right;
 }
 
+.mobile-field-value .ant-tag:last-child {
+  margin-inline-end: 0px;
+}
+
 .mobile-card-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px 12px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--fs-border);
+}
+
+.mobile-card-more {
+  margin-left: auto;
 }
 
 .mobile-card-actions :deep(.ant-divider-vertical) {

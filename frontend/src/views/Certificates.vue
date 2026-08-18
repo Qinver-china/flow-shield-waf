@@ -4,26 +4,20 @@
       <a-button type="primary" @click="openCreate">添加证书</a-button>
     </template>
 
-    <list-filter-bar
-      :fields="listFilters"
-      :model="filterValues"
-      @change="onFilterChange"
-      @reset="resetFilters"
-    />
+    <list-filter-bar :fields="listFilters" :model="filterValues" @change="onFilterChange" @reset="resetFilters" />
 
-    <fs-data-table
-      :columns="columns"
-      :data-source="rows"
-      :loading="loading"
-      :pagination="pagination"
-      api-base="/api/v1/certificates"
-      :batch="{ allowDelete: true, enableToggle: false }"
-      :scroll="{ x: 1100 }"
-      @change="onTableChange"
-      @refresh="fetchList"
-    >
+    <fs-data-table :columns="columns" :data-source="rows" :loading="loading" :pagination="pagination"
+      api-base="/api/v1/certificates" :batch="{ allowDelete: true, enableToggle: false }" :scroll="{ x: 1100 }"
+      mobile-title-key="name" @change="onTableChange" @refresh="fetchList">
+      <template #head="{ record }">
+        <resource-name-cell :text="String(record.name ?? '')" :actions="nameActions(record)"
+          @view="openUpdate(record)" />
+      </template>
       <template #bodyCell="{ column, record, text }">
-        <template v-if="column.key === 'not_after'">
+        <template v-if="column.dataIndex === 'name'">
+          <resource-name-cell :text="String(text ?? '')" :actions="nameActions(record)" @view="openUpdate(record)" />
+        </template>
+        <template v-else-if="column.key === 'not_after'">
           <a-tooltip v-if="record.not_after" :title="formatTime(record.not_after)">
             <span :class="expiryClass(record.not_after)">{{ formatRemainingDays(record.not_after) }}</span>
           </a-tooltip>
@@ -35,16 +29,18 @@
         <template v-else-if="column.key === 'expiry_notify'">
           <template v-if="!record.expiry_notify_enabled">关闭</template>
           <template v-else>
-            <div>已开启</div>
+            <a-tag color="success">已开启</a-tag>
             <div class="notify-channel">{{ formatNotifyChannels(record.expiry_notify_channel_ids) }}</div>
           </template>
         </template>
-        <template v-else-if="column.key === '__actions'">
-          <a @click="openUpdate(record)">更新证书</a>
-          <a-divider type="vertical" />
-          <a-popconfirm title="确认删除该证书?" @confirm="remove(record.id)">
-            <a class="danger">删除</a>
-          </a-popconfirm>
+        <template v-else-if="column.key === 'acme_auto_renew'">
+          <template v-if="!record.acme_auto_renew">关闭</template>
+          <template v-else>
+            <a-tag color="success">已开启</a-tag>
+            <div v-if="formatAcmeProvider(record.acme_provider)" class="notify-channel">
+              {{ formatAcmeProvider(record.acme_provider) }}
+            </div>
+          </template>
         </template>
         <template v-else>
           {{ text ?? "-" }}
@@ -52,12 +48,8 @@
       </template>
     </fs-data-table>
 
-    <certificate-form-drawer
-      v-model:open="modalOpen"
-      :certificate-id="editingId"
-      @saved="fetchList"
-      @imported="fetchList"
-    />
+    <certificate-form-drawer v-model:open="modalOpen" :certificate-id="editingId" @saved="fetchList"
+      @imported="fetchList" />
   </page-shell>
 </template>
 
@@ -69,7 +61,9 @@ import CertificateFormDrawer from "@/components/CertificateFormDrawer.vue";
 import FsDataTable from "@/components/FsDataTable.vue";
 import ListFilterBar from "@/components/ListFilterBar.vue";
 import PageShell from "@/components/PageShell.vue";
+import ResourceNameCell from "@/components/ResourceNameCell.vue";
 import { certificateExpiryFilterOptions } from "@/constants/resourceList";
+import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
 import { formatDateTime, parseUtc } from "@/utils/datetime";
 import type { ResourceFilterField } from "@/types/resourceList";
 
@@ -87,6 +81,8 @@ interface CertificateRow {
   remark: string | null;
   expiry_notify_enabled?: boolean;
   expiry_notify_channel_ids?: number[];
+  acme_auto_renew?: boolean;
+  acme_provider?: string | null;
   bound_sites?: CertificateBoundSite[];
 }
 
@@ -113,6 +109,7 @@ const columns = computed(() => [
     title: "名称",
     dataIndex: "name",
     sorter: true,
+    minWidth: 180,
     sortOrder: sortField.value === "name" ? (sortOrder.value === "asc" ? "ascend" : "descend") : undefined,
   },
   { title: "域名", dataIndex: "domains", ellipsis: true },
@@ -134,10 +131,14 @@ const columns = computed(() => [
   {
     title: "到期前通知",
     key: "expiry_notify",
-    width: 200,
+    width: 120,
+  },
+  {
+    title: "自动续期",
+    key: "acme_auto_renew",
+    width: 120,
   },
   { title: "备注", dataIndex: "remark", ellipsis: true },
-  { title: "操作", key: "__actions", width: 180 },
 ]);
 
 const rows = ref<CertificateRow[]>([]);
@@ -185,6 +186,38 @@ function formatNotifyChannels(channelIds: number[] | null | undefined) {
 function formatBoundSites(sites: CertificateBoundSite[] | null | undefined) {
   if (!sites?.length) return "-";
   return sites.map((site) => site.name).join("、");
+}
+
+/**
+ * 将 ACME 机构代码转为列表展示名。
+ *
+ * @param provider 证书机构代码
+ * @return 展示名；未知或空则返回原值或空串
+ */
+function formatAcmeProvider(provider: string | null | undefined) {
+  if (provider === "letsencrypt") return "Let's Encrypt";
+  if (provider === "zerossl") return "ZeroSSL";
+  return provider || "";
+}
+
+/**
+ * 证书名称下拉菜单：更新与删除。
+ *
+ * @param row 证书行
+ * @return 快捷操作
+ */
+function nameActions(row: CertificateRow): ResourceQuickAction[] {
+  return [
+    { key: "edit", label: "更新证书", onClick: () => openUpdate(row) },
+    {
+      key: "delete",
+      label: "删除",
+      danger: true,
+      divided: true,
+      confirm: "确认删除该证书？",
+      onClick: () => remove(row.id),
+    },
+  ];
 }
 
 function expiryClass(notAfter: string | null) {
@@ -279,15 +312,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.danger {
-  color: #ef4444;
-}
 .expired {
   color: #ef4444;
 }
+
 .soon {
   color: #f59e0b;
 }
+
 .notify-channel {
   margin-top: 2px;
   font-size: 12px;

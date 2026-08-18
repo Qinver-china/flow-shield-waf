@@ -13,7 +13,7 @@ from app.services.logging.payload_slim import payload_for_storage
 log = logging.getLogger("waf.clickhouse_store")
 
 _COLUMNS = [
-    "ts", "site_id", "domain", "client_ip", "ip_is_private", "xff_first",
+    "ts", "site_id", "domain", "client_ip", "tcp_ip", "ip_is_private", "xff_first",
     "geo_country", "geo_region", "geo_city", "geo_isp", "geo_asn",
     "method", "scheme", "http_version", "request_uri", "uri_path", "uri_ext", "uri_depth",
     "uri_pattern", "uri_query", "query_count", "referer", "referer_host", "ua", "bot_name", "bot_category",
@@ -55,6 +55,7 @@ def _row_from_enriched(e: dict) -> list:
         e.get("site_id"),
         e.get("domain") or "",
         e.get("client_ip") or "",
+        e.get("tcp_ip") or "",
         1 if ip_priv else 0,
         e.get("xff_first"),
         e.get("geo_country"),

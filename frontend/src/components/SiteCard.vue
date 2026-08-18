@@ -1,12 +1,7 @@
 <template>
-  <article
-    class="site-card"
-    :class="{ 'site-card--disabled': !site.enabled, 'site-card--anomaly': metrics?.anomaly }"
-  >
+  <article class="site-card" :class="{ 'site-card--disabled': !site.enabled, 'site-card--anomaly': metrics?.anomaly }">
     <header class="site-card__head">
-      <div
-        class="site-card__title-wrap"
-      >
+      <div class="site-card__title-wrap">
         <button type="button" class="site-card__title" @click="emit('view')">
           {{ site.name }}
         </button>
@@ -15,26 +10,14 @@
         </a-tag>
         <a-tag v-if="metrics?.anomaly" color="error" class="site-card__status">异常流量</a-tag>
       </div>
-      <a-switch
-        :checked="site.enabled"
-        :loading="toggling"
-        @change="onToggleChange"
-      />
+      <a-switch :checked="site.enabled" :loading="toggling" @change="onToggleChange" />
     </header>
 
-    <div
-      class="site-card__domains"
-    >
+    <div class="site-card__domains">
       <template v-if="domainLinks.length">
         <template v-for="(item, index) in domainLinks" :key="item.domain">
-          <a
-            v-if="item.linkable"
-            class="site-card__domain-link"
-            :href="item.href"
-            target="_blank"
-            rel="noopener noreferrer"
-            :title="`打开 ${item.href}`"
-          >{{ item.label }}</a>
+          <a v-if="item.linkable" class="site-card__domain-link" :href="item.href" target="_blank"
+            rel="noopener noreferrer" :title="`打开 ${item.href}`">{{ item.label }}</a>
           <span v-else class="site-card__domain-text" :title="item.label">{{ item.label }}</span>
           <span v-if="index < domainLinks.length - 1" class="site-card__domain-sep"> · </span>
         </template>
@@ -43,11 +26,7 @@
     </div>
 
     <div class="site-card__meta">
-      <div
-        v-for="item in metaItems"
-        :key="item.label"
-        class="meta-item"
-      >
+      <div v-for="item in metaItems" :key="item.label" class="meta-item">
         <span class="meta-label">{{ item.label }}</span>
         <span class="meta-value" :title="item.tags?.length ? undefined : String(item.value || '')">
           <template v-if="item.tags?.length">
@@ -61,60 +40,32 @@
     </div>
 
     <div class="site-card__metrics">
-      <button
-        type="button"
-        class="metric metric--clickable"
-        title="查看近 24 小时统计"
-        @click="goStats({})"
-      >
-        <div
-          class="metric__value"
-        >
+      <button type="button" class="metric metric--clickable" title="查看近 24 小时统计" @click="goStats({})">
+        <div class="metric__value">
           {{ formatCount(metrics?.requests_24h) }}
         </div>
         <div class="metric__label">24 小时命中量</div>
-        <div
-          class="metric__delta"
-          :class="deltaClass(metrics?.requests_24h_delta_pct)"
-        >
+        <div class="metric__delta" :class="deltaClass(metrics?.requests_24h_delta_pct)">
           {{ formatDelta(metrics?.requests_24h_delta_pct) }}
         </div>
       </button>
-      <button
-        type="button"
-        class="metric metric--danger metric--clickable"
-        title="查看近 24 小时拦截统计"
-        @click="goStats({ blocked: true })"
-      >
-        <div
-          class="metric__value"
-        >
+      <button type="button" class="metric metric--danger metric--clickable" title="查看近 24 小时拦截统计"
+        @click="goStats({ blocked: true })">
+        <div class="metric__value">
           {{ formatCount(metrics?.blocked_24h) }}
         </div>
         <div class="metric__label">24 小时拦截数量</div>
-        <div
-          class="metric__delta"
-          :class="deltaClass(metrics?.blocked_24h_delta_pct)"
-        >
+        <div class="metric__delta" :class="deltaClass(metrics?.blocked_24h_delta_pct)">
           {{ formatDelta(metrics?.blocked_24h_delta_pct) }}
         </div>
       </button>
-      <button
-        type="button"
-        class="metric metric--clickable"
-        title="按客户端 IP 聚合统计"
-        @click="goStats({ dimension: 'client_ip' })"
-      >
-        <div
-          class="metric__value"
-        >
+      <button type="button" class="metric metric--clickable" title="按客户端 IP 聚合统计"
+        @click="goStats({ dimension: 'client_ip' })">
+        <div class="metric__value">
           {{ formatCount(metrics?.unique_ips_24h) }}
         </div>
         <div class="metric__label">24 小时 IP 数量</div>
-        <div
-          class="metric__delta"
-          :class="deltaClass(metrics?.unique_ips_24h_delta_pct)"
-        >
+        <div class="metric__delta" :class="deltaClass(metrics?.unique_ips_24h_delta_pct)">
           {{ formatDelta(metrics?.unique_ips_24h_delta_pct) }}
         </div>
       </button>
@@ -123,41 +74,23 @@
     <div v-if="trafficWindows.length" class="site-card__traffic">
       <div class="site-card__traffic-title">实时流量</div>
       <div class="site-card__traffic-grid">
-        <div
-          v-for="w in trafficWindows"
-          :key="w.window_sec"
-          class="traffic-card"
-          :class="trafficBaselineClass(w)"
-        >
+        <div v-for="w in trafficWindows" :key="w.window_sec" class="traffic-card" :class="trafficBaselineClass(w)">
           <div class="traffic-card__label">{{ w.label }}</div>
-          <div
-            class="traffic-card__value"
-          >
+          <div class="traffic-card__value">
             {{ formatCount(w.requests) }}
             <span class="traffic-card__qps">{{ formatQps(w.qps) }}</span>
           </div>
-          <a-tooltip
-            :title="trafficBaselineTip(w)"
-            overlay-class-name="baseline-status-tooltip"
-            :mouse-enter-delay="0.25"
-          >
+          <a-tooltip :title="trafficBaselineTip(w)" overlay-class-name="baseline-status-tooltip"
+            :mouse-enter-delay="0.25">
             <div class="traffic-card__baseline">
               <template v-if="w.baseline_avg != null">
                 <div class="traffic-card__baseline-line">
                   基线 {{ formatBaseline(w.baseline_avg) }}
                 </div>
-                <div
-                  v-if="w.deviation_ratio != null"
-                  class="traffic-card__deviation"
-                >
-                  <ArrowUpOutlined
-                    v-if="deviationDelta(w.deviation_ratio) > 0"
-                    class="traffic-card__deviation-icon"
-                  />
-                  <ArrowDownOutlined
-                    v-else-if="deviationDelta(w.deviation_ratio) < 0"
-                    class="traffic-card__deviation-icon"
-                  />
+                <div v-if="w.deviation_ratio != null" class="traffic-card__deviation">
+                  <ArrowUpOutlined v-if="deviationDelta(w.deviation_ratio) > 0" class="traffic-card__deviation-icon" />
+                  <ArrowDownOutlined v-else-if="deviationDelta(w.deviation_ratio) < 0"
+                    class="traffic-card__deviation-icon" />
                   <span>{{ formatDeviation(w.deviation_ratio) }}</span>
                 </div>
               </template>
@@ -266,15 +199,16 @@ function firstListenPort(value: unknown, fallback: number): number {
 /** HTTP 优先；自定义监听端口时带上非 80/443 的端口。 */
 function siteAccessTarget(site: Record<string, any>): { scheme: "http" | "https"; port: number } {
   const custom = Boolean(site.custom_listen_ports);
-  if (site.listen_http) {
+  if (site.listen_https) {
+
     return {
-      scheme: "http",
-      port: custom ? firstListenPort(site.listen_http_ports, 80) : 80,
+      scheme: "https",
+      port: custom ? firstListenPort(site.listen_https_ports, 443) : 443,
     };
   }
   return {
-    scheme: "https",
-    port: custom ? firstListenPort(site.listen_https_ports, 443) : 443,
+    scheme: "http",
+    port: custom ? firstListenPort(site.listen_http_ports, 80) : 80,
   };
 }
 
@@ -734,6 +668,7 @@ function trafficBaselineClass(w: SiteTrafficWindow) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .site-card,
   .metric--clickable {
     transition: none;

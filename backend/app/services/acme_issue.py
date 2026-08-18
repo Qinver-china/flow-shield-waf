@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models import Certificate, Site
 from app.models.notification import NotificationChannel
+from app.schemas.certificate import apply_panel_push_rules
 from app.services.certificate_ops import (
     apply_pem_to_certificate,
     persist_new_certificate,
@@ -30,6 +31,7 @@ from app.services.notifications.certificate_expiry import (
 )
 from app.services.notifications.channels import send_via_channel
 from app.services.notifications.email_templates import build_acme_result_email
+from app.services.panels.push_service import push_certificate_to_panels
 from app.services.site_domains import normalize_domain_list, site_domain_list
 from app.services.traffic_intel.timezone import get_traffic_timezone, local_datetime
 from app.services import waf_settings
@@ -456,6 +458,39 @@ async def _load_channels(db: AsyncSession, channel_ids: list[int]) -> list[Notif
     )
 
 
+def _panel_push_extra_note(
+    result: dict | None = None, *, error: str | None = None
+) -> str | None:
+    """Build a short panel-sync summary to append to the ACME renew mail."""
+    if error:
+        return f"其他面板同步失败：{error}"
+    if not result:
+        return None
+    lines: list[str] = []
+    pushed = result.get("pushed") or []
+    failed = result.get("failed") or []
+    if pushed:
+        labels = "、".join(
+            str(item.get("name") or item.get("key") or "").strip()
+            for item in pushed
+            if isinstance(item, dict)
+        ).strip("、")
+        if labels:
+            lines.append(f"已同步到其他面板：{labels}")
+    if failed:
+        labels = "、".join(
+            (
+                f"{str(item.get('name') or item.get('key') or '').strip()}"
+                f"（{str(item.get('reason') or '失败').strip()}）"
+            )
+            for item in failed
+            if isinstance(item, dict)
+        ).strip("、")
+        if labels:
+            lines.append(f"其他面板同步失败：{labels}")
+    return "\n".join(lines) or None
+
+
 async def notify_acme_result(
     db: AsyncSession,
     channel_ids: list[int],
@@ -466,6 +501,7 @@ async def notify_acme_result(
     domains: str,
     provider: str | None,
     error: str | None = None,
+    extra_note: str | None = None,
 ) -> None:
     """Send issue/renew success or failure through configured channels."""
     channels = await _load_channels(db, channel_ids)
@@ -484,6 +520,7 @@ async def notify_acme_result(
         domains=domains,
         ca_name=ca_name,
         error=error,
+        extra_note=extra_note,
     )
     for channel in channels:
         try:
@@ -542,6 +579,8 @@ async def issue_for_site(
     renew_domains: list[str] | None = None,
     name: str | None = None,
     replace_certificate_id: int | None = None,
+    panel_push_enabled: bool | None = None,
+    panel_push_targets: list | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> Certificate:
     """Issue an ACME certificate, persist it, bind the site, and notify.
@@ -559,6 +598,10 @@ async def issue_for_site(
             metadata domains when auto_renew is enabled).
         name: Optional certificate display name.
         replace_certificate_id: Overwrite this row instead of creating.
+        panel_push_enabled: Persist auto-renew panel push switch. ``None``
+            keeps the existing value when replacing a certificate.
+        panel_push_targets: Panel connection/site keys used after auto-renew.
+            ``None`` keeps the existing list when replacing.
         on_progress: Optional async/sync callback for UI progress lines.
 
     Returns:
@@ -586,6 +629,7 @@ async def issue_for_site(
             renew_names.append(name_item)
     if auto_renew and renew_domains is not None and not renew_names:
         raise AcmeIssueError("开启自动续期时请选择绑定域名")
+    push_specified = panel_push_enabled is not None or panel_push_targets is not None
 
     setting = await waf_settings.get_or_create(db)
     email = await ensure_acme_account_email(db, setting)
@@ -611,6 +655,21 @@ async def issue_for_site(
             and domain_set(bound.domains) == set(names)
         ):
             target = bound
+
+    if push_specified:
+        try:
+            push_enabled, push_targets = apply_panel_push_rules(
+                auto_renew=auto_renew,
+                panel_push_enabled=bool(panel_push_enabled),
+                panel_push_targets=panel_push_targets,
+            )
+        except ValueError as exc:
+            raise AcmeIssueError(str(exc)) from exc
+    elif target is not None and auto_renew:
+        push_enabled = bool(getattr(target, "panel_push_enabled", False))
+        push_targets = list(getattr(target, "panel_push_targets", None) or [])
+    else:
+        push_enabled, push_targets = False, []
 
     display_name = (name or "").strip() or (
         target.name if target is not None else _default_cert_name(provider, names)
@@ -656,6 +715,8 @@ async def issue_for_site(
                 acme_auto_renew=auto_renew,
                 acme_provider=provider,
                 renew_domains=renew_names or None,
+                panel_push_enabled=push_enabled,
+                panel_push_targets=push_targets,
                 commit=False,
             )
         else:
@@ -675,6 +736,8 @@ async def issue_for_site(
             cert.expiry_notify_channel_ids = []
         if auto_renew and renew_names:
             cert.domains = ",".join(renew_names)
+        cert.panel_push_enabled = push_enabled
+        cert.panel_push_targets = push_targets
         await _bind_site_certificate(db, site, cert)
         await db.commit()
         await db.refresh(cert)
@@ -741,10 +804,27 @@ async def renew_one(
                 request_certificate_pem, provider, email, names
             )
             apply_pem_to_certificate(cert, cert_pem, key_pem)
+            if names:
+                cert.domains = ",".join(names)
             cert.acme_last_attempt_on = today
             cert.acme_last_error = None
             await db.commit()
             await reload_sites_using_certificate(db, cert.id)
+            extra_note = None
+            if cert.panel_push_enabled:
+                try:
+                    result = await push_certificate_to_panels(db, cert)
+                    extra_note = _panel_push_extra_note(result)
+                    failed = result.get("failed") or []
+                    if failed:
+                        log.warning(
+                            "ACME renew panel push partial fail id=%s: %s",
+                            cert.id,
+                            failed,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("ACME renew panel push failed id=%s: %s", cert.id, exc)
+                    extra_note = _panel_push_extra_note(error=str(exc))
             await notify_acme_result(
                 db,
                 channel_ids,
@@ -753,6 +833,7 @@ async def renew_one(
                 cert_name=cert.name,
                 domains=cert.domains or ", ".join(names),
                 provider=provider,
+                extra_note=extra_note,
             )
             return True
         except Exception as exc:  # noqa: BLE001

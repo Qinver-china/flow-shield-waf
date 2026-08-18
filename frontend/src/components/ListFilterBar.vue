@@ -1,6 +1,6 @@
 <template>
-  <div v-if="fields.length" class="" style="margin-bottom: 24px;">
-    <a-space wrap :size="12" align="start">
+  <div v-if="fields.length || $slots.extra" class="filter-bar">
+    <a-space wrap :size="12" align="start" class="filter-bar-controls">
       <template v-for="field in fields" :key="field.key">
         <a-input-search
           v-if="field.type === 'search'"
@@ -43,8 +43,11 @@
           @change="emit('change')"
         />
       </template>
-      <a-button @click="emit('reset')">重置</a-button>
+      <a-button v-if="fields.length" @click="emit('reset')">重置</a-button>
     </a-space>
+    <div v-if="$slots.extra" class="filter-bar-extra">
+      <slot name="extra" />
+    </div>
   </div>
 </template>
 
@@ -80,8 +83,20 @@ function controlStyle(field: ResourceFilterField, type: string) {
 
 <style scoped>
 .filter-bar {
-  padding: 14px 16px;
-  margin-bottom: var(--fs-space-md);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.filter-bar-controls {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-bar-extra {
+  flex-shrink: 0;
 }
 
 .filter-bar-head {

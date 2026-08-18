@@ -144,8 +144,8 @@
                 </a-radio-group>
               </a-form-item>
               <a-form-item label="绑定站点" required>
-                <a-select v-model:value="renew.siteId" placeholder="选择已保存的站点" show-search option-filter-prop="label"
-                  style="width: 100%" @change="onRenewSiteChange">
+                <a-select :value="renew.siteIds" mode="multiple" placeholder="选择已保存的站点" show-search
+                  option-filter-prop="label" style="width: 100%" @change="onRenewSitesChange">
                   <a-select-option v-for="site in sites" :key="site.id" :value="site.id"
                     :label="site.name || site.domain">
                     {{ site.name || site.domain }}
@@ -169,6 +169,36 @@
                   </a-select-option>
                 </a-select>
               </a-form-item>
+              <div class="fs-switch-row panel-push-nested">
+                <div class="fs-switch-row-header">
+                  <div>
+                    <div><b>续期时自动推送到其他面板</b></div>
+                    <div class="fs-muted">续期成功后，将证书部署到所选宝塔或 1Panel 站点</div>
+                  </div>
+                  <a-switch v-model:checked="panelPush.enabled" />
+                </div>
+                <div class="fs-switch-row-body" v-if="panelPush.enabled">
+                  <a-form-item label="目标面板" required>
+                    <a-radio-group v-model:value="panelPush.provider">
+                      <a-radio value="baota">宝塔</a-radio>
+                      <a-radio value="onepanel">1Panel</a-radio>
+                    </a-radio-group>
+                  </a-form-item>
+                  <panel-push-target-picker :provider="panelPush.provider" :connection-id="panelPush.connectionId"
+                    :site-keys="panelPush.siteKeys" :cert-domains="certDomainList"
+                    @update:connection-id="panelPush.connectionId = $event"
+                    @update:site-keys="panelPush.siteKeys = $event" @close="emit('update:open', false)" />
+                </div>
+              </div>
+              <div class="panel-sync-row">
+                <a-tooltip :title="syncDisabledReason || undefined">
+                  <span class="panel-sync-btn">
+                    <a-button :disabled="!!syncDisabledReason" :loading="panelPush.syncing" @click="syncNow">
+                      立即同步
+                    </a-button>
+                  </span>
+                </a-tooltip>
+              </div>
             </div>
           </div>
         </fs-form-section>
@@ -184,7 +214,9 @@ import { message, type UploadProps } from "ant-design-vue";
 import { api } from "@/api";
 import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
-import PanelImportForm, { type PanelImportStatus } from "@/components/PanelImportForm.vue";
+import PanelImportForm, { type PanelImportStatus, type PanelProvider } from "@/components/PanelImportForm.vue";
+import PanelPushTargetPicker from "@/components/PanelPushTargetPicker.vue";
+import type { PanelConnectionRow } from "@/components/PanelConnectionsCard.vue";
 import type { SiteOption } from "@/composables/useSiteOptions";
 
 export interface CertificateSaved {
@@ -217,6 +249,8 @@ interface CertificateDetail {
   expiry_notify_channel_ids?: number[];
   acme_provider?: string | null;
   acme_auto_renew?: boolean;
+  panel_push_enabled?: boolean;
+  panel_push_targets?: { connection_id: number; site_keys: string[] }[];
   bound_sites?: CertificateBoundSite[];
 }
 
@@ -303,8 +337,16 @@ const acme = reactive({
 });
 
 const renew = reactive({
-  siteId: null as number | null,
+  siteIds: [] as number[],
   domains: [] as string[],
+});
+
+const panelPush = reactive({
+  enabled: false,
+  provider: "baota" as PanelProvider,
+  connectionId: null as number | null,
+  siteKeys: [] as string[],
+  syncing: false,
 });
 
 const certFile = ref<File | null>(null);
@@ -317,8 +359,22 @@ function siteDomainList(site: SiteOption | undefined) {
   return site.domains?.length ? site.domains : site.domain ? [site.domain] : [];
 }
 
+function domainsForSiteIds(ids: number[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    for (const domain of siteDomainList(sites.value.find((item) => item.id === id))) {
+      if (seen.has(domain)) continue;
+      seen.add(domain);
+      out.push(domain);
+    }
+  }
+  return out;
+}
+
 const acmeSiteDomains = computed(() => siteDomainList(sites.value.find((item) => item.id === acme.siteId)));
-const renewSiteDomains = computed(() => siteDomainList(sites.value.find((item) => item.id === renew.siteId)));
+const certDomainList = computed(() => splitDomains(form.domains));
+const renewSiteDomains = computed(() => domainsForSiteIds(renew.siteIds));
 
 function channelTypeLabel(type: string) {
   if (type === "email") return "邮件";
@@ -348,8 +404,13 @@ function resetForm() {
   form.bound_sites = [];
   acme.siteId = null;
   acme.domains = [];
-  renew.siteId = null;
+  renew.siteIds = [];
   renew.domains = [];
+  panelPush.enabled = false;
+  panelPush.provider = "baota";
+  panelPush.connectionId = null;
+  panelPush.siteKeys = [];
+  panelPush.syncing = false;
   acmeLogs.value = [];
   acmeError.value = "";
   certFile.value = null;
@@ -364,10 +425,44 @@ function onAcmeSiteChange(id: number) {
   acme.domains = [...siteDomainList(sites.value.find((item) => item.id === id))];
 }
 
-function onRenewSiteChange(id: number) {
-  renew.siteId = id;
-  renew.domains = [...siteDomainList(sites.value.find((item) => item.id === id))];
+/** Keep renew site selection and domain checkboxes aligned. */
+function applyRenewSites(ids: number[], preferredDomains?: string[]) {
+  const next = [...new Set(ids.filter((id) => sites.value.some((site) => site.id === id)))];
+  const added = next.filter((id) => !renew.siteIds.includes(id));
+  renew.siteIds = next;
+  const available = domainsForSiteIds(next);
+  if (preferredDomains) {
+    const prefer = preferredDomains.filter((domain) => available.includes(domain));
+    renew.domains = prefer.length ? prefer : [...available];
+    return;
+  }
+  const keep = renew.domains.filter((domain) => available.includes(domain));
+  const extra = domainsForSiteIds(added).filter((domain) => !keep.includes(domain));
+  renew.domains = [...keep, ...extra];
 }
+
+function onRenewSitesChange(ids: number[]) {
+  applyRenewSites(Array.isArray(ids) ? ids.map(Number) : []);
+}
+
+function pushTargetsPayload() {
+  if (!form.acme_auto_renew || !panelPush.enabled || !panelPush.connectionId || !panelPush.siteKeys.length) {
+    return { panel_push_enabled: false, panel_push_targets: [] as { connection_id: number; site_keys: string[] }[] };
+  }
+  return {
+    panel_push_enabled: true,
+    panel_push_targets: [
+      { connection_id: panelPush.connectionId, site_keys: [...panelPush.siteKeys] },
+    ],
+  };
+}
+
+const syncDisabledReason = computed(() => {
+  if (!props.certificateId) return "请先保存证书后再测试同步";
+  if (!panelPush.enabled) return "请先开启续期时自动推送到其他面板";
+  if (!panelPush.connectionId || !panelPush.siteKeys.length) return "请选择要同步的面板站点";
+  return "";
+});
 
 async function loadChannels() {
   try {
@@ -385,6 +480,28 @@ async function loadSites() {
   } catch {
     sites.value = [];
   }
+}
+
+async function restorePanelPush(detail: CertificateDetail) {
+  const target = (detail.panel_push_targets || [])[0];
+  if (!target) {
+    panelPush.connectionId = null;
+    panelPush.siteKeys = [];
+    panelPush.enabled = Boolean(detail.panel_push_enabled);
+    return;
+  }
+  try {
+    const resp = await api.get<PanelConnectionRow[]>("/api/v1/panel-connections");
+    const row = (resp.data || []).find((item) => item.id === target.connection_id);
+    if (row?.provider === "onepanel" || row?.provider === "baota") {
+      panelPush.provider = row.provider;
+    }
+  } catch {
+    // keep default provider; picker will prompt if the account is gone
+  }
+  panelPush.connectionId = target.connection_id;
+  panelPush.siteKeys = [...(target.site_keys || [])];
+  panelPush.enabled = Boolean(detail.panel_push_enabled);
 }
 
 function pickSiteForDomains(certDomains: string[]) {
@@ -408,10 +525,9 @@ function pickSiteForDomains(certDomains: string[]) {
   };
 }
 
-function initDomainSelections() {
+function initAcmeDomainSelections() {
   if (props.preselectSiteId) {
     onAcmeSiteChange(props.preselectSiteId);
-    onRenewSiteChange(props.preselectSiteId);
     return;
   }
 
@@ -420,8 +536,6 @@ function initDomainSelections() {
   if (matched) {
     acme.siteId = matched.siteId;
     acme.domains = [...matched.domains];
-    renew.siteId = matched.siteId;
-    renew.domains = [...matched.domains];
     return;
   }
 
@@ -429,9 +543,31 @@ function initDomainSelections() {
     const boundId = form.bound_sites[0].id;
     if (sites.value.some((site) => site.id === boundId)) {
       onAcmeSiteChange(boundId);
-      onRenewSiteChange(boundId);
     }
   }
+}
+
+function initRenewDomainSelections() {
+  const boundIds = form.bound_sites
+    .map((item) => item.id)
+    .filter((id) => sites.value.some((site) => site.id === id));
+  if (boundIds.length) {
+    applyRenewSites(boundIds, splitDomains(form.domains));
+    return;
+  }
+  if (props.preselectSiteId) {
+    applyRenewSites([props.preselectSiteId], splitDomains(form.domains));
+    return;
+  }
+  const matched = pickSiteForDomains(splitDomains(form.domains));
+  if (matched) {
+    applyRenewSites([matched.siteId], matched.domains);
+  }
+}
+
+function initDomainSelections() {
+  initAcmeDomainSelections();
+  initRenewDomainSelections();
 }
 
 async function loadDetail(id: number) {
@@ -452,6 +588,7 @@ async function loadDetail(id: number) {
         : "letsencrypt";
     form.acme_auto_renew = Boolean(detail.acme_auto_renew);
     form.bound_sites = [...(detail.bound_sites || [])];
+    await restorePanelPush(detail);
   } finally {
     detailLoading.value = false;
   }
@@ -471,14 +608,14 @@ watch(
 );
 
 watch(importMode, (mode) => {
-  if (mode === "acme" && !acme.siteId) initDomainSelections();
+  if (mode === "acme" && !acme.siteId) initAcmeDomainSelections();
 });
 
 watch(
   () => form.acme_auto_renew,
   (enabled) => {
     if (!enabled) return;
-    if (!renew.siteId) initDomainSelections();
+    if (!renew.siteIds.length) initRenewDomainSelections();
   },
 );
 
@@ -551,6 +688,10 @@ function validateAutoRenewSettings(): boolean {
     message.warning("开启自动续期时请勾选至少一个域名");
     return false;
   }
+  if (panelPush.enabled && (!panelPush.connectionId || !panelPush.siteKeys.length)) {
+    message.warning("开启面板推送时请选择面板账号和要同步的站点");
+    return false;
+  }
   return true;
 }
 
@@ -560,6 +701,7 @@ function notifyPayload() {
     expiry_notify_enabled: form.expiry_notify_enabled,
     expiry_notify_channel_ids: channelsNeeded ? [...form.expiry_notify_channel_ids] : [],
     acme_auto_renew: form.acme_auto_renew,
+    ...pushTargetsPayload(),
   };
   if (form.acme_auto_renew) {
     payload.acme_provider = acmeProviderModel.value;
@@ -575,6 +717,38 @@ function onPanelStatus(status: PanelImportStatus) {
 function onPanelImported() {
   emit("update:open", false);
   emit("imported");
+}
+
+async function syncNow() {
+  if (syncDisabledReason.value || !props.certificateId) return;
+  const payload = pushTargetsPayload();
+  if (!payload.panel_push_enabled) {
+    message.warning("请选择要同步的面板站点");
+    return;
+  }
+  panelPush.syncing = true;
+  try {
+    const resp = await api.post(
+      `/api/v1/certificates/${props.certificateId}/sync-to-panels`,
+      { targets: payload.panel_push_targets },
+      { timeout: 120000 },
+    );
+    const data = resp.data || {};
+    const failed = (data.failed || []) as { name?: string; key?: string; reason?: string }[];
+    if (failed.length) {
+      const detail = failed
+        .map((item) => `${item.name || item.key || ""}${item.reason ? `（${item.reason}）` : ""}`)
+        .filter(Boolean)
+        .join("、");
+      message.warning(detail ? `${resp.message || "部分同步失败"}：${detail}` : resp.message || "部分同步失败", 6);
+    } else {
+      message.success(resp.message || "同步完成");
+    }
+  } catch {
+    // interceptor shows error
+  } finally {
+    panelPush.syncing = false;
+  }
 }
 
 function formatAcmeLogTime() {
@@ -649,6 +823,7 @@ async function submitAcme() {
         renew_domains: form.acme_auto_renew ? [...renew.domains] : null,
         name: form.name.trim() || null,
         replace_certificate_id: props.certificateId || null,
+        ...pushTargetsPayload(),
       }),
     });
 
@@ -772,6 +947,10 @@ async function save() {
         fd.append("acme_provider", String(notify.acme_provider));
         fd.append("renew_domains", JSON.stringify(notify.renew_domains));
       }
+      fd.append("panel_push_enabled", String(notify.panel_push_enabled));
+      if ((notify.panel_push_targets as unknown[])?.length) {
+        fd.append("panel_push_targets", JSON.stringify(notify.panel_push_targets));
+      }
       fd.append("cert_file", certFile.value!);
       fd.append("key_file", keyFile.value!);
       const resp = await api.upload<CertificateSaved>("/api/v1/certificates/upload", fd);
@@ -843,5 +1022,18 @@ async function save() {
 .acme-log-time {
   flex: none;
   color: var(--fs-text-muted, #64748b);
+}
+
+.panel-push-nested {
+  margin-top: 8px;
+  background: var(--fs-bg-elevated, #fff);
+}
+
+.panel-sync-row {
+  margin-top: 12px;
+}
+
+.panel-sync-btn {
+  display: inline-block;
 }
 </style>

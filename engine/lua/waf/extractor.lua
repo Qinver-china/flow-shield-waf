@@ -162,6 +162,9 @@ function _M:_resolve(field, arg)
     if field == "ip.src" then
         if not self.cache.ip then self.cache.ip = util.client_ip() end
         return self.cache.ip
+    elseif field == "ip.tcp" then
+        if not self.cache.tcp_ip then self.cache.tcp_ip = util.tcp_ip() end
+        return self.cache.tcp_ip
     elseif field == "ip.src.is_private" then
         if not self.cache.ip then self.cache.ip = util.client_ip() end
         return util.is_private_ip(self.cache.ip)

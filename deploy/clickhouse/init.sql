@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS waf.waf_logs (
   site_id Nullable(UInt32),
   domain LowCardinality(String),
   client_ip String,
+  tcp_ip String DEFAULT '',
   ip_is_private UInt8 DEFAULT 0,
   xff_first Nullable(String),
   geo_country LowCardinality(Nullable(String)),

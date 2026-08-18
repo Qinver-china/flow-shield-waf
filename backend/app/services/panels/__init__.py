@@ -18,6 +18,8 @@ class PanelAdapter(Protocol):
 
     async def fetch_cert(self, cert_key: str) -> PemPair: ...
 
+    async def push_site_cert(self, site_key: str, cert_pem: str, key_pem: str) -> None: ...
+
 
 def get_adapter(
     *,

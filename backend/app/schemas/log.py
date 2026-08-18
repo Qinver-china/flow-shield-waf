@@ -12,6 +12,7 @@ class LogOut(BaseModel):
     site_id: int | None = None
     domain: str | None = None
     client_ip: str | None = None
+    tcp_ip: str | None = None
     geo_country: str | None = None
     method: str | None = None
     uri: str | None = None  # deprecated alias; use request_uri
@@ -33,6 +34,7 @@ class LogQuery(BaseModel):
     source: str | None = None
     site_id: int | None = None
     client_ip: str | None = None
+    tcp_ip: str | None = None
     rule_id: int | None = None
     rule_name: str | None = None
     action: str | None = None

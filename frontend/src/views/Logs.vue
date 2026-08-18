@@ -92,6 +92,7 @@ const detailQueryKeys = [
   "source",
   "log_type",
   "client_ip",
+  "tcp_ip",
   "rule_id",
   "site_id",
   "bot_name",

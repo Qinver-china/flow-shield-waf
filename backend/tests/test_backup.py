@@ -5,9 +5,11 @@ from app.services.backup import (
     FORMAT_NAME,
     _apply_certificate_acme_fields,
     _certificate_domains,
+    _finalize_certificate_panel_push,
     _normalize_sections,
     _remap_ids,
     _remap_ip_group_ids_in_conditions,
+    _remap_panel_push_targets,
     section_catalog,
 )
 
@@ -97,3 +99,26 @@ def test_apply_certificate_acme_fields_from_backup():
     assert cert.acme_auto_renew is True
     assert cert.acme_last_attempt_on == "2026-08-01"
     assert cert.acme_last_error is None
+
+
+def test_remap_panel_push_targets_rewrites_connection_ids():
+    remapped = _remap_panel_push_targets(
+        [{"connection_id": 7, "site_keys": ["a.com", "a.com", "b.com"]}, {"connection_id": 8, "site_keys": ["c.com"]}],
+        {7: 70},
+    )
+    assert remapped == [{"connection_id": 70, "site_keys": ["a.com", "b.com"]}]
+
+
+def test_finalize_certificate_panel_push_disables_when_unmapped():
+    cert = SimpleNamespace(
+        acme_auto_renew=True,
+        panel_push_enabled=True,
+        panel_push_targets=[{"connection_id": 1, "site_keys": ["a.com"]}],
+    )
+    _finalize_certificate_panel_push(
+        cert,
+        {"panel_push_enabled": True, "panel_push_targets": cert.panel_push_targets},
+        {},
+    )
+    assert cert.panel_push_enabled is False
+    assert cert.panel_push_targets == []

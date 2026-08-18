@@ -5,46 +5,21 @@
       <a-button v-if="showCreate" type="primary" @click="openCreate">{{ createLabel }}</a-button>
     </div>
 
-    <list-filter-bar
-      v-if="filters?.length"
-      :fields="filters"
-      :model="filterValues"
-      @change="onFilterChange"
-      @reset="resetFilters"
-    />
+    <list-filter-bar v-if="filters?.length || $slots['filter-extra']" :fields="filters ?? []" :model="filterValues"
+      @change="onFilterChange" @reset="resetFilters">
+      <template v-if="$slots['filter-extra']" #extra>
+        <slot name="filter-extra" />
+      </template>
+    </list-filter-bar>
 
-    <slot
-      v-if="$slots.list"
-      name="list"
-      :rows="rows"
-      :loading="loading"
-      :open-view="openView"
-      :open-edit="openEdit"
-      :open-duplicate="openDuplicate"
-      :remove="remove"
-      :toggle-enabled="toggleEnabled"
-      :toggling-id="togglingId"
-      :allow-delete="allowDelete"
-      :name-actions="nameActions"
-      :duplicatable="duplicatable"
-      :pagination="pagination"
-      :on-table-change="onTableChange"
-    />
+    <slot v-if="$slots.list" name="list" :rows="rows" :loading="loading" :open-view="openView" :open-edit="openEdit"
+      :open-duplicate="openDuplicate" :remove="remove" :toggle-enabled="toggleEnabled" :toggling-id="togglingId"
+      :allow-delete="allowDelete" :name-actions="nameActions" :duplicatable="duplicatable" :pagination="pagination"
+      :on-table-change="onTableChange" :sort-field="sortField" :sort-order="sortOrder" />
 
-    <a-table
-      v-else-if="!isMobile"
-      :columns="tableColumns"
-      :data-source="rows"
-      :loading="loading"
-      :pagination="pagination"
-      :row-selection="rowSelection"
-      row-key="id"
-      size="middle"
-      bordered
-      :scroll="{ x: tableScrollX }"
-      :show-sorter-tooltip="false"
-      @change="onTableChange"
-    >
+    <a-table v-else-if="!isMobile" :columns="tableColumns" :data-source="rows" :loading="loading"
+      :pagination="pagination" :row-selection="rowSelection" row-key="id" size="middle" bordered
+      :scroll="{ x: tableScrollX }" :show-sorter-tooltip="false" @change="onTableChange">
       <template #bodyCell="{ column, record, text }">
         <template v-if="column.key === '__actions'">
           <a @click="openView(record)">查看</a>
@@ -62,18 +37,11 @@
           </template>
         </template>
         <template v-else-if="nameField && column.dataIndex === nameField">
-          <resource-name-cell
-            :text="String(text ?? '')"
-            :actions="nameActions(record)"
-            @view="openView(record)"
-          />
+          <resource-name-cell :text="String(text ?? '')" :actions="nameActions(record)" @view="openView(record)" />
         </template>
         <template v-else-if="column.key === 'enabled'">
-          <a-switch
-            :checked="record.enabled"
-            :loading="togglingId === record.id"
-            @change="(checked: boolean) => toggleEnabled(record, checked)"
-          />
+          <a-switch :checked="record.enabled" :loading="togglingId === record.id"
+            @change="(checked: boolean) => toggleEnabled(record, checked)" />
         </template>
         <template v-else-if="column.slotCell">
           <slot name="cell" :column="column" :record="record" />
@@ -90,36 +58,25 @@
         <div v-for="row in rows" :key="row.id" class="mobile-card fs-card">
           <div class="mobile-card-head">
             <div class="mobile-card-head-left">
-              <a-checkbox
-                v-if="batchEnabled"
-                :checked="isMobileRowSelected(row.id)"
-                class="mobile-card-check"
-                @change="(e: any) => toggleMobileRow(row.id, e.target.checked)"
-              />
+              <a-checkbox v-if="batchEnabled" :checked="isMobileRowSelected(row.id)" class="mobile-card-check"
+                @change="(e: any) => toggleMobileRow(row.id, e.target.checked)" />
               <a class="mobile-card-title" @click="openView(row)">
                 {{ nameField ? row[nameField] : `#${row.id}` }}
               </a>
             </div>
-            <a-switch
-              v-if="hasEnabledColumn"
-              :checked="row.enabled"
-              :loading="togglingId === row.id"
-              @change="(checked: boolean) => toggleEnabled(row, checked)"
-            />
+            <a-switch v-if="hasEnabledColumn" :checked="row.enabled" :loading="togglingId === row.id"
+              @change="(checked: boolean) => toggleEnabled(row, checked)" />
           </div>
           <div class="mobile-card-body">
-            <div
-              v-for="col in displayColumns"
-              :key="col.key || col.dataIndex"
-              class="mobile-field"
-            >
+            <div v-for="col in displayColumns" :key="col.key || col.dataIndex" class="mobile-field">
               <span class="mobile-field-label">{{ col.title }}</span>
               <span class="mobile-field-value">
                 <template v-if="col.slotCell">
                   <slot name="cell" :column="col" :record="row" />
                 </template>
                 <template v-else>
-                  {{ col.customRender ? col.customRender({ text: row[col.dataIndex as string], record: row }) : row[col.dataIndex as string] }}
+                  {{ col.customRender ? col.customRender({ text: row[col.dataIndex as string], record: row }) :
+                    row[col.dataIndex as string] }}
                 </template>
               </span>
             </div>
@@ -145,76 +102,34 @@
       </a-spin>
     </div>
 
-    <div v-if="($slots.list || isMobile) && total > pageSize" class="mobile-pagination">
-      <a-pagination
-        v-model:current="page"
-        :total="total"
-        :page-size="pageSize"
-        :size="paginationSize"
-        :show-total="(t: number) => `共 ${t} 条`"
-        :show-size-changer="total > DEFAULT_PAGE_SIZE"
-        :page-size-options="DEFAULT_PAGE_SIZE_OPTIONS"
-        @change="onMobilePageChange"
-      />
+    <div v-if="($slots.list || isMobile) && total > pageSize && !hideListPagination" class="mobile-pagination">
+      <a-pagination v-model:current="page" :total="total" :page-size="pageSize" :size="paginationSize"
+        :show-total="(t: number) => `共 ${t} 条`" :show-size-changer="total > DEFAULT_PAGE_SIZE"
+        :page-size-options="DEFAULT_PAGE_SIZE_OPTIONS" @change="onMobilePageChange" />
     </div>
 
-    <fs-form-drawer
-      v-model:open="drawerOpen"
-      :title="drawerTitle"
-      :subtitle="drawerSubtitle"
-      :mode="drawerMode"
+    <fs-form-drawer v-model:open="drawerOpen" :title="drawerTitle" :subtitle="drawerSubtitle" :mode="drawerMode"
       :width="extraCreateTabs.length ? 760 : undefined"
       :loading="extraCreateTabActive ? extraCreateFooter?.loading : false"
       :confirm-loading="extraCreateTabActive ? !!extraCreateFooter?.confirmLoading : saving"
       :ok-text="extraCreateTabActive ? (extraCreateFooter?.okText || '导入') : undefined"
       :hide-ok="extraCreateTabActive ? !!extraCreateFooter?.hideOk : false"
-      :json-content="drawerMode === 'view' && props.showViewJson ? recordJson : undefined"
-      @ok="onDrawerOk"
-    >
+      :json-content="drawerMode === 'view' && props.showViewJson ? recordJson : undefined" @ok="onDrawerOk">
       <a-form layout="vertical">
-         <a-tabs
-          v-if="showJsonImport"
-          v-model:active-key="createFormTab"
-          class="resource-crud__create-tabs"
-        >
+        <a-tabs v-if="showJsonImport" v-model:active-key="createFormTab" class="resource-crud__create-tabs">
           <a-tab-pane key="form" tab="表单填写">
-            <slot
-              name="form"
-              :record="record"
-              :readonly="false"
-              :mode="drawerMode"
-              :enabled-loading="drawerEnabledToggling"
-              :on-enabled-persist="persistDrawerEnabled"
-            />
+            <slot name="form" :record="record" :readonly="false" :mode="drawerMode"
+              :enabled-loading="drawerEnabledToggling" :on-enabled-persist="persistDrawerEnabled" />
           </a-tab-pane>
-          <a-tab-pane
-            v-for="tab in extraCreateTabs"
-            :key="tab.key"
-            :tab="tab.tab"
-          >
-            <slot
-              v-if="createFormTab === tab.key"
-              name="create-tab-extra"
-              :tab-key="tab.key"
-            />
+          <a-tab-pane v-for="tab in extraCreateTabs" :key="tab.key" :tab="tab.tab">
+            <slot v-if="createFormTab === tab.key" name="create-tab-extra" :tab-key="tab.key" />
           </a-tab-pane>
           <a-tab-pane key="import" tab="JSON 导入">
-            <resource-json-import
-              :default-record="defaultRecord"
-              bare
-              @import="onJsonImport"
-            />
+            <resource-json-import :default-record="defaultRecord" bare @import="onJsonImport" />
           </a-tab-pane>
         </a-tabs>
-        <slot
-          v-else
-          name="form"
-          :record="record"
-          :readonly="drawerMode === 'view'"
-          :mode="drawerMode"
-          :enabled-loading="drawerEnabledToggling"
-          :on-enabled-persist="persistDrawerEnabled"
-        />
+        <slot v-else name="form" :record="record" :readonly="drawerMode === 'view'" :mode="drawerMode"
+          :enabled-loading="drawerEnabledToggling" :on-enabled-persist="persistDrawerEnabled" />
       </a-form>
       <template v-if="drawerMode === 'view' && detailActions" #view-actions>
         <a-button type="primary" @click="switchToEdit">编辑</a-button>
@@ -225,24 +140,11 @@
       </template>
     </fs-form-drawer>
 
-    <table-batch-bar
-      v-if="batchEnabled"
-      :count="selectedCount"
-      :processing="batchProcessing"
-      :actions="availableActions()"
-      :mode-options="modeOptions"
-      @execute="onBatchExecute"
-      @clear="clearSelection"
-    />
+    <table-batch-bar v-if="batchEnabled" :count="selectedCount" :processing="batchProcessing"
+      :actions="availableActions()" :mode-options="modeOptions" @execute="onBatchExecute" @clear="clearSelection" />
 
-    <batch-edit-drawer
-      v-if="hasBatchEdit"
-      v-model:open="batchEditOpen"
-      :count="selectedCount"
-      :fields="editFields"
-      :loading="batchProcessing"
-      @submit="batchUpdate"
-    />
+    <batch-edit-drawer v-if="hasBatchEdit" v-model:open="batchEditOpen" :count="selectedCount" :fields="editFields"
+      :loading="batchProcessing" @submit="batchUpdate" />
   </div>
 </template>
 
@@ -297,8 +199,9 @@ const props = withDefaults(
       confirmLoading?: boolean;
       loading?: boolean;
     };
+    hideListPagination?: boolean;
   }>(),
-  { duplicatable: false, detailActions: false, embedded: false, showViewJson: true, createLabel: "新增", showCreate: true },
+  { duplicatable: false, detailActions: false, embedded: false, showViewJson: true, createLabel: "新增", showCreate: true, hideListPagination: false },
 );
 
 const emit = defineEmits<{
@@ -884,6 +787,10 @@ watch(
   text-align: right;
   color: var(--fs-text-primary);
   word-break: break-all;
+}
+
+.mobile-field-value .ant-tag:last-child {
+  margin-inline-end: 0px;
 }
 
 .mobile-card-actions {

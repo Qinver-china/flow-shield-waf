@@ -389,7 +389,7 @@ docker compose up -d --build   # 或已部署时：docker compose restart app
 | True-Client-IP | Akamai 等 |
 | X-Real-IP / X-Client-IP | 通用反向代理 |
 
-该设置影响规则中的 `ip.src`、限速键、挑战校验、防护日志与 GeoIP。对于 `X-Real-IP`、`CF-Connecting-IP` 等单值头，引擎还会在站点 Nginx 配置中启用 `real_ip` 模块，使 GeoIP2 与 `$remote_addr` 同步为真实客户端地址。
+该设置影响规则中的 `ip.src`、限速键、挑战校验、防护日志中的客户端 IP 与 GeoIP。防护日志仍会单独记录 **直连 IP**（`tcp_ip`，TCP 连接地址；有 CDN 时即边缘节点），规则可用 `ip.tcp` 匹配。对于 `X-Real-IP`、`CF-Connecting-IP` 等单值头，引擎还会在站点 Nginx 配置中启用 `real_ip` 模块，使 GeoIP2 与 `$remote_addr` 同步为真实客户端地址。
 
 > 请确保流量**仅**从可信 CDN / 代理进入 WAF，避免客户端伪造 IP 头。直连公网暴露时请保持「直连 IP」。
 

@@ -128,17 +128,17 @@ const okText = computed(() => {
 const tableColumns = computed(() => {
   if (props.kind === "sites") {
     return [
-      { title: "站点", dataIndex: "name", key: "name", width: 160 },
-      { title: "域名", key: "domains", ellipsis: true },
-      { title: "回源端口", key: "ports", width: 110, customRender: ({ record }: { record: PreviewItem }) => `${record.origin_http_port}/${record.origin_https_port}` },
-      { title: "证书", key: "ssl", width: 140 },
+      { title: "站点", dataIndex: "name", key: "name", width: 140 },
+      { title: "域名", key: "domains", width: 140},
+      { title: "回源端口", key: "ports", width: 100, customRender: ({ record }: { record: PreviewItem }) => `${record.origin_http_port}/${record.origin_https_port}` },
+      { title: "证书", key: "ssl", width: 120 },
       { title: "状态", key: "status", width: 180 },
     ];
   }
   return [
-    { title: "证书", dataIndex: "name", key: "name", width: 180 },
-    { title: "域名", key: "domains", ellipsis: true },
-    { title: "到期", dataIndex: "not_after", key: "not_after", width: 160 },
+    { title: "证书", dataIndex: "name", key: "name", width: 140 },
+    { title: "域名", key: "domains", width: 140 },
+    { title: "到期时间", dataIndex: "not_after", key: "not_after", width: 120 },
     { title: "状态", key: "status", width: 180 },
   ];
 });

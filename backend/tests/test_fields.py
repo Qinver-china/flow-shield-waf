@@ -110,6 +110,14 @@ def test_field_map_unique():
     assert len(field_map()) == len(FIELDS)
 
 
+def test_tcp_ip_field_in_catalog():
+    fields = field_map()
+    assert fields["ip.tcp"]["label"] == "直连 IP"
+    assert fields["ip.tcp"]["value_type"] == "ip"
+    cond = validate_condition({"field": "ip.tcp", "op": "eq", "value": "203.0.113.10"})
+    assert cond["conditions"][0]["field"] == "ip.tcp"
+
+
 def test_catalog_for_frontend_shape():
     cat = catalog_for_frontend()
     assert "categories" in cat and "operators" in cat

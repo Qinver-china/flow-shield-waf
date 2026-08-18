@@ -43,6 +43,7 @@ export const logStatsDimensionLayout = [
     label: "网络与地理",
     items: [
       { key: "client_ip", label: "客户端 IP", desc: "ip.src" },
+      { key: "tcp_ip", label: "直连 IP", desc: "ip.tcp（TCP 连接地址）" },
       { key: "ip_is_private", label: "IP 是否内网", desc: "ip.src.is_private" },
       { key: "scheme", label: "协议", desc: "net.scheme" },
       { key: "http_version", label: "HTTP 版本", desc: "http.version" },

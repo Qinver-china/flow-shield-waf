@@ -18,6 +18,10 @@ _URI_COLUMNS = (
     ("referer", "String DEFAULT ''"),
 )
 
+_TCP_IP_COLUMNS = (
+    ("tcp_ip", "String DEFAULT ''"),
+)
+
 _HOURLY_MV = "mv_stats_core_hourly_mv"
 
 
@@ -44,6 +48,11 @@ def ensure_clickhouse_columns() -> None:
             )
             log.info("clickhouse column ensured: waf_logs.%s", col)
         for col, col_type in _URI_COLUMNS:
+            client.command(
+                f"ALTER TABLE waf_logs ADD COLUMN IF NOT EXISTS {col} {col_type}"
+            )
+            log.info("clickhouse column ensured: waf_logs.%s", col)
+        for col, col_type in _TCP_IP_COLUMNS:
             client.command(
                 f"ALTER TABLE waf_logs ADD COLUMN IF NOT EXISTS {col} {col_type}"
             )

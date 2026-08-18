@@ -255,3 +255,46 @@ async def test_bootstrap_skips_existing_same_server_account():
     assert status == "skipped"
     assert row is existing
     db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_baota_push_site_cert_calls_set_ssl():
+    captured = {}
+
+    def handler(method, url, **kwargs):
+        captured["url"] = url
+        captured["data"] = kwargs.get("data")
+        return FakeResponse({"status": True, "msg": "证书已保存!"})
+
+    adapter = BaotaAdapter(panel_url="http://127.0.0.1:8888", api_key="secret")
+    with patch("app.services.panels.baota.httpx.AsyncClient", return_value=FakeAsyncClient(handler)):
+        await adapter.push_site_cert("blog.example.com", "CERT", "KEY")
+    assert captured["url"].endswith("/site?action=SetSSL")
+    assert captured["data"]["siteName"] == "blog.example.com"
+    assert captured["data"]["csr"] == "CERT"
+    assert captured["data"]["key"] == "KEY"
+
+
+@pytest.mark.asyncio
+async def test_onepanel_push_site_cert_imports_https():
+    captured = []
+
+    def handler(method, url, **kwargs):
+        captured.append({"method": method, "url": url, "json": kwargs.get("json")})
+        if method == "GET":
+            return FakeResponse({"code": 200, "data": {"httpConfig": "HTTPToHTTPS", "hsts": True}})
+        return FakeResponse({"code": 200, "data": {}})
+
+    adapter = OnePanelAdapter(panel_url="http://panel.example:10086", api_key="panel-key")
+    with patch("app.services.panels.onepanel.httpx.AsyncClient", return_value=FakeAsyncClient(handler)):
+        await adapter.push_site_cert("9", "CERT", "KEY")
+    assert captured[0]["method"] == "GET"
+    assert captured[0]["url"].endswith("/api/v2/websites/9/https")
+    assert captured[1]["method"] == "POST"
+    body = captured[1]["json"]
+    assert body["type"] == "import"
+    assert body["importType"] == "paste"
+    assert body["certificate"] == "CERT"
+    assert body["privateKey"] == "KEY"
+    assert body["httpConfig"] == "HTTPToHTTPS"
+    assert body["hsts"] is True

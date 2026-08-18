@@ -57,6 +57,7 @@ _LOG_COMMON_FILTER_PROPERTIES = {
     "site_id": {"type": "integer", "description": "按站点 ID 过滤"},
     "blocked": {"type": "boolean", "description": "true=仅拦截，false=仅放行"},
     "client_ip": {"type": "string", "description": "客户端 IP"},
+    "tcp_ip": {"type": "string", "description": "直连 IP（TCP 连接地址 / CDN 边缘节点）"},
     "rule_id": {"type": "integer", "description": "规则 ID"},
     "rule_name": {"type": "string", "description": "规则名称子串"},
     "source": {

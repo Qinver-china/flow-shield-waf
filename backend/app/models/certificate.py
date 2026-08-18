@@ -26,3 +26,5 @@ class Certificate(Base, TimestampMixin):
     acme_auto_renew: Mapped[bool] = mapped_column(Boolean, default=False)
     acme_last_attempt_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
     acme_last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    panel_push_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    panel_push_targets: Mapped[list] = mapped_column(JSON, default=list)

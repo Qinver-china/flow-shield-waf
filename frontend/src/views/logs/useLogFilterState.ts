@@ -155,6 +155,7 @@ function createLogFilterState(defaultPreset: TimePreset) {
       "mode",
       "log_type",
       "client_ip",
+      "tcp_ip",
       "rule_id",
       "site_id",
       "bot_name",

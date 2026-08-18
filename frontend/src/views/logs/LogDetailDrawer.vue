@@ -137,6 +137,7 @@ const summaryItems = computed(() => {
     { label: "模式", value: modeLabel[d.mode] || d.mode || "-", tag: true, tagColor: modeColor[d.mode] || "default" },
     { label: "请求域名", value: d.domain || "-" },
     { label: "客户端 IP", value: d.client_ip || "-" },
+    { label: "直连 IP", value: d.tcp_ip || "-" },
     {
       label: "地理位置",
       value:
@@ -194,6 +195,7 @@ const requestItems = computed(() => {
   const request = payload?.request as Record<string, unknown> | undefined;
   return [
     { label: "客户端 IP", value: d.client_ip || client?.ip || "-" },
+    { label: "直连 IP", value: d.tcp_ip || "-" },
     { label: "客户端端口", value: client?.port ?? "-" },
     { label: "协议", value: d.scheme || request?.scheme || "-" },
     { label: "完整 URL", value: buildFullUrl(d) },

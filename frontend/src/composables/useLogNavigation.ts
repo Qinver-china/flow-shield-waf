@@ -9,6 +9,7 @@ export interface LogNavQuery {
   source?: string;
   log_type?: string;
   client_ip?: string;
+  tcp_ip?: string;
   rule_id?: number;
   site_id?: number;
   bot_name?: string;
@@ -28,6 +29,7 @@ function toQueryString(filters: LogNavQuery): Record<string, string> {
   if (filters.source) query.source = filters.source;
   if (filters.log_type) query.log_type = filters.log_type;
   if (filters.client_ip) query.client_ip = filters.client_ip;
+  if (filters.tcp_ip) query.tcp_ip = filters.tcp_ip;
   if (filters.rule_id) query.rule_id = String(filters.rule_id);
   if (filters.site_id) query.site_id = String(filters.site_id);
   if (filters.bot_name) query.bot_name = filters.bot_name;

@@ -711,6 +711,7 @@ const logFilterFieldRegistry: Record<string, LogFilterFieldDef> = {
   action: { key: "action", label: "动作", type: "text", placeholder: "action" },
   keyword: { key: "keyword", label: "关键字", type: "text", placeholder: "URL / UA / 域名模糊搜索" },
   client_ip: { key: "client_ip", label: "客户端 IP", type: "text", placeholder: "精确匹配" },
+  tcp_ip: { key: "tcp_ip", label: "直连 IP", type: "text", placeholder: "精确匹配" },
   ip_is_private: { key: "ip_is_private", label: "IP 是否内网", type: "bool" },
   scheme: { key: "scheme", label: "协议", type: "select", options: schemeOptions },
   http_version: { key: "http_version", label: "HTTP 版本", type: "select", options: httpVersionOptions },
@@ -809,6 +810,7 @@ export const logDetailQuickFilterKeys = [
   "blocked",
   "site_id",
   "client_ip",
+  "tcp_ip",
   "rule_id",
   "keyword",
 ] as const;
@@ -883,6 +885,7 @@ export type LogDetailFilters = {
   rule_name: string;
   action: string;
   client_ip: string;
+  tcp_ip: string;
   ip_is_private?: boolean;
   xff_first: string;
   geo_country?: string;
@@ -929,6 +932,7 @@ export function createDefaultLogFilters(): LogDetailFilters {
     rule_name: "",
     action: "",
     client_ip: "",
+    tcp_ip: "",
     ip_is_private: undefined,
     xff_first: "",
     geo_country: undefined,
@@ -1001,6 +1005,7 @@ export function buildLogQueryParams(
     rule_name: filters.rule_name || undefined,
     action: filters.action || undefined,
     client_ip: filters.client_ip || undefined,
+    tcp_ip: filters.tcp_ip || undefined,
     xff_first: filters.xff_first || undefined,
     geo_region: filters.geo_region || undefined,
     geo_city: filters.geo_city || undefined,
@@ -1111,6 +1116,7 @@ const STATS_DIM_FILTER: Partial<Record<StatsDimension, { field: string; operator
   log_type: { field: "log_type" },
   site_id: { field: "site_id" },
   client_ip: { field: "client_ip" },
+  tcp_ip: { field: "tcp_ip" },
   ip_is_private: { field: "ip_is_private" },
   xff_first: { field: "xff_first" },
   geo_country: { field: "geo_country" },
@@ -1307,6 +1313,9 @@ export function applyStatsDrillDownToFilters(
     }
     case "client_ip":
       filters.client_ip = key;
+      break;
+    case "tcp_ip":
+      filters.tcp_ip = key;
       break;
     case "source":
       filters.source = key;

@@ -85,4 +85,20 @@
 | GET | `/panel-connections/{id}/certificates` | 预览可导入证书（不含私钥） |
 | POST | `/panel-connections/{id}/certificates/import` | 按 key 批量导入证书 |
 
-`provider` 为 `baota` 或 `onepanel`。同服务器账号导入时回源默认 `host.docker.internal`，80/443 纠正为 8080/4343。
+`provider` 为 `baota` 或 `onepanel`。同服务器账号导入时回源默认 `host.docker.internal`，80/443 纠正为 8080/4343。`GET /panel-connections/{id}/sites?purpose=sync` 用于证书续期推送选站：不把「域名已在流盾」标成不可选。
+
+## 证书 `/certificates`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/certificates` | 列表（分页） |
+| POST | `/certificates` | 粘贴 PEM 新建 |
+| POST | `/certificates/upload` | 上传证书/私钥文件 |
+| GET | `/certificates/{id}` | 详情（含 PEM） |
+| PUT | `/certificates/{id}` | 更新 |
+| DELETE | `/certificates/{id}` | 删除（被站点引用时拒绝） |
+| POST | `/certificates/acme/issue` | 申请免费证书 |
+| POST | `/certificates/acme/issue/stream` | 同上，SSE 进度 |
+| POST | `/certificates/{id}/sync-to-panels` | 将当前 PEM 推送到已配置的宝塔 / 1Panel 站点 |
+
+自动续期可附带 `panel_push_enabled` 与 `panel_push_targets`（`[{ "connection_id": 1, "site_keys": ["..."] }]`）。续期成功后后台会按该配置推送，并把同步结果写进同一封续期通知（未开启推送时通知内容不变）。`sync-to-panels` 的 body 可带 `targets` 覆盖已存配置以便测试。申请接口未提交这两个字段时，覆盖已有证书会保留原推送配置。

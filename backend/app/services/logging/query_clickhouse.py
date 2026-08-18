@@ -136,7 +136,7 @@ TREND_GRANULARITIES = {
 }
 
 STATS_DIMENSIONS = frozenset({
-    "rule_id", "client_ip", "source", "mode", "site_id", "domain", "geo_country",
+    "rule_id", "client_ip", "tcp_ip", "source", "mode", "site_id", "domain", "geo_country",
     "method", "blocked", "log_type", "ip_is_private", "xff_first", "geo_region",
     "geo_city", "geo_isp", "geo_asn", "scheme", "http_version",
     "uri_path", "uri_ext", "uri_depth", "uri_pattern", "request_uri", "uri_query",
@@ -150,6 +150,7 @@ STATS_DIMENSIONS = frozenset({
 _DIM_COLUMN = {
     "rule_id": "rule_id",
     "client_ip": "client_ip",
+    "tcp_ip": "tcp_ip",
     "source": "source",
     "mode": "mode",
     "site_id": "site_id",
@@ -372,7 +373,7 @@ def _count_dimension_groups(client, dimension: str, where: str, params: dict) ->
 
 
 _FILTER_FIELDS = frozenset({
-    "log_type", "source", "site_id", "client_ip", "rule_id", "rule_name", "action", "mode",
+    "log_type", "source", "site_id", "client_ip", "tcp_ip", "rule_id", "rule_name", "action", "mode",
     "blocked", "domain", "geo_country", "geo_region", "geo_city", "geo_isp",
     "geo_asn", "method", "scheme", "http_version", "uri_path", "uri_ext", "uri_depth",
     "uri_pattern", "request_uri", "uri_query", "full_url", "query_count_bucket", "referer_host",
@@ -644,6 +645,9 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
     if q.client_ip:
         parts.append(f"{_col('client_ip')} = {{client_ip:String}}")
         params["client_ip"] = q.client_ip
+    if q.tcp_ip:
+        parts.append(f"{_col('tcp_ip')} = {{tcp_ip:String}}")
+        params["tcp_ip"] = q.tcp_ip
     if q.rule_id is not None:
         parts.append(f"{_col('rule_id')} = {{rule_id:UInt32}}")
         params["rule_id"] = q.rule_id

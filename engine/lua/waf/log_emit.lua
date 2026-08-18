@@ -42,6 +42,7 @@ function _M.build_tier_a(ctx, meta, mode, blocked, trace, ext, captured)
         site_id = ctx.site_id,
         domain = ctx.domain,
         client_ip = summary.client_ip,
+        tcp_ip = summary.tcp_ip,
         method = ngx.req.get_method(),
         request_uri = uri_parse.request_uri(),
         uri_path = path,

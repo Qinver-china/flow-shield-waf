@@ -37,6 +37,7 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_rule_remark(conn)
     await _ensure_certificate_expiry_notify(conn)
     await _ensure_certificate_acme_columns(conn)
+    await _ensure_certificate_panel_push_columns(conn)
     await _ensure_waf_setting_acme_account_email(conn)
     await _upgrade_default_response_page_brand_links(conn)
 
@@ -344,6 +345,31 @@ async def _ensure_certificate_acme_columns(conn) -> None:
             text("ALTER TABLE certificate ADD COLUMN acme_last_error VARCHAR(512) NULL")
         )
         log.info("schema patch applied: certificate.acme_last_error")
+
+
+async def _ensure_certificate_panel_push_columns(conn) -> None:
+    """Add auto-renew panel push columns used to deploy certs to BaoTa / 1Panel."""
+    if not await _column_exists(conn, "certificate", "panel_push_enabled"):
+        await conn.execute(
+            text(
+                "ALTER TABLE certificate "
+                "ADD COLUMN panel_push_enabled BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        log.info("schema patch applied: certificate.panel_push_enabled")
+    if not await _column_exists(conn, "certificate", "panel_push_targets"):
+        await conn.execute(
+            text("ALTER TABLE certificate ADD COLUMN panel_push_targets JSON")
+        )
+        log.info("schema patch applied: certificate.panel_push_targets")
+    await conn.execute(
+        text(
+            "UPDATE certificate "
+            "SET panel_push_targets = json_array() "
+            "WHERE panel_push_targets IS NULL OR panel_push_targets = '' "
+            "OR panel_push_targets = 'null'"
+        )
+    )
 
 
 async def _ensure_waf_setting_acme_account_email(conn) -> None:

@@ -18,6 +18,22 @@
       ]
     },
     {
+      "key": "ip.tcp",
+      "label": "直连 IP",
+      "category": "网络与地理",
+      "value_type": "ip",
+      "requires_arg": false,
+      "operators": [
+        "eq",
+        "in_cidr",
+        "in_list",
+        "in_ip_group",
+        "not_in_ip_group",
+        "geo_in",
+        "exists"
+      ]
+    },
+    {
       "key": "ip.src.is_private",
       "label": "IP 是否内网",
       "category": "网络与地理",
