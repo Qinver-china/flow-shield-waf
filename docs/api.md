@@ -101,4 +101,4 @@
 | POST | `/certificates/acme/issue/stream` | 同上，SSE 进度 |
 | POST | `/certificates/{id}/sync-to-panels` | 将当前 PEM 推送到已配置的宝塔 / 1Panel 站点 |
 
-自动续期可附带 `panel_push_enabled` 与 `panel_push_targets`（`[{ "connection_id": 1, "site_keys": ["..."] }]`）。续期成功后后台会按该配置推送，并把同步结果写进同一封续期通知（未开启推送时通知内容不变）。`sync-to-panels` 的 body 可带 `targets` 覆盖已存配置以便测试。申请接口未提交这两个字段时，覆盖已有证书会保留原推送配置。
+自动续期可附带 `panel_push_enabled` 与 `panel_push_targets`（`[{ "connection_id": 1, "site_keys": ["..."] }]`）。续期成功后后台会按该配置推送，并把同步结果写进同一封续期通知（未开启推送时通知内容不变）。`sync-to-panels` 的 body 可带 `targets` 覆盖已存配置以便测试。申请接口未提交这两个字段时，覆盖已有证书会保留原推送配置。推送到宝塔后会调用 `CloseToHttps` 关闭面板默认打开的强制 HTTPS；1Panel 使用 `HTTPAlso`，不会打开 `HTTPToHTTPS`。

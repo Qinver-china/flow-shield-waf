@@ -214,6 +214,9 @@ class OnePanelAdapter:
     async def push_site_cert(self, site_key: str, cert_pem: str, key_pem: str) -> None:
         """Deploy a PEM pair onto a 1Panel website HTTPS config.
 
+        Force HTTP→HTTPS (``HTTPToHTTPS``) is not enabled: 1Panel GET defaults
+        that value when unset, and the origin behind WAF should keep HTTP.
+
         Args:
             site_key: 1Panel website id as a string.
             cert_pem: Certificate chain in PEM format.
@@ -234,6 +237,8 @@ class OnePanelAdapter:
         except PanelError:
             https = {}
         http_config = str(https.get("httpConfig") or https.get("HttpConfig") or "").strip()
+        if http_config != "HTTPSOnly":
+            http_config = "HTTPAlso"
         ssl_protocol = https.get("SSLProtocol") or https.get("sslProtocol")
         if not isinstance(ssl_protocol, list) or not ssl_protocol:
             ssl_protocol = ["TLSv1.2", "TLSv1.3"]
@@ -250,7 +255,7 @@ class OnePanelAdapter:
                 "importType": "paste",
                 "privateKey": key_pem,
                 "certificate": cert_pem,
-                "httpConfig": http_config or "HTTPAlso",
+                "httpConfig": http_config,
                 "SSLProtocol": ssl_protocol,
                 "algorithm": algorithm,
                 "hsts": hsts,

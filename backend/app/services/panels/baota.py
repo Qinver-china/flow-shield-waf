@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -10,6 +11,8 @@ import httpx
 
 from app.services.panels.mapping import should_skip_site_name
 from app.services.panels.types import PanelError, PemPair, RawPanelCert, RawPanelSite
+
+log = logging.getLogger("waf.panels.baota")
 
 _DEFAULT_API_IPS = ("127.0.0.1", "172.17.0.1")
 
@@ -248,6 +251,9 @@ class BaotaAdapter:
     async def push_site_cert(self, site_key: str, cert_pem: str, key_pem: str) -> None:
         """Deploy a PEM pair onto a BaoTa website via SetSSL.
 
+        BaoTa 11.x turns on HTTP→HTTPS redirect after SetSSL; that is a
+        separate ``HttpToHttps`` feature and is closed here with ``CloseToHttps``.
+
         Args:
             site_key: BaoTa site name (``RawPanelSite.key``).
             cert_pem: Certificate chain in PEM format.
@@ -260,6 +266,10 @@ class BaotaAdapter:
             "/site?action=SetSSL",
             {"siteName": site_key, "key": key_pem, "csr": cert_pem},
         )
+        try:
+            await self._post("/site?action=CloseToHttps", {"siteName": site_key})
+        except PanelError as exc:
+            log.warning("baota CloseToHttps failed site=%s: %s", site_key, exc)
 
 
 def _extract_rows(payload: Any) -> list[dict[str, Any]]:
