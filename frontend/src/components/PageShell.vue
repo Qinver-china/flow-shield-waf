@@ -16,10 +16,21 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { onActivated, onBeforeUnmount, watch } from "vue";
+import { clearPageTitleOverride, setPageTitleOverride } from "@/composables/usePageTitle";
+
+const props = defineProps<{
   title: string;
   description?: string;
 }>();
+
+function syncTitle() {
+  setPageTitleOverride(props.title);
+}
+
+watch(() => props.title, syncTitle, { immediate: true });
+onActivated(syncTitle);
+onBeforeUnmount(clearPageTitleOverride);
 </script>
 
 <style scoped>

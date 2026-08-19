@@ -46,6 +46,24 @@ def test_where_clause_supports_extended_filters():
     assert params["geo_asn"] == 13335
 
 
+def test_where_clause_json_request_id_filter():
+    start = datetime(2026, 1, 1, 0, 0, 0)
+    end = datetime(2026, 1, 2, 0, 0, 0)
+    q = LogQuery(filters='[{"field":"request_id","op":"eq","value":"abc123def"}]')
+    where, params = _where_clause(q, start, end)
+    assert "waf_logs.request_id = {f_request_id_0:String}" in where
+    assert params["f_request_id_0"] == "abc123def"
+
+
+def test_where_clause_keyword_includes_request_id():
+    start = datetime(2026, 1, 1, 0, 0, 0)
+    end = datetime(2026, 1, 2, 0, 0, 0)
+    q = LogQuery(keyword="abc123def")
+    where, params = _where_clause(q, start, end)
+    assert "waf_logs.request_id" in where
+    assert params["kw"] == "abc123def"
+
+
 def test_clickhouse_row_includes_tcp_ip():
     from app.services.logging.clickhouse_store import _COLUMNS, _row_from_enriched
 

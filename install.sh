@@ -7,7 +7,7 @@
 # 官网：https://fswaf.top
 set -euo pipefail
 
-FSWAF_VERSION="1.0.6"
+FSWAF_VERSION="1.0.7"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.top"
@@ -2167,17 +2167,11 @@ prune_docker_build_artifacts() {
   local out
   info "清理多余的构建缓存与悬空镜像..."
   if out="$(run_docker builder prune -f 2>&1)"; then
-    if [[ -n "$out" ]]; then
-      echo "$out" | sed 's/^/  /'
-    fi
     ok "构建缓存已清理"
   else
     warn "构建缓存清理失败（可稍后手动执行：docker builder prune -f）"
   fi
   if out="$(run_docker image prune -f 2>&1)"; then
-    if [[ -n "$out" ]]; then
-      echo "$out" | sed 's/^/  /'
-    fi
     ok "悬空镜像已清理"
   else
     warn "悬空镜像清理失败（可稍后手动执行：docker image prune -f）"
@@ -2572,8 +2566,9 @@ run_update() {
   [[ -f .env ]] || die "未找到 .env，无法更新。若需重装请先处理旧容器后重新安装。"
 
   info "更新模式：$(pwd)"
+  rm -f .env.bak.*
   cp .env ".env.bak.$(date +%Y%m%d%H%M%S)"
-  ok "已备份 .env"
+  ok "已备份 .env（仅保留本次一份）"
 
   if [[ -d .git ]]; then
     git_pull_with_mirror_fallback || true
@@ -2591,7 +2586,7 @@ run_update() {
   sync_jwt_refresh_ttl
   build_and_start
   wait_healthy
-  bootstrap_host_panels || warn "检测本机面板失败（不影响安装）"
+  bootstrap_host_panels
   write_meta
   print_success update
 }
@@ -2614,7 +2609,7 @@ run_install() {
   write_meta
   build_and_start
   wait_healthy
-  bootstrap_host_panels || warn "检测本机面板失败（不影响安装）"
+  bootstrap_host_panels
   print_success install
 }
 

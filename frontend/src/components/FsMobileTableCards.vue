@@ -208,8 +208,9 @@ function showTotal(total: number) {
   text-align: right;
 }
 
-.mobile-field-value .ant-tag:last-child {
+.mobile-field-value .ant-tag{
   margin-inline-end: 0px;
+  margin-inline-start: 6px;
 }
 
 .mobile-card-actions {

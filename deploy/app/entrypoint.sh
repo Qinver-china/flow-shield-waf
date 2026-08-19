@@ -6,8 +6,15 @@ source /opt/flowshield/startup-log.sh
 startup_init
 startup_header
 
-mkdir -p /data/engine/conf.d /data/engine/certs /data/acme/http-01 /var/log/supervisor /etc/flowshield /etc/nginx/geoip /run/flowshield
+mkdir -p /data/engine/conf.d /data/engine/certs /data/acme/http-01 /var/log/supervisor /etc/flowshield /etc/nginx/geoip /etc/nginx/snippets /run/flowshield
 rm -f /run/flowshield/backend.sock
+
+if [ ! -s /etc/nginx/snippets/client-max-body.conf ]; then
+  printf '%s\n' 'client_max_body_size 50m;' >/etc/nginx/snippets/client-max-body.conf
+fi
+if [ ! -s /etc/nginx/snippets/origin-timeout.conf ]; then
+  printf '%s\n' 'proxy_read_timeout 60s;' 'proxy_send_timeout 60s;' >/etc/nginx/snippets/origin-timeout.conf
+fi
 
 startup_step "1/5" "初始化运行环境"
 

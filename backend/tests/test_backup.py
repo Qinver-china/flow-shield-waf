@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from app.services.backup import (
     FORMAT_NAME,
     _apply_certificate_acme_fields,
+    _apply_engine_backup_fields,
     _certificate_domains,
     _finalize_certificate_panel_push,
     _normalize_sections,
@@ -122,3 +123,22 @@ def test_finalize_certificate_panel_push_disables_when_unmapped():
     )
     assert cert.panel_push_enabled is False
     assert cert.panel_push_targets == []
+
+
+def test_apply_engine_backup_fields_clamps_and_skips_missing():
+    waf = SimpleNamespace(max_upload_size_mb=50, origin_read_timeout_sec=60)
+    _apply_engine_backup_fields(
+        waf,
+        {"max_upload_size_mb": 128, "origin_read_timeout_sec": 180},
+    )
+    assert waf.max_upload_size_mb == 128
+    assert waf.origin_read_timeout_sec == 180
+
+    _apply_engine_backup_fields(waf, {"max_upload_size_mb": 9999, "origin_read_timeout_sec": 1})
+    assert waf.max_upload_size_mb == 2048
+    assert waf.origin_read_timeout_sec == 5
+
+    kept = SimpleNamespace(max_upload_size_mb=256, origin_read_timeout_sec=90)
+    _apply_engine_backup_fields(kept, {"timezone": "Asia/Shanghai"})
+    assert kept.max_upload_size_mb == 256
+    assert kept.origin_read_timeout_sec == 90

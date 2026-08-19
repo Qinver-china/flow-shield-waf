@@ -10,7 +10,7 @@
       type="button"
       class="dimension-picker-trigger"
       :class="{ 'dimension-picker-trigger--card': triggerVariant === 'card' }"
-      :title="selectedLabel"
+      :title="selectedHint"
     >
       <template v-if="triggerVariant === 'card'">
         <span class="dimension-card-label">{{ label }}</span>
@@ -72,6 +72,10 @@ const open = ref(false);
 
 const selectedLabel = computed(
   () => statsDimensions.find((item) => item.key === props.modelValue)?.label || "选择维度",
+);
+
+const selectedHint = computed(
+  () => statsDimensions.find((item) => item.key === props.modelValue)?.desc,
 );
 
 function selectDimension(key: StatsDimension) {

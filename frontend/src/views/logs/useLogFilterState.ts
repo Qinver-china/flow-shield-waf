@@ -163,6 +163,7 @@ function createLogFilterState(defaultPreset: TimePreset) {
       "geo_country",
       "method",
       "keyword",
+      "request_id",
     ] as const;
 
     for (const key of detailKeys) {

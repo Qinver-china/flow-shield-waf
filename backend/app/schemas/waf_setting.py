@@ -12,6 +12,14 @@ from app.constants.display_settings import (
     DEFAULT_TIMEZONE,
     TIMEZONE_OPTIONS,
 )
+from app.constants.engine_settings import (
+    DEFAULT_MAX_UPLOAD_SIZE_MB,
+    DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
+    MAX_MAX_UPLOAD_SIZE_MB,
+    MAX_ORIGIN_READ_TIMEOUT_SEC,
+    MIN_MAX_UPLOAD_SIZE_MB,
+    MIN_ORIGIN_READ_TIMEOUT_SEC,
+)
 
 
 class FingerprintDimensionOption(BaseModel):
@@ -76,6 +84,23 @@ class ChallengeSettingsOut(ChallengeSettings):
             captcha_ttl=row.captcha_ttl,
             clearance_fingerprint_dims=dims,
         )
+
+
+class EngineSettings(BaseModel):
+    max_upload_size_mb: int = Field(
+        default=DEFAULT_MAX_UPLOAD_SIZE_MB,
+        ge=MIN_MAX_UPLOAD_SIZE_MB,
+        le=MAX_MAX_UPLOAD_SIZE_MB,
+    )
+    origin_read_timeout_sec: int = Field(
+        default=DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
+        ge=MIN_ORIGIN_READ_TIMEOUT_SEC,
+        le=MAX_ORIGIN_READ_TIMEOUT_SEC,
+    )
+
+
+class EngineSettingsOut(EngineSettings):
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DebugSettings(BaseModel):

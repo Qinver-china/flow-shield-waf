@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -17,6 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.constants.engine_settings import (
+    DEFAULT_MAX_UPLOAD_SIZE_MB,
+    DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
+)
 from app.core.redis import get_redis
 from app.constants.client_ip import REAL_IP_HEADER_BY_SOURCE
 from app.models import Site
@@ -39,6 +44,49 @@ ENGINE_RELOAD_CMD = (
     "-c",
     ENGINE_NGINX_CONF,
 )
+
+
+def render_client_max_body_size(mb: int) -> str:
+    """Render the http-level Nginx snippet for the configured upload cap."""
+    size = int(mb) if mb else DEFAULT_MAX_UPLOAD_SIZE_MB
+    return f"client_max_body_size {size}m;\n"
+
+
+def _write_text_atomic(path: str, content: str) -> None:
+    """Replace ``path`` via a same-directory temp file so reload never reads a truncated snippet."""
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".waf-snippet.", suffix=".tmp", dir=directory or None)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def apply_client_max_body_size(mb: int) -> None:
+    """Write client_max_body_size so OpenResty picks it up on the next reload."""
+    _write_text_atomic(settings.engine_client_max_body_conf, render_client_max_body_size(mb))
+
+
+def render_origin_read_timeout(sec: int) -> str:
+    """Render http-level origin proxy timeouts (read + send)."""
+    timeout = int(sec) if sec else DEFAULT_ORIGIN_READ_TIMEOUT_SEC
+    return (
+        f"proxy_read_timeout {timeout}s;\n"
+        f"proxy_send_timeout {timeout}s;\n"
+    )
+
+
+def apply_origin_read_timeout(sec: int) -> None:
+    """Write origin proxy timeouts so OpenResty picks them up on the next reload."""
+    _write_text_atomic(settings.engine_origin_timeout_conf, render_origin_read_timeout(sec))
 
 
 @dataclass(frozen=True)
@@ -118,6 +166,7 @@ server {{
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $waf_connection_upgrade;
+        proxy_set_header X-WAF-Request-Id $waf_request_id;
 {proxy_buffering_line}        proxy_pass {upstream};
     }}
 }}
@@ -322,6 +371,24 @@ async def regenerate(db: AsyncSession) -> EngineReloadResult:
     conf_dir = settings.engine_conf_dir
     os.makedirs(conf_dir, exist_ok=True)
 
+    from app.services import waf_settings as waf_settings_svc
+
+    row = await waf_settings_svc.get_or_create(db)
+    snippet_error: str | None = None
+    try:
+        apply_client_max_body_size(
+            int(getattr(row, "max_upload_size_mb", None) or DEFAULT_MAX_UPLOAD_SIZE_MB)
+        )
+        apply_origin_read_timeout(
+            int(
+                getattr(row, "origin_read_timeout_sec", None)
+                or DEFAULT_ORIGIN_READ_TIMEOUT_SEC
+            )
+        )
+    except OSError as exc:
+        snippet_error = str(exc).strip() or exc.__class__.__name__
+        log.error("failed to write engine http snippets: %s", exc)
+
     sites = (
         await db.execute(
             select(Site).options(selectinload(Site.certificate))
@@ -347,6 +414,17 @@ async def regenerate(db: AsyncSession) -> EngineReloadResult:
                 os.remove(os.path.join(conf_dir, fname))
             except OSError:
                 pass
+
+    if snippet_error:
+        result = EngineReloadResult(ok=False, reason="engine", detail=snippet_error)
+        log.info(
+            "regenerated %d site confs (reload_ok=%s reason=%s detail=%s)",
+            len(wanted),
+            result.ok,
+            result.reason,
+            (result.detail or "")[:200],
+        )
+        return result
 
     result = await trigger_reload()
     log.info(

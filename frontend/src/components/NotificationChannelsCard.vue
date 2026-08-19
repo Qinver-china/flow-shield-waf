@@ -1,7 +1,7 @@
 <template>
-  <a-card title="通知通道" style="margin-top: 16px">
-    <template #extra>
-      <a-button type="primary" size="small" @click="openCreate">增加通知通道</a-button>
+  <component :is="embedded ? 'div' : 'a-card'" v-bind="cardProps">
+    <template v-if="!embedded" #extra>
+      <a-button type="primary" @click="openCreate">添加通知通道</a-button>
     </template>
 
     <fs-data-table
@@ -126,7 +126,7 @@
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item label="发件人邮箱" required>
-                <a-input v-model:value="form.config.from_address" />
+                <a-input v-model:value="form.config.from_address" type="email" inputmode="email" autocomplete="email" />
               </a-form-item>
             </a-col>
             <a-col :span="12">
@@ -152,11 +152,11 @@
         </fs-form-section>
       </a-form>
     </fs-form-drawer>
-  </a-card>
+  </component>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { message } from "ant-design-vue";
 import { api } from "@/api";
 import FsDataTable from "@/components/FsDataTable.vue";
@@ -165,6 +165,19 @@ import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import { commonBatchEditFields } from "@/constants/batch";
 import type { BatchConfig } from "@/types/batch";
+
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean;
+  }>(),
+  { embedded: false },
+);
+
+const cardProps = computed(() =>
+  props.embedded
+    ? { class: "notification-channels-embedded" }
+    : { title: "通知通道", style: "margin-top: 16px" },
+);
 
 interface ChannelType {
   value: string;
@@ -349,6 +362,8 @@ async function testChannel(id: number) {
 }
 
 onMounted(load);
+
+defineExpose({ openCreate });
 </script>
 
 <style scoped>

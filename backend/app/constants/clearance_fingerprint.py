@@ -45,4 +45,4 @@ ALLOWED_FINGERPRINT_DIMS = frozenset(
     opt["key"] for opt in FINGERPRINT_DIMENSION_OPTIONS
 )
 
-DEFAULT_CLEARANCE_FINGERPRINT_DIMS: list[str] = ["ip", "ua"]
+DEFAULT_CLEARANCE_FINGERPRINT_DIMS: list[str] = ["ip"]

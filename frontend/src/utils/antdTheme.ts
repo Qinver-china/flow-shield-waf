@@ -70,6 +70,9 @@ export function buildAntdTheme(isDark: boolean): ThemeConfig {
       Drawer: {
         colorBgElevated: v("--fs-bg-modal"),
       },
+      Segmented: {
+        trackBg: v("--fs-segmented-bg"),
+      },
       Menu: {
         darkItemBg: v("--fs-bg-sidebar"),
         darkSubMenuItemBg: v("--fs-bg-sidebar"),

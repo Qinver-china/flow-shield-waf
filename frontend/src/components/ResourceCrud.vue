@@ -15,7 +15,8 @@
     <slot v-if="$slots.list" name="list" :rows="rows" :loading="loading" :open-view="openView" :open-edit="openEdit"
       :open-duplicate="openDuplicate" :remove="remove" :toggle-enabled="toggleEnabled" :toggling-id="togglingId"
       :allow-delete="allowDelete" :name-actions="nameActions" :duplicatable="duplicatable" :pagination="pagination"
-      :on-table-change="onTableChange" :sort-field="sortField" :sort-order="sortOrder" :on-refresh="refreshListAndNotify" />
+      :on-table-change="onTableChange" :sort-field="sortField" :sort-order="sortOrder"
+      :on-refresh="refreshListAndNotify" />
 
     <a-table v-else-if="!isMobile" :columns="tableColumns" :data-source="rows" :loading="loading"
       :pagination="pagination" :row-selection="rowSelection" row-key="id" size="middle" bordered
@@ -792,8 +793,9 @@ watch(
   word-break: break-all;
 }
 
-.mobile-field-value .ant-tag:last-child {
+.mobile-field-value .ant-tag {
   margin-inline-end: 0px;
+  margin-inline-start: 6px;
 }
 
 .mobile-card-actions {

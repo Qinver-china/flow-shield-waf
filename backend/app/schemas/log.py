@@ -71,6 +71,7 @@ class LogQuery(BaseModel):
     hour_of_day: int | None = None
     weekday: int | None = None
     keyword: str | None = None
+    request_id: str | None = None
     filters: str | None = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)

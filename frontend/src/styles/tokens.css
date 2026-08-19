@@ -28,11 +28,13 @@
 
   --fs-text-primary: #2e353f;
   --fs-text-secondary: #475569;
-  --fs-text-muted: #94a3b8;
+  --fs-text-muted: #8593a7;
   --fs-text-inverse: #f8fafc;
 
   --fs-border: #a4b1b73b;
   --fs-border-strong: #cbd5e1;
+
+  --fs-segmented-bg: #d5dce4;
 
   --fs-radius-sm: 8px;
   --fs-radius-md: 12px;
@@ -86,6 +88,8 @@
 
   --fs-border: #33415560;
   --fs-border-strong: #475569;
+
+  --fs-segmented-bg: #0d1421;
 
   --fs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --fs-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);

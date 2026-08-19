@@ -18,6 +18,10 @@ from app.constants.logging_settings import (
     DEFAULT_OBSERVE_SAMPLE_RATE_IDLE,
 )
 from app.constants.display_settings import DEFAULT_TIMEZONE
+from app.constants.engine_settings import (
+    DEFAULT_MAX_UPLOAD_SIZE_MB,
+    DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
+)
 from app.constants.response_pages import (
     DEFAULT_BLOCK_PAGE_HTML,
     DEFAULT_BLOCK_PAGE_STATUS,
@@ -114,6 +118,8 @@ async def get_or_create(db: AsyncSession) -> WafSetting:
             block_page_html=DEFAULT_BLOCK_PAGE_HTML,
             captcha_footer_html=DEFAULT_CAPTCHA_FOOTER_HTML,
             timezone=DEFAULT_TIMEZONE,
+            max_upload_size_mb=DEFAULT_MAX_UPLOAD_SIZE_MB,
+            origin_read_timeout_sec=DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
         )
         db.add(row)
         await db.commit()
@@ -225,4 +231,10 @@ async def get_runtime_settings(db: AsyncSession) -> dict:
         "captcha_footer": {
             "html": row.captcha_footer_html or DEFAULT_CAPTCHA_FOOTER_HTML,
         },
+        "max_upload_size_mb": int(
+            row.max_upload_size_mb or DEFAULT_MAX_UPLOAD_SIZE_MB
+        ),
+        "origin_read_timeout_sec": int(
+            row.origin_read_timeout_sec or DEFAULT_ORIGIN_READ_TIMEOUT_SEC
+        ),
     }

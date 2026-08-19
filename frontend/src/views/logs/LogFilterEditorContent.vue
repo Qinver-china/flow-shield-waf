@@ -109,14 +109,7 @@
           @update:value="setStringValue(condition, $event)"
         />
       </div>
-      <a-button
-        type="text"
-        danger
-        class="remove-btn"
-        @click="filterState.removeDraftCondition(condition.id)"
-      >
-        <delete-outlined />
-      </a-button>
+      <a-button danger class="remove-btn" type="text" @click="filterState.removeDraftCondition(condition.id)" :icon="h(DeleteOutlined)"></a-button>
     </div>
 
     <a-button type="link" class="add-and-btn" @click="filterState.addDraftCondition()">
@@ -131,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import { h } from "vue";
 import { DeleteOutlined } from "@ant-design/icons-vue";
 import SiteSingleSelect from "@/components/SiteSingleSelect.vue";
 import LogFilterFieldPicker from "./LogFilterFieldPicker.vue";

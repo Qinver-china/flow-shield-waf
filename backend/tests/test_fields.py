@@ -124,6 +124,15 @@ def test_catalog_for_frontend_shape():
     assert all("fields" in c for c in cat["categories"])
 
 
+def test_catalog_field_hints():
+    cat = catalog_for_frontend()
+    fields = {f["key"]: f for c in cat["categories"] for f in c["fields"]}
+    assert fields["ip.tcp"]["hint"] == "TCP 连接对端 IP"
+    assert fields["http.method"].get("hint") is None
+    assert fields["traffic.global"]["hint"] == "全站滑动窗口请求量"
+    assert fields["system.cpu"]["hint"] == "容器或宿主机 CPU 使用率"
+
+
 def test_enum_fields_expose_options():
     cat = catalog_for_frontend()
     fields = {f["key"]: f for c in cat["categories"] for f in c["fields"]}

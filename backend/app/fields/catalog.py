@@ -169,13 +169,46 @@ OPERATORS: dict[str, str] = {
 }
 
 
+# Brief UI tooltips for fields whose labels alone are ambiguous.
+FIELD_HINTS: dict[str, str] = {
+    "ip.tcp": "TCP 连接对端 IP",
+    "ip.src.is_private": "是否为 RFC 私网地址",
+    "net.dst_port": "本机监听端口",
+    "geo.asn": "自治系统编号",
+    "http.url": "含协议、域名、路径与参数",
+    "http.request_uri": "请求行中的路径与查询串",
+    "http.uri.segment": "指定层级的路径片段，需填段号",
+    "http.uri.depth": "URL 路径的层级数",
+    "http.uri.query": "问号后的原始查询串",
+    "http.query": "按查询参数名取值",
+    "http.header": "按请求头名称取值",
+    "http.xff": "代理转发链中的 IP 列表",
+    "http.cookie": "按 Cookie 键取值",
+    "http.cookie_raw": "完整 Cookie 头原文",
+    "http.body.form": "按表单字段名取值",
+    "http.body.json": "按 JSON 字段路径取值",
+    "tls.cipher": "TLS 握手选用的加密算法",
+    "tls.sni": "TLS 握手声明的目标域名",
+    "tls.ja3": "TLS 客户端指纹",
+    "derived.args_count": "查询参数与表单字段总数",
+    "derived.fingerprint": "请求特征哈希，用于识别相似请求",
+    "bot.is_known": "是否命中自建 Bot 库",
+    "ua.family": "识别为浏览器或 Bot",
+    "traffic.global": "全站滑动窗口请求量",
+    "traffic.site": "当前站点滑动窗口请求量",
+    "traffic.origin_global": "全站滑动窗口回源请求量",
+    "traffic.origin_site": "当前站点滑动窗口回源请求量",
+    "system.cpu": "容器或宿主机 CPU 使用率",
+}
+
+
 def _f(key, label, category, value_type, requires_arg=False, extra_ops=None):
     ops = list(OPERATORS_BY_TYPE[value_type])
     if requires_arg:
         ops += ["key_exists", "key_absent"]
     if extra_ops:
         ops += [o for o in extra_ops if o not in ops]
-    return {
+    entry = {
         "key": key,
         "label": label,
         "category": category,
@@ -183,6 +216,10 @@ def _f(key, label, category, value_type, requires_arg=False, extra_ops=None):
         "requires_arg": requires_arg,
         "operators": ops,
     }
+    hint = FIELD_HINTS.get(key)
+    if hint:
+        entry["hint"] = hint
+    return entry
 
 
 # ordered category names for the condition editor (and log dimension UI alignment)

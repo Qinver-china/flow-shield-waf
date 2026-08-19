@@ -165,6 +165,10 @@
 | http.upload.filename | 上传文件名 | string | |
 | http.upload.ext | 上传文件后缀 | string | |
 
+请求体类字段按需提取：配置里没有任何启用规则引用 `http.body.raw` / `form` / `json` / `derived.args_count` 时，引擎不会读取请求体。`http.upload.*` 同理，未引用则完全跳过。
+
+对体积超过 64KB 的请求（含大 `multipart`），`http.body.raw` / `json` 只读取前 64KB 前缀做匹配，不再把整包载入 Lua。`http.body.form` 在大 `multipart` 上不解析（避免 `get_post_args` 撑爆 worker）；小体积表单仍走原来的整表解析。文件名与后缀从 multipart 头部前 64KB 解析。`http.body.size` 优先使用 `Content-Length`。
+
 ### TLS 与指纹
 
 | key | 说明 | 类型 |

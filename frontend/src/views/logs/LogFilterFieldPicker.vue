@@ -6,7 +6,7 @@
     overlay-class-name="log-filter-field-picker-popover"
     :get-popup-container="getPopupContainer"
   >
-    <button type="button" class="field-picker-trigger" :title="selectedLabel">
+    <button type="button" class="field-picker-trigger" :title="selectedHint">
       <span class="field-picker-trigger-label">{{ selectedLabel }}</span>
       <down-outlined class="field-picker-trigger-icon" />
     </button>
@@ -21,7 +21,7 @@
               type="button"
               class="dimension-btn"
               :class="{ active: modelValue === field.key }"
-              :title="field.placeholder || field.label"
+              :title="field.hint"
               @click="selectField(field.key)"
             >
               {{ field.label }}
@@ -54,6 +54,8 @@ const open = ref(false);
 const groups = computed(() => props.groups || logDetailFilterGroups);
 
 const selectedLabel = computed(() => findLogFilterField(props.modelValue)?.label || "选择字段");
+
+const selectedHint = computed(() => findLogFilterField(props.modelValue)?.hint);
 
 function selectField(key: string) {
   emit("update:modelValue", key);

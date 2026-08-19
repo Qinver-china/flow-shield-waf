@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     # engine integration
     engine_conf_dir: str = "/data/engine/conf.d"
     engine_cert_dir: str = "/data/engine/certs"
+    engine_client_max_body_conf: str = "/etc/nginx/snippets/client-max-body.conf"
+    engine_origin_timeout_conf: str = "/etc/nginx/snippets/origin-timeout.conf"
     engine_reload_url: str = "http://engine/.waf/reload"
     # Loopback health probe (same host as OpenResty in app/baota layouts).
     engine_health_url: str = "http://127.0.0.1/waf-health"

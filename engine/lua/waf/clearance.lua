@@ -8,7 +8,7 @@ local _M = {}
 
 local store = ngx.shared.waf_challenge
 
-local DEFAULT_DIMS = { "ip", "ua" }
+local DEFAULT_DIMS = { "ip" }
 
 local HEADER_DIMS = {
     accept_language = "Accept-Language",

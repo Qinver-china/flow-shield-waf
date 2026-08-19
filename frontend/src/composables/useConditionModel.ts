@@ -3,6 +3,8 @@ import { formatGeoAsn, formatGeoCity, formatGeoIsp, formatGeoRegion } from "@/ut
 export interface Field {
   key: string;
   label: string;
+  /** Brief tooltip when the label alone is ambiguous. */
+  hint?: string;
   requires_arg: boolean;
   operators: string[];
   value_type: string;

@@ -40,6 +40,8 @@ async def _apply_schema_patches(conn) -> None:
     await _ensure_certificate_acme_columns(conn)
     await _ensure_certificate_panel_push_columns(conn)
     await _ensure_waf_setting_acme_account_email(conn)
+    await _ensure_waf_setting_max_upload_size_mb(conn)
+    await _ensure_waf_setting_origin_read_timeout_sec(conn)
     await _upgrade_default_response_page_brand_links(conn)
 
 
@@ -375,6 +377,37 @@ async def _ensure_waf_setting_acme_account_email(conn) -> None:
         text("ALTER TABLE waf_setting ADD COLUMN acme_account_email VARCHAR(254) NULL")
     )
     log.info("schema patch applied: waf_setting.acme_account_email")
+
+
+async def _ensure_waf_setting_max_upload_size_mb(conn) -> None:
+    if await _column_exists(conn, "waf_setting", "max_upload_size_mb"):
+        return
+    from app.constants.engine_settings import DEFAULT_MAX_UPLOAD_SIZE_MB
+
+    default_mb = int(DEFAULT_MAX_UPLOAD_SIZE_MB)
+    await conn.execute(
+        text(
+            "ALTER TABLE waf_setting "
+            f"ADD COLUMN max_upload_size_mb INTEGER NOT NULL DEFAULT {default_mb}"
+        )
+    )
+    log.info("schema patch applied: waf_setting.max_upload_size_mb")
+
+
+async def _ensure_waf_setting_origin_read_timeout_sec(conn) -> None:
+    if await _column_exists(conn, "waf_setting", "origin_read_timeout_sec"):
+        return
+    from app.constants.engine_settings import DEFAULT_ORIGIN_READ_TIMEOUT_SEC
+
+    default_sec = int(DEFAULT_ORIGIN_READ_TIMEOUT_SEC)
+    await conn.execute(
+        text(
+            "ALTER TABLE waf_setting "
+            "ADD COLUMN origin_read_timeout_sec INTEGER NOT NULL "
+            f"DEFAULT {default_sec}"
+        )
+    )
+    log.info("schema patch applied: waf_setting.origin_read_timeout_sec")
 
 
 async def _upgrade_default_response_page_brand_links(conn) -> None:

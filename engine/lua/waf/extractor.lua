@@ -99,28 +99,145 @@ function _M:_cookies()
     return self.cache.cookies
 end
 
-function _M:_body()
-    if self.cache.body == nil then
-        ngx.req.read_body()
-        self.cache.body = ngx.req.get_body_data() or false
+-- Only the first 64KiB is copied into Lua. Larger bodies stay in Nginx temp
+-- files so upload traffic does not pin worker memory for regex matching.
+local BODY_INSPECT_MAX = 65536
+
+local function is_multipart()
+    local ct = ngx.var.content_type
+    return type(ct) == "string" and ct:find("multipart/form-data", 1, true)
+end
+
+function _M:_inspect()
+    if self.cache.inspect ~= nil then
+        return self.cache.inspect
     end
-    return self.cache.body or nil
+    local sync = require "waf.sync"
+    local ins = ((sync.get() or {}).settings or {}).inspect
+    if type(ins) ~= "table" then
+        -- Missing flags (old config): keep previous behavior if a field is read.
+        self.cache.inspect = { body = true, upload = true }
+    else
+        self.cache.inspect = {
+            body = ins.body == true,
+            upload = ins.upload == true,
+        }
+    end
+    return self.cache.inspect
+end
+
+-- True when ngx.req.get_post_args() would parse a large multipart into Lua.
+-- Chunked multipart (no Content-Length) is treated as large.
+function _M:_large_multipart()
+    if not is_multipart() then
+        return false
+    end
+    local n = tonumber(ngx.var.content_length)
+    if not n then
+        return true
+    end
+    return n > BODY_INSPECT_MAX
+end
+
+local function match_upload_filename(body)
+    if type(body) ~= "string" then
+        return nil
+    end
+    local quoted = body:match('filename="([^"]*)"')
+    if quoted then
+        return quoted
+    end
+    for star, token in body:gmatch("filename(%*?)%=([^%s;]+)") do
+        if star ~= "*" then
+            return token
+        end
+    end
+    return nil
+end
+
+function _M:_body_prefix()
+    if self.cache.body_prefix ~= nil then
+        if self.cache.body_prefix == false then
+            return nil
+        end
+        return self.cache.body_prefix
+    end
+    ngx.req.read_body()
+    local data = ngx.req.get_body_data()
+    if type(data) == "string" then
+        if #data > BODY_INSPECT_MAX then
+            data = data:sub(1, BODY_INSPECT_MAX)
+        end
+        self.cache.body_prefix = data
+        return data
+    end
+    local fname = ngx.req.get_body_file()
+    if type(fname) == "string" and fname ~= "" then
+        local f = io.open(fname, "rb")
+        if f then
+            local chunk = f:read(BODY_INSPECT_MAX)
+            f:close()
+            if type(chunk) == "string" and chunk ~= "" then
+                self.cache.body_prefix = chunk
+                return chunk
+            end
+        else
+            ngx.log(ngx.ERR, "waf extractor: cannot open client body file")
+        end
+    end
+    self.cache.body_prefix = false
+    return nil
+end
+
+function _M:_body()
+    return self:_body_prefix()
 end
 
 function _M:_post_args()
-    if self.cache.post_args == nil then
-        ngx.req.read_body()
-        local args = ngx.req.get_post_args()
-        self.cache.post_args = args or {}
+    if self.cache.post_args ~= nil then
+        return self.cache.post_args
     end
+    if not self:_inspect().body then
+        self.cache.post_args = {}
+        return self.cache.post_args
+    end
+    -- Full multipart parse would pin worker RAM; form fields stay empty.
+    -- http.body.raw / json still use the 64KiB prefix.
+    if self:_large_multipart() then
+        self.cache.post_args = {}
+        return self.cache.post_args
+    end
+    ngx.req.read_body()
+    local cl = tonumber(ngx.var.content_length)
+    local spilled = ngx.req.get_body_file()
+    local data = ngx.req.get_body_data()
+    local too_big = (cl and cl > BODY_INSPECT_MAX)
+        or (type(data) == "string" and #data > BODY_INSPECT_MAX)
+        or (type(spilled) == "string" and spilled ~= "")
+    if too_big then
+        local prefix = self:_body_prefix()
+        if type(prefix) == "string" and prefix ~= "" then
+            self.cache.post_args = ngx.decode_args(prefix, 100) or {}
+        else
+            self.cache.post_args = {}
+        end
+        return self.cache.post_args
+    end
+    local args = ngx.req.get_post_args()
+    self.cache.post_args = args or {}
     return self.cache.post_args
 end
 
 function _M:_json()
-    if self.cache.json == nil then
-        local body = self:_body()
-        self.cache.json = body and cjson.decode(body) or false
+    if self.cache.json ~= nil then
+        return self.cache.json or nil
     end
+    if not self:_inspect().body then
+        self.cache.json = false
+        return nil
+    end
+    local body = self:_body_prefix()
+    self.cache.json = body and cjson.decode(body) or false
     return self.cache.json or nil
 end
 
@@ -257,9 +374,12 @@ function _M:_resolve(field, arg)
 
     -- body / post / json / upload
     elseif field == "http.body.raw" then
-        return self:_body()
+        if not self:_inspect().body then
+            return nil
+        end
+        return self:_body_prefix()
     elseif field == "http.body.size" then
-        return tonumber(ngx.var.content_length) or (self:_body() and #self:_body()) or 0
+        return tonumber(ngx.var.content_length) or (self:_body_prefix() and #self:_body_prefix()) or 0
     elseif field == "http.body.form" then
         local v = self:_post_args()[arg]
         if type(v) == "table" then return table.concat(v, ",") end
@@ -269,12 +389,10 @@ function _M:_resolve(field, arg)
         if type(v) == "table" then return cjson.encode(v) end
         return v
     elseif field == "http.upload.filename" then
-        local ct = ngx.var.content_type
-        if ct and ct:find("multipart/form%-data") then
-            local body = self:_body()
-            return body and body:match('filename="([^"]+)"') or nil
+        if not self:_inspect().upload or not is_multipart() then
+            return nil
         end
-        return nil
+        return match_upload_filename(self:_body_prefix())
     elseif field == "http.upload.ext" then
         local fn = self:get("http.upload.filename")
         return fn and fn:match("%.([%a%d]+)$") or nil

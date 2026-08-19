@@ -143,6 +143,10 @@ code,
     box-shadow: none;
 }
 
+.ant-segmented {
+    background-color: var(--fs-segmented-bg) !important;
+}
+
 /* Dropdown menus: align elevated surface with design tokens (day/night) */
 .ant-tabs-dropdown .ant-tabs-dropdown-menu,
 .ant-dropdown .ant-dropdown-menu,

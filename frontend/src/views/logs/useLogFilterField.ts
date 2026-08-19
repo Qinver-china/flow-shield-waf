@@ -54,7 +54,7 @@ export function useLogFilterFieldBindings(filters: LogDetailFilters) {
 
 export function colSpanForField(field: LogFilterFieldDef, compact = false) {
   if (compact) {
-    if (field.key === "keyword") return { span: 12, xl: 4 };
+    if (field.key === "keyword" || field.key === "request_id") return { span: 12, xl: 4 };
     if (field.type === "site") return { span: 12, xl: 3 };
     return { span: 12, xl: 2 };
   }

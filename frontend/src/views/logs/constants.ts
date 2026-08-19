@@ -625,6 +625,8 @@ export interface LogFilterFieldDef {
   type: LogFilterFieldType;
   placeholder?: string;
   argPlaceholder?: string;
+  /** Brief tooltip when the label alone is ambiguous. */
+  hint?: string;
   options?: { value: string; label: string }[];
 }
 
@@ -696,7 +698,7 @@ export const geoIspOptions = GEO_ISP_SELECT_HINTS.map((item) => ({
 
 /** 筛选专用字段：不在统计维度中，追加到对应分组末尾 */
 const LOG_FILTER_GROUP_EXTRAS: Record<string, string[]> = {
-  [LOG_HIT_CATEGORY]: ["rule_name", "action", "keyword"],
+  [LOG_HIT_CATEGORY]: ["rule_name", "request_id", "keyword"],
   "HTTP 请求": ["cookie"],
 };
 
@@ -707,9 +709,21 @@ const logFilterFieldRegistry: Record<string, LogFilterFieldDef> = {
   blocked: { key: "blocked", label: "拦截结果", type: "bool" },
   log_type: { key: "log_type", label: "日志类型", type: "select", options: selectFromRecord(logTypeLabel) },
   site_id: { key: "site_id", label: "站点", type: "site" },
-  rule_name: { key: "rule_name", label: "规则名称", type: "text", placeholder: "模糊匹配" },
-  action: { key: "action", label: "动作", type: "text", placeholder: "action" },
-  keyword: { key: "keyword", label: "关键字", type: "text", placeholder: "URL / UA / 域名模糊搜索" },
+  rule_name: { key: "rule_name", label: "规则名称", type: "text", placeholder: "模糊匹配", hint: "支持模糊匹配" },
+  request_id: {
+    key: "request_id",
+    label: "请求 ID",
+    type: "text",
+    placeholder: "如 X-WAF-Request-Id",
+    hint: "X-WAF-Request-Id",
+  },
+  keyword: {
+    key: "keyword",
+    label: "关键字",
+    type: "text",
+    placeholder: "URL / UA / 域名模糊搜索",
+    hint: "URL、UA 或域名关键字",
+  },
   client_ip: { key: "client_ip", label: "客户端 IP", type: "text", placeholder: "精确匹配" },
   tcp_ip: { key: "tcp_ip", label: "直连 IP", type: "text", placeholder: "精确匹配" },
   ip_is_private: { key: "ip_is_private", label: "IP 是否内网", type: "bool" },
@@ -775,6 +789,7 @@ const logFilterFieldRegistry: Record<string, LogFilterFieldDef> = {
     type: "cookie",
     argPlaceholder: "参数名",
     placeholder: "参数值",
+    hint: "按 Cookie 键值筛选",
   },
   bot_name: { key: "bot_name", label: "Bot 名称", type: "text", placeholder: "如 Googlebot" },
   bot_category: { key: "bot_category", label: "Bot 分类", type: "select", options: [] },
@@ -788,13 +803,25 @@ const logFilterFieldRegistry: Record<string, LogFilterFieldDef> = {
 };
 
 function buildLogDetailFilterGroups(): { label: string; fields: LogFilterFieldDef[] }[] {
+  const hintByKey = new Map<string, string>();
+  for (const group of logStatsDimensionLayout) {
+    for (const item of group.items) {
+      if (item.desc) hintByKey.set(item.key, item.desc);
+    }
+  }
+
   return logStatsDimensionLayout.map((group) => {
     const keys = [
       ...group.items.map((item) => item.key),
       ...(LOG_FILTER_GROUP_EXTRAS[group.label] || []),
     ];
     const fields = keys
-      .map((key) => logFilterFieldRegistry[key])
+      .map((key) => {
+        const field = logFilterFieldRegistry[key];
+        if (!field) return undefined;
+        const hint = field.hint ?? hintByKey.get(key);
+        return hint ? { ...field, hint } : field;
+      })
       .filter((field): field is LogFilterFieldDef => !!field);
     return { label: group.label, fields };
   });
@@ -812,6 +839,7 @@ export const logDetailQuickFilterKeys = [
   "client_ip",
   "tcp_ip",
   "rule_id",
+  "request_id",
   "keyword",
 ] as const;
 
@@ -839,7 +867,6 @@ export function buildAdvancedLogFilterGroups() {
 export function logDetailFiltersUseAdvanced(filters: LogDetailFilters): boolean {
   if (filters.log_type) return true;
   if (filters.rule_name) return true;
-  if (filters.action) return true;
   if (filters.ip_is_private !== undefined) return true;
   if (filters.xff_first) return true;
   if (filters.geo_country) return true;
@@ -883,7 +910,6 @@ export type LogDetailFilters = {
   site_id?: number;
   rule_id?: number;
   rule_name: string;
-  action: string;
   client_ip: string;
   tcp_ip: string;
   ip_is_private?: boolean;
@@ -908,6 +934,7 @@ export type LogDetailFilters = {
   cookie_name: string;
   cookie_count_bucket?: string;
   referer_host: string;
+  request_id: string;
   keyword: string;
   ua: string;
   ua_family: string;
@@ -930,7 +957,6 @@ export function createDefaultLogFilters(): LogDetailFilters {
     site_id: undefined,
     rule_id: undefined,
     rule_name: "",
-    action: "",
     client_ip: "",
     tcp_ip: "",
     ip_is_private: undefined,
@@ -955,6 +981,7 @@ export function createDefaultLogFilters(): LogDetailFilters {
     cookie_name: "",
     cookie_count_bucket: undefined,
     referer_host: "",
+    request_id: "",
     keyword: "",
     ua: "",
     ua_family: "",
@@ -1003,7 +1030,6 @@ export function buildLogQueryParams(
     ip_is_private: filters.ip_is_private,
     geo_asn: filters.geo_asn,
     rule_name: filters.rule_name || undefined,
-    action: filters.action || undefined,
     client_ip: filters.client_ip || undefined,
     tcp_ip: filters.tcp_ip || undefined,
     xff_first: filters.xff_first || undefined,
@@ -1021,6 +1047,7 @@ export function buildLogQueryParams(
     query_count_bucket: filters.query_count_bucket || undefined,
     cookie_count_bucket: filters.cookie_count_bucket || undefined,
     referer_host: filters.referer_host || undefined,
+    request_id: filters.request_id || undefined,
     keyword: filters.keyword || undefined,
     ua: filters.ua || undefined,
     ua_family: filters.ua_family || undefined,

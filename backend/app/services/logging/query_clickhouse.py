@@ -379,7 +379,7 @@ _FILTER_FIELDS = frozenset({
     "uri_pattern", "request_uri", "uri_query", "full_url", "query_count_bucket", "referer_host",
     "ip_is_private", "xff_first", "ua", "ua_family", "ua_os", "ua_browser", "bot_name",
     "bot_category", "tls_version", "tls_ja3", "hour_of_day", "weekday", "keyword",
-    "cookie", "cookie_name", "cookie_count_bucket",
+    "cookie", "cookie_name", "cookie_count_bucket", "request_id",
 })
 
 _INT_FILTER_FIELDS = frozenset({"site_id", "rule_id", "geo_asn", "uri_depth"})
@@ -521,6 +521,7 @@ def _append_condition_sql(
                 f"(positionCaseInsensitive({_col('request_uri')}, {{{pname}:String}}) > 0 "
                 f"OR positionCaseInsensitive({_col('ua')}, {{{pname}:String}}) > 0 "
                 f"OR positionCaseInsensitive({_col('domain')}, {{{pname}:String}}) > 0 "
+                f"OR positionCaseInsensitive({_col('request_id')}, {{{pname}:String}}) > 0 "
                 f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('request_uri')}), {{{pname}:String}}) > 0)"
             )
             if op in {"ne", "not_contains"}:
@@ -530,6 +531,7 @@ def _append_condition_sql(
                     f"(positionCaseInsensitive({_col('request_uri')}, {{{pname}:String}}) > 0 "
                     f"OR positionCaseInsensitive({_col('ua')}, {{{pname}:String}}) > 0 "
                     f"OR positionCaseInsensitive({_col('domain')}, {{{pname}:String}}) > 0 "
+                    f"OR positionCaseInsensitive({_col('request_id')}, {{{pname}:String}}) > 0 "
                     f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('request_uri')}), {{{pname}:String}}) > 0)"
                 )
             subparts.append(expr)
@@ -759,11 +761,15 @@ def _where_clause(q: LogQuery | None, start_ts: datetime, end_ts: datetime) -> t
     if q.weekday is not None:
         parts.append(f"toDayOfWeek({_col('ts')}) = {{weekday:UInt32}}")
         params["weekday"] = q.weekday
+    if q.request_id:
+        parts.append(f"{_col('request_id')} = {{request_id:String}}")
+        params["request_id"] = q.request_id
     if q.keyword:
         parts.append(
             f"(positionCaseInsensitive({_col('request_uri')}, {{kw:String}}) > 0 "
             f"OR positionCaseInsensitive({_col('ua')}, {{kw:String}}) > 0 "
             f"OR positionCaseInsensitive({_col('domain')}, {{kw:String}}) > 0 "
+            f"OR positionCaseInsensitive({_col('request_id')}, {{kw:String}}) > 0 "
             f"OR positionCaseInsensitive(concat({_col('scheme')}, '://', {_col('domain')}, {_col('request_uri')}), {{kw:String}}) > 0)"
         )
         params["kw"] = q.keyword

@@ -11,11 +11,20 @@
               <h2 class="hero-title">安全总览</h2>
               <span class="hero-desc">24 小时防护态势</span>
             </div>
-            <div class="hero-health">
-              <div class="health-item" v-for="item in healthItems" :key="item.key">
+            <div v-if="visibleOverviewStatusItems.length || feed.pending_ai_incidents > 0" class="hero-health">
+              <div
+                v-for="item in visibleOverviewStatusItems"
+                :key="item.key"
+                class="health-item"
+                :class="{ 'is-alert': item.status !== 'ok' }"
+              >
                 <span class="health-dot" :class="item.status" />
                 <span class="health-text">
-                  {{ item.label }} {{ healthStatusSuffix(item.status) }}
+                  <span class="health-text-main">
+                    <template v-if="item.key === 'all-ok'">{{ item.text }}</template>
+                    <template v-else>{{ item.label }} {{ item.text }}</template>
+                  </span>
+                  <span v-if="item.detail && item.status !== 'ok'" class="health-detail">{{ item.detail }}</span>
                 </span>
               </div>
               <a-tag v-if="feed.pending_ai_incidents > 0" color="orange" class="health-ai-link" @click="goAiGuard">
@@ -26,8 +35,7 @@
         </div>
       </div>
       <div class="hero-actions">
-        <div class="hero-time">{{ statsWindowLabel }}</div>
-        <dashboard-live-refresh-toggle />
+        <dashboard-live-refresh-toggle :last-updated="statsWindowLabel" />
       </div>
     </div>
 
@@ -700,7 +708,8 @@ const liveTrafficOverall = computed(() => {
     desc: "当前请求量在基线范围内波动，未检测到异常。",
     icon: SafetyCertificateOutlined,
   };
-}); const feedLoading = ref(false);
+});
+const feedLoading = ref(false);
 const trendEl = ref<HTMLElement>();
 const modeEl = ref<HTMLElement>();
 const loadCpuEl = ref<HTMLElement>();
@@ -736,14 +745,55 @@ function healthStatusSuffix(status: string) {
   return "异常";
 }
 
-const healthItems = computed(() => [
-  { key: "database", label: "SQLite", status: health.database },
-  { key: "redis", label: "Redis", status: health.redis },
-  { key: "clickhouse", label: "ClickHouse", status: health.clickhouse },
-  { key: "engine", label: "WAF 引擎", status: health.engine },
-  { key: "worker", label: "后台 Worker", status: health.worker },
-  { key: "rule_sync", label: "规则同步", status: health.rule_sync?.status || "error" },
-]);
+function mergedEngineStatus(): string {
+  const engine = health.engine;
+  const sync = health.rule_sync?.status || "error";
+  if (engine === "error" || sync === "error") return "error";
+  if (sync === "stale") return "stale";
+  return engine === "ok" ? "ok" : engine;
+}
+
+type OverviewStatusItem = {
+  key: string;
+  label: string;
+  status: "ok" | "stale" | "warn" | "error" | "neutral";
+  text: string;
+  detail?: string;
+};
+
+const overviewStatusItems = computed<OverviewStatusItem[]>(() => {
+  const engineStatus = mergedEngineStatus() as OverviewStatusItem["status"];
+  return [
+    { key: "database", label: "SQLite", status: health.database, text: healthStatusSuffix(health.database) },
+    { key: "redis", label: "Redis", status: health.redis, text: healthStatusSuffix(health.redis) },
+    { key: "clickhouse", label: "ClickHouse", status: health.clickhouse, text: healthStatusSuffix(health.clickhouse) },
+    {
+      key: "engine",
+      label: "WAF 引擎",
+      status: engineStatus,
+      text: healthStatusSuffix(engineStatus),
+      detail:
+        health.rule_sync?.status === "stale"
+          ? "规则尚未同步到引擎"
+          : health.engine === "error"
+            ? "引擎健康检查未通过"
+            : undefined,
+    },
+    { key: "worker", label: "后台 Worker", status: health.worker, text: healthStatusSuffix(health.worker) },
+  ];
+});
+
+const visibleOverviewStatusItems = computed(() => {
+  const items = overviewStatusItems.value;
+  if (isMobile.value) {
+    const alerts = items.filter((item) => item.status !== "ok");
+    if (!alerts.length) {
+      return [{ key: "all-ok", label: "", status: "ok" as const, text: "运行正常" }];
+    }
+    return alerts;
+  }
+  return items;
+});
 
 const resourceCards = computed(() => [
   { key: "sites", label: "防护站点", value: counts.sites.total, sub: enabledSub(counts.sites), color: "#2563eb", icon: ClusterOutlined },
@@ -1836,26 +1886,22 @@ onUnmounted(() => {
 
 .hero-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: center;
   flex-shrink: 0;
   margin-left: auto;
   padding-top: 4px;
 }
 
-.hero-time {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: var(--fs-text-secondary);
-  line-height: 1;
-}
-
 .health-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   font-size: 12px;
+}
+
+.health-item.is-alert .health-text-main {
+  color: var(--fs-text-primary);
+  font-weight: 500;
 }
 
 .health-dot {
@@ -1863,10 +1909,20 @@ onUnmounted(() => {
   height: 8px;
   border-radius: 50%;
   background: var(--fs-text-muted);
+  margin-top: 4px;
+  flex-shrink: 0;
 }
 
 .health-dot.ok {
   background: var(--fs-color-accent);
+}
+
+.health-dot.warn {
+  background: var(--fs-color-warning);
+}
+
+.health-dot.neutral {
+  background: var(--fs-text-muted);
 }
 
 .health-dot.error,
@@ -1875,7 +1931,17 @@ onUnmounted(() => {
 }
 
 .health-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
   color: var(--fs-text-secondary);
+}
+
+.health-detail {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--fs-text-muted);
 }
 
 .health-ai-link {
@@ -2396,7 +2462,6 @@ onUnmounted(() => {
   justify-content: center;
   gap: 6px;
   margin-top: 2px;
-  font-size: 12px;
   font-weight: 600;
 }
 

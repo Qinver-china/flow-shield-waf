@@ -1,15 +1,8 @@
 <template>
-  <a-card title="面板集成" style="margin-top: 16px">
-    <template #extra>
-      <a-button type="primary" size="small" @click="openCreate">添加面板账号</a-button>
+  <component :is="embedded ? 'div' : 'a-card'" v-bind="cardProps">
+    <template v-if="!embedded" #extra>
+      <a-button type="primary" @click="openCreate">添加面板账号</a-button>
     </template>
-
-    <a-alert
-      type="info"
-      show-icon
-      style="margin-bottom: 12px"
-      message="添加您搭建网站的面板集成，可以方便地将您的网站及证书导入到流盾 WAF。"
-    />
 
     <fs-data-table
       :columns="columns"
@@ -77,6 +70,9 @@
           <a-form-item label="面板地址" required>
             <a-input
               v-model:value="form.panel_url"
+              type="url"
+              inputmode="url"
+              autocomplete="url"
               :placeholder="form.provider === 'baota' ? 'http://172.17.0.1:8888' : 'http://172.17.0.1:10086'"
             />
             <div v-if="form.provider === 'baota'" class="hint">
@@ -117,11 +113,11 @@
         </fs-form-section>
       </a-form>
     </fs-form-drawer>
-  </a-card>
+  </component>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { message } from "ant-design-vue";
 import { api } from "@/api";
 import FsDataTable from "@/components/FsDataTable.vue";
@@ -130,6 +126,19 @@ import FsFormDrawer from "@/components/FsFormDrawer.vue";
 import FsFormSection from "@/components/FsFormSection.vue";
 import { commonBatchEditFields } from "@/constants/batch";
 import type { BatchConfig } from "@/types/batch";
+
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean;
+  }>(),
+  { embedded: false },
+);
+
+const cardProps = computed(() =>
+  props.embedded
+    ? { class: "panel-connections-embedded" }
+    : { title: "面板集成", style: "margin-top: 16px" },
+);
 
 export interface PanelConnectionRow {
   id: number;
@@ -298,6 +307,8 @@ async function testForm() {
 }
 
 onMounted(load);
+
+defineExpose({ openCreate });
 </script>
 
 <style scoped>

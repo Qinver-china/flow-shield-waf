@@ -1,5 +1,6 @@
 """Tests for shared email HTML templates."""
 
+from app.constants.response_pages import OFFICIAL_SITE_URL
 from app.services.notifications.email_templates import (
     PRODUCT_NAME,
     PRODUCT_TAGLINE,
@@ -17,6 +18,8 @@ def test_build_email_html_includes_branding_footer():
     assert PRODUCT_TAGLINE in html
     assert "Flow Shield WAF" in html
     assert "请勿直接回复" in html
+    assert OFFICIAL_SITE_URL in html
+    assert f'href="{OFFICIAL_SITE_URL}"' in html
 
 
 def test_build_plain_email_includes_header_and_footer():
@@ -26,6 +29,7 @@ def test_build_plain_email_includes_header_and_footer():
     assert "内容" in plain
     assert PRODUCT_NAME in plain
     assert PRODUCT_TAGLINE in plain
+    assert OFFICIAL_SITE_URL in plain
 
 
 def test_build_alert_email_has_html_and_plain():

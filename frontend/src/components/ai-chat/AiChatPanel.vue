@@ -74,12 +74,8 @@
                 <div v-else-if="item.action_status === 'executed'"
                   class="ai-chat-action-result ai-chat-action-result--executed">
                   <span>已确认执行该操作</span>
-                  <a
-                    v-for="rule in createdRules(item.pending_action)"
-                    :key="rule.id"
-                    class="ai-chat-view-rule"
-                    @click="openCreatedRule(rule.id)"
-                  >查看规则</a>
+                  <a v-for="rule in createdRules(item.pending_action)" :key="rule.id" class="ai-chat-view-rule"
+                    @click="openCreatedRule(rule.id)">查看规则</a>
                 </div>
                 <div v-else-if="item.action_status === 'cancelled'"
                   class="ai-chat-action-result ai-chat-action-result--cancelled">
@@ -341,6 +337,14 @@ function openCreatedRule(id: number) {
 
 .ai-chat-panel--compact :deep(.chat-assistant-step) {
   font-size: 11px;
+}
+
+.ai-chat-sender-wrap :deep(.ant-sender) {
+  border-color: var(--fs-border);
+}
+
+.ai-chat-sender-wrap :deep(.ant-sender:focus-within) {
+  border-color: var(--fs-color-primary);
 }
 
 .ai-chat-sider-backdrop {

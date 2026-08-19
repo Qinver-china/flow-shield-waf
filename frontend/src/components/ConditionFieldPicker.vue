@@ -28,6 +28,7 @@
                 type="button"
                 class="cond-field-picker-btn"
                 :class="{ active: field.key === value }"
+                :title="field.hint"
                 @click="pick(field.key)"
               >
                 {{ field.label }}
@@ -39,7 +40,12 @@
       </div>
     </template>
 
-    <button type="button" class="cond-field-picker-trigger" :class="{ placeholder: !value }">
+    <button
+      type="button"
+      class="cond-field-picker-trigger"
+      :class="{ placeholder: !value }"
+      :title="value ? fieldMap[value]?.hint : undefined"
+    >
       <span class="cond-field-picker-trigger-text">{{ displayLabel }}</span>
       <DownOutlined class="cond-field-picker-trigger-icon" />
     </button>

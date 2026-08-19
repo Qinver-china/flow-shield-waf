@@ -4,6 +4,8 @@ from __future__ import annotations
 import html
 from datetime import datetime, timezone
 
+from app.constants.response_pages import OFFICIAL_SITE_URL
+
 PRODUCT_NAME = "流盾 WAF"
 PRODUCT_NAME_EN = "Flow Shield WAF"
 PRODUCT_TAGLINE = "守住每一次真实访问"
@@ -21,6 +23,23 @@ _FONT_FAMILY = (
     "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',"
     "'Hiragino Sans GB','Microsoft YaHei',Roboto,'Helvetica Neue',Arial,sans-serif"
 )
+
+
+def _email_footer_copyright_html(year: int) -> str:
+    site_url = html.escape(OFFICIAL_SITE_URL, quote=True)
+    product_link = (
+        f'<a href="{site_url}" target="_blank" rel="noopener noreferrer" '
+        f'style="color:{_COLOR_PRIMARY};text-decoration:none;">{PRODUCT_NAME}</a>'
+    )
+    return (
+        f'<div style="margin-top:6px;font-size:11px;color:{_COLOR_TEXT_MUTED};">'
+        f"© {year} {product_link} · {PRODUCT_NAME_EN}"
+        f"</div>"
+    )
+
+
+def _email_footer_copyright_plain(year: int) -> str:
+    return f"© {year} {PRODUCT_NAME} · {PRODUCT_NAME_EN} — {OFFICIAL_SITE_URL}"
 
 
 def build_email_html(
@@ -58,9 +77,9 @@ font-family:{_FONT_FAMILY};line-height:1.6;-webkit-text-size-adjust:100%;">
   <div style="max-width:720px;margin:0 auto;background:{_COLOR_BG_SURFACE};
   border:1px solid {_COLOR_BORDER};border-radius:12px;overflow:hidden;
   box-shadow:0 4px 12px rgba(15,23,42,0.06);">
-    <div style="padding:18px 24px;background:{_COLOR_PRIMARY};color:#ffffff;">
-      <div style="font-size:18px;font-weight:700;letter-spacing:0.02em;">{PRODUCT_NAME}</div>
-      <div style="margin-top:4px;font-size:12px;opacity:0.9;">{PRODUCT_TAGLINE}</div>
+    <div style="padding:18px 24px;background:{_COLOR_PRIMARY};">
+      <div style="font-size:18px;font-weight:700;letter-spacing:0.02em;color:#ffffff;">{PRODUCT_NAME}</div>
+      <div style="margin-top:4px;font-size:12px;opacity:0.9;color:#ffffff;">{PRODUCT_TAGLINE}</div>
     </div>
     <div style="padding:28px 24px 8px;">
       <h1 style="margin:0;font-size:22px;font-weight:700;color:{_COLOR_TEXT};">{title_html}</h1>
@@ -78,9 +97,7 @@ font-family:{_FONT_FAMILY};line-height:1.6;-webkit-text-size-adjust:100%;">
       <div style="margin-top:10px;font-size:11px;color:{_COLOR_TEXT_MUTED};">
         此邮件由 {PRODUCT_NAME} 自动发送，请勿直接回复。
       </div>
-      <div style="margin-top:6px;font-size:11px;color:{_COLOR_TEXT_MUTED};">
-        © {year} {PRODUCT_NAME_EN}
-      </div>
+      {_email_footer_copyright_html(year)}
     </div>
   </div>
 </body>
@@ -100,6 +117,7 @@ def build_plain_email(
     ]
     if subtitle:
         lines.extend([subtitle, ""])
+    year = datetime.now(timezone.utc).year
     lines.extend(
         [
             body.strip(),
@@ -108,6 +126,7 @@ def build_plain_email(
             f"{PRODUCT_NAME} · {PRODUCT_NAME_EN}",
             PRODUCT_TAGLINE,
             f"此邮件由 {PRODUCT_NAME} 自动发送，请勿直接回复。",
+            _email_footer_copyright_plain(year),
         ]
     )
     return "\n".join(lines)

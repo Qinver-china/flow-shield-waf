@@ -50,10 +50,11 @@ local function empty_config()
         settings = {
             js_challenge_ttl = 1800,
             captcha_ttl = 1800,
-            clearance_fingerprint_dims = { "ip", "ua" },
+            clearance_fingerprint_dims = { "ip" },
             debug_mode = false,
             ratelimit_fail_open = true,
             logging = default_logging_settings(),
+            inspect = { body = false, upload = false },
         },
     }
 end
@@ -158,10 +159,11 @@ function _M.load(force)
         settings = parsed.settings or {
             js_challenge_ttl = 1800,
             captcha_ttl = 1800,
-            clearance_fingerprint_dims = { "ip", "ua" },
+            clearance_fingerprint_dims = { "ip" },
             debug_mode = false,
             ratelimit_fail_open = true,
             logging = default_logging_settings(),
+            inspect = { body = false, upload = false },
         },
     }
     _fail_streak = 0

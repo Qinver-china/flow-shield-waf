@@ -126,6 +126,7 @@
 import { computed } from "vue";
 import { Modal } from "ant-design-vue";
 import { ArrowDownOutlined, ArrowUpOutlined } from "@ant-design/icons-vue";
+import { useBreakpoint } from "@/composables/useBreakpoint";
 import { clientIpSourceLabel } from "@/constants/clientIpSource";
 import { useLogNavigation } from "@/composables/useLogNavigation";
 import type { ResourceQuickAction } from "@/composables/useResourceQuickActions";
@@ -177,6 +178,7 @@ const emit = defineEmits<{
 
 const { runAction } = useResourceQuickActions();
 const { goToLogs } = useLogNavigation("24h");
+const { isMobile } = useBreakpoint();
 
 const domainList = computed(() => {
   if (Array.isArray(props.site.domains) && props.site.domains.length) {
@@ -250,7 +252,12 @@ const metaItems = computed(() => {
   ];
 });
 
-const trafficWindows = computed(() => props.metrics?.traffic_windows || []);
+/** 移动端隐藏 24 小时窗口，仅展示 5/30/60 分钟三张卡片 */
+const trafficWindows = computed(() => {
+  const windows = props.metrics?.traffic_windows || [];
+  if (!isMobile.value) return windows;
+  return windows.filter((w) => w.window_sec !== 86400);
+});
 
 const menuActions = computed(() => props.moreActions || []);
 
@@ -562,7 +569,7 @@ function trafficBaselineClass(w: SiteTrafficWindow) {
 
 .site-card__traffic-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 

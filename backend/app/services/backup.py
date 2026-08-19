@@ -30,6 +30,14 @@ from app.models import (
 )
 from app.services import certificate_store, nginx_conf, rule_sync
 from app.services.ai_guard.crypto import decrypt_secret, encrypt_secret
+from app.constants.engine_settings import (
+    DEFAULT_MAX_UPLOAD_SIZE_MB,
+    DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
+    MAX_MAX_UPLOAD_SIZE_MB,
+    MAX_ORIGIN_READ_TIMEOUT_SEC,
+    MIN_MAX_UPLOAD_SIZE_MB,
+    MIN_ORIGIN_READ_TIMEOUT_SEC,
+)
 
 log = logging.getLogger("waf.backup")
 
@@ -195,6 +203,32 @@ _ALERT_FIELDS = (
 )
 
 _WAF_SETTING_SKIP = {"id", "created_at", "updated_at"}
+
+
+def _bounded_int(value: object, lo: int, hi: int, default: int) -> int:
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, parsed))
+
+
+def _apply_engine_backup_fields(waf: Any, item: dict[str, Any]) -> None:
+    """Clamp engine proxy limits from a backup payload onto the settings row."""
+    if "max_upload_size_mb" in item:
+        waf.max_upload_size_mb = _bounded_int(
+            item.get("max_upload_size_mb"),
+            MIN_MAX_UPLOAD_SIZE_MB,
+            MAX_MAX_UPLOAD_SIZE_MB,
+            DEFAULT_MAX_UPLOAD_SIZE_MB,
+        )
+    if "origin_read_timeout_sec" in item:
+        waf.origin_read_timeout_sec = _bounded_int(
+            item.get("origin_read_timeout_sec"),
+            MIN_ORIGIN_READ_TIMEOUT_SEC,
+            MAX_ORIGIN_READ_TIMEOUT_SEC,
+            DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
+        )
 
 
 def section_catalog() -> list[dict[str, str]]:
@@ -891,7 +925,10 @@ async def _import_waf_settings(db: AsyncSession, item: dict[str, Any] | None) ->
         key = attr.key
         if key in _WAF_SETTING_SKIP or key not in item:
             continue
+        if key in {"max_upload_size_mb", "origin_read_timeout_sec"}:
+            continue
         setattr(waf, key, item[key])
+    _apply_engine_backup_fields(waf, item)
     await db.flush()
     return True
 
@@ -1059,7 +1096,7 @@ async def apply_import(
         except Exception:  # noqa: BLE001
             pass
 
-    if "sites" in selected or "certificates" in selected:
+    if "sites" in selected or "certificates" in selected or "system_settings" in selected:
         try:
             reload_result = await nginx_conf.regenerate(db)
             reload_ok = bool(reload_result) and reload_ok

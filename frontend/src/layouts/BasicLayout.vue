@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   BellOutlined,
@@ -129,6 +129,8 @@ import ThemeToggle from "@/components/ThemeToggle.vue";
 import AppLogo from "@/components/AppLogo.vue";
 import FloatingAiChat from "@/components/ai-chat/FloatingAiChat.vue";
 import { useBreakpoint } from "@/composables/useBreakpoint";
+import { clearPageTitleOverride, pageTitleOverride } from "@/composables/usePageTitle";
+import { BRAND } from "@/constants/brand";
 import { useAuthStore } from "@/stores/auth";
 import { useAppSettingsStore } from "@/stores/appSettings";
 import { version as appVersion } from "../../package.json";
@@ -187,8 +189,50 @@ const menuGroups = [
   },
 ];
 
+const DOC_TITLE_BASE = `${BRAND.name} · Flow Shield WAF`;
+
+function findMenuLabel(path: string): string {
+  for (const group of menuGroups) {
+    const item = group.items.find((entry) => entry.path === path);
+    if (item) return item.label;
+  }
+  return "";
+}
+
 const selectedKey = computed(() => route.path);
-const pageTitle = computed(() => (route.meta.title as string) || "");
+
+const contentTitle = computed(
+  () => pageTitleOverride.value || (route.meta.title as string) || "",
+);
+
+const pageTitle = computed(() => {
+  const title = contentTitle.value;
+  if (route.path === "/dashboard") return title;
+
+  const menuLabel = findMenuLabel(route.path);
+  if (!menuLabel) return title;
+  if (!title || menuLabel === title) return title || menuLabel;
+  return `${menuLabel} · ${title}`;
+});
+
+watch(
+  () => route.path,
+  () => {
+    clearPageTitleOverride();
+  },
+);
+
+watch(
+  [pageTitle, () => route.path],
+  ([title, path]) => {
+    if (path === "/dashboard") {
+      document.title = DOC_TITLE_BASE;
+      return;
+    }
+    document.title = title ? `${title} · ${DOC_TITLE_BASE}` : DOC_TITLE_BASE;
+  },
+  { immediate: true },
+);
 
 function onMenu({ key }: { key: string }) {
   drawerOpen.value = false;
@@ -312,7 +356,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   min-height: 56px;
-  margin: 12px 6px;
+  margin: 2px 10px 6px;
   border-radius: var(--fs-radius-md);
   background: transparent;
 }
@@ -338,8 +382,8 @@ onMounted(() => {
     padding: 0 4px;
   }
 
-  .logo {
-    margin: 0;
+  .logo{
+    margin: 0 7px 0 2px;
   }
 }
 

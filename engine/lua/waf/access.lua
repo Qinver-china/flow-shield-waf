@@ -157,6 +157,10 @@ function _M.run()
     end
     ext.cache.site_id = site_id
     local ctx = make_ctx(site_id, domain, cfg.settings)
+    ngx.ctx.waf_request_id = ctx.request_id
+    if ctx.request_id and ctx.request_id ~= "" then
+        ngx.var.waf_request_id = ctx.request_id
+    end
 
     if ngx.var.uri == "/.waf/challenge-submit"
         or ngx.var.uri == "/.waf/captcha-verify" then

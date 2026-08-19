@@ -23,8 +23,11 @@ from app.schemas.waf_setting import (
     DebugSettingsOut,
     DisplaySettings,
     DisplaySettingsOut,
+    EngineSettings,
+    EngineSettingsOut,
 )
-from app.services import rule_sync, waf_settings
+from app.services import nginx_conf, rule_sync, waf_settings
+from app.services.nginx_conf import format_reload_warn_message
 from app.services.logging.retention_ttl import apply_log_retention_ttl
 
 router = APIRouter()
@@ -202,3 +205,33 @@ async def update_display_settings(
     await db.commit()
     await db.refresh(row)
     return ok(DisplaySettingsOut.from_row(row, backend_port=settings.backend_port).model_dump())
+
+
+@router.get("/engine")
+async def get_engine_settings(
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    row = await waf_settings.get_or_create(db)
+    return ok(EngineSettingsOut.model_validate(row).model_dump())
+
+
+@router.put("/engine")
+async def update_engine_settings(
+    body: EngineSettings,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    row = await waf_settings.get_or_create(db)
+    row.max_upload_size_mb = body.max_upload_size_mb
+    row.origin_read_timeout_sec = body.origin_read_timeout_sec
+    await db.commit()
+    await db.refresh(row)
+    result = await nginx_conf.regenerate(db)
+    data = EngineSettingsOut.model_validate(row).model_dump()
+    if not result.ok:
+        return ok(
+            data,
+            message=format_reload_warn_message(result, saved_label="引擎设置已保存"),
+        )
+    return ok(data)

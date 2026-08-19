@@ -2,6 +2,10 @@ from sqlalchemy import Boolean, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.constants.display_settings import DEFAULT_TIMEZONE
+from app.constants.engine_settings import (
+    DEFAULT_MAX_UPLOAD_SIZE_MB,
+    DEFAULT_ORIGIN_READ_TIMEOUT_SEC,
+)
 from app.constants.ratelimit_settings import DEFAULT_RATELIMIT_FAIL_OPEN
 from app.models.base import Base, TimestampMixin
 
@@ -34,3 +38,7 @@ class WafSetting(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(String(64), default=DEFAULT_TIMEZONE)
     panel_public_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     acme_account_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
+    max_upload_size_mb: Mapped[int] = mapped_column(Integer, default=DEFAULT_MAX_UPLOAD_SIZE_MB)
+    origin_read_timeout_sec: Mapped[int] = mapped_column(
+        Integer, default=DEFAULT_ORIGIN_READ_TIMEOUT_SEC
+    )
