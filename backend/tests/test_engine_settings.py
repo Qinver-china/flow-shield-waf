@@ -187,3 +187,111 @@ async def test_regenerate_snippet_write_failure_skips_reload(tmp_path, monkeypat
     assert result.reason == "engine"
     assert "disk full" in (result.detail or "")
     assert reload_called is False
+
+
+def _empty_site_db():
+    class _Scalars:
+        def all(self):
+            return []
+
+    class _Result:
+        def scalars(self):
+            return _Scalars()
+
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_Result())
+    return db
+
+
+@pytest.mark.asyncio
+async def test_regenerate_skips_reload_when_engine_down(tmp_path, monkeypatch):
+    from app.services import nginx_conf
+    from app.services.nginx_conf import EngineReloadResult
+
+    row = MagicMock()
+    row.max_upload_size_mb = 50
+    row.origin_read_timeout_sec = 60
+
+    reload_called = False
+
+    async def fake_reload():
+        nonlocal reload_called
+        reload_called = True
+        return EngineReloadResult(ok=True)
+
+    monkeypatch.setattr(
+        "app.services.waf_settings.get_or_create", AsyncMock(return_value=row)
+    )
+    monkeypatch.setattr(nginx_conf, "apply_client_max_body_size", lambda _mb: None)
+    monkeypatch.setattr(nginx_conf, "apply_origin_read_timeout", lambda _sec: None)
+    monkeypatch.setattr(nginx_conf, "trigger_reload", fake_reload)
+    monkeypatch.setattr(nginx_conf, "_engine_is_running", lambda: False)
+    monkeypatch.setattr(nginx_conf.settings, "engine_conf_dir", str(tmp_path))
+
+    result = await nginx_conf.regenerate(
+        _empty_site_db(), skip_reload_if_engine_down=True
+    )
+    assert result.ok is True
+    assert reload_called is False
+
+
+@pytest.mark.asyncio
+async def test_regenerate_reloads_when_engine_up_even_if_skip_flag(tmp_path, monkeypatch):
+    from app.services import nginx_conf
+    from app.services.nginx_conf import EngineReloadResult
+
+    row = MagicMock()
+    row.max_upload_size_mb = 50
+    row.origin_read_timeout_sec = 60
+
+    reload_called = False
+
+    async def fake_reload():
+        nonlocal reload_called
+        reload_called = True
+        return EngineReloadResult(ok=True)
+
+    monkeypatch.setattr(
+        "app.services.waf_settings.get_or_create", AsyncMock(return_value=row)
+    )
+    monkeypatch.setattr(nginx_conf, "apply_client_max_body_size", lambda _mb: None)
+    monkeypatch.setattr(nginx_conf, "apply_origin_read_timeout", lambda _sec: None)
+    monkeypatch.setattr(nginx_conf, "trigger_reload", fake_reload)
+    monkeypatch.setattr(nginx_conf, "_engine_is_running", lambda: True)
+    monkeypatch.setattr(nginx_conf.settings, "engine_conf_dir", str(tmp_path))
+
+    result = await nginx_conf.regenerate(
+        _empty_site_db(), skip_reload_if_engine_down=True
+    )
+    assert result.ok is True
+    assert reload_called is True
+
+
+@pytest.mark.asyncio
+async def test_regenerate_default_still_reloads_when_engine_down(tmp_path, monkeypatch):
+    from app.services import nginx_conf
+    from app.services.nginx_conf import EngineReloadResult
+
+    row = MagicMock()
+    row.max_upload_size_mb = 50
+    row.origin_read_timeout_sec = 60
+
+    reload_called = False
+
+    async def fake_reload():
+        nonlocal reload_called
+        reload_called = True
+        return EngineReloadResult(ok=True)
+
+    monkeypatch.setattr(
+        "app.services.waf_settings.get_or_create", AsyncMock(return_value=row)
+    )
+    monkeypatch.setattr(nginx_conf, "apply_client_max_body_size", lambda _mb: None)
+    monkeypatch.setattr(nginx_conf, "apply_origin_read_timeout", lambda _sec: None)
+    monkeypatch.setattr(nginx_conf, "trigger_reload", fake_reload)
+    monkeypatch.setattr(nginx_conf, "_engine_is_running", lambda: False)
+    monkeypatch.setattr(nginx_conf.settings, "engine_conf_dir", str(tmp_path))
+
+    result = await nginx_conf.regenerate(_empty_site_db())
+    assert result.ok is True
+    assert reload_called is True

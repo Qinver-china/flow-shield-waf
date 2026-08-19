@@ -37,6 +37,7 @@ log = logging.getLogger("waf.nginx_conf")
 
 RELOAD_KEY = "waf:nginx:reload"
 ENGINE_NGINX_CONF = "/usr/local/openresty/nginx/conf/nginx.conf"
+ENGINE_PID_PATH = "/usr/local/openresty/nginx/logs/nginx.pid"
 ENGINE_RELOAD_CMD = (
     "/usr/local/openresty/bin/openresty",
     "-s",
@@ -362,11 +363,41 @@ def render_site(site: Site) -> str:
     return main_block
 
 
-async def regenerate(db: AsyncSession) -> EngineReloadResult:
+def _engine_is_running() -> bool:
+    """Return True if nginx.pid exists and the OpenResty master is alive."""
+    try:
+        with open(ENGINE_PID_PATH, encoding="utf-8") as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+async def regenerate(
+    db: AsyncSession,
+    *,
+    skip_reload_if_engine_down: bool = False,
+) -> EngineReloadResult:
     """Rewrite conf.d for all enabled sites, drop stale files, trigger reload.
 
     Returns an EngineReloadResult. Conf files are always written first;
     callers that already committed DB state should treat failure as soft.
+
+    Args:
+        db: Session used to load sites and engine settings.
+        skip_reload_if_engine_down: When True, write conf.d but skip
+            ``openresty -s reload`` if the engine is not running yet
+            (cold start). Default False keeps existing caller behavior.
+
+    Returns:
+        Reload result. ``ok`` is True when reload succeeded, or when reload
+        was skipped because the engine had not started.
     """
     conf_dir = settings.engine_conf_dir
     os.makedirs(conf_dir, exist_ok=True)
@@ -425,6 +456,16 @@ async def regenerate(db: AsyncSession) -> EngineReloadResult:
             (result.detail or "")[:200],
         )
         return result
+
+    # Cold start: engine waits for /health, so pid is not there yet. Conf is
+    # already on disk; OpenResty will load it on first start. Do not call
+    # ``openresty -s reload`` (that would log nginx.pid ENOENT).
+    if skip_reload_if_engine_down and not _engine_is_running():
+        log.info(
+            "regenerated %d site confs (reload skipped: engine not running yet)",
+            len(wanted),
+        )
+        return EngineReloadResult(ok=True)
 
     result = await trigger_reload()
     log.info(

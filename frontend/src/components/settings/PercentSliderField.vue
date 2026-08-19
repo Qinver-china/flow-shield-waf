@@ -1,24 +1,10 @@
 <template>
   <div class="percent-slider-field">
-    <a-slider
-      class="percent-slider-field__slider"
-      :value="modelValue"
-      :min="0"
-      :max="100"
-      :step="1"
-      @update:value="onInput"
-    />
-    <a-input-number
-      :value="modelValue"
-      :min="0"
-      :max="100"
-      :step="1"
-      :precision="0"
-      addon-after="%"
-      class="percent-slider-field__input"
-      inputmode="numeric"
-      @update:value="onInput"
-    />
+    <a-slider class="percent-slider-field__slider" :value="modelValue" :min="0" :max="100" :step="1"
+      @update:value="onInput" />
+    <div class="percent-slider-field__value">
+      {{ modelValue }}%
+    </div>
   </div>
 </template>
 
@@ -45,14 +31,8 @@ function onInput(val: number | null) {
   align-items: center;
 }
 
-.percent-slider-field__input {
-  width: 100%;
-  max-width: 85px;
-}
-
 .percent-slider-field__slider {
   flex: 1;
-  margin:2px;
+  margin: 2px;
 }
-
 </style>

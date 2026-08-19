@@ -1,10 +1,23 @@
--- Render gateway / origin error pages with configured captcha footer.
+-- Render nginx / gateway error pages with configured captcha footer.
+-- Used for engine-generated errors (413, 502, …), not WAF block pages.
 local sync = require "waf.sync"
 local page_render = require "waf.page_render"
 
 local _M = {}
 
+local DEFAULT_MESSAGE = "请求处理失败"
+
 local MESSAGES = {
+    [400] = "请求格式无效",
+    [401] = "需要身份验证",
+    [403] = "访问被拒绝",
+    [404] = "页面不存在",
+    [405] = "请求方法不允许",
+    [408] = "请求超时",
+    [413] = "请求体过大",
+    [414] = "请求 URI 过长",
+    [429] = "请求过于频繁",
+    [500] = "服务器内部错误",
     [502] = "无法连接到源站",
     [503] = "源站连接失败",
     [504] = "源站连接超时",
@@ -16,24 +29,9 @@ local PAGE = [[<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>%s</title>
-<style>
-body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
-.box{max-width:520px;text-align:center;padding:40px}
-h1{font-size:100px;margin:0;color:#f87171;font-weight:700;letter-spacing:.04em;line-height:1}
-h2{font-size:22px;font-weight:600;margin:16px 0 0;color:#e2e8f0}
-.brand{margin-top:40px;color:#64748b;font-size:13px;letter-spacing:.5px}
-.brand b,.brand a{color:#38bdf8}
-.brand a{text-decoration:none}
-.brand a:hover{text-decoration:underline}
-</style>
+<style> body{color:#80858c;display:flex;align-items:center;justify-content:center;height:100vh;margin:0} .box{max-width:520px;text-align:center;padding:40px} h1{font-size:100px;margin:0;color:#f87171;} h2{font-size:22px;margin:16px 0 0} .brand{margin-top:40px;color:#64748b;font-size:13px;} .brand b,.brand a{color:#38bdf8} .brand a{text-decoration:none} .brand a:hover{text-decoration:underline} </style>
 </head>
-<body>
-<div class="box">
-  <h1>%s</h1>
-  <h2>%s</h2>
-  <div class="brand">%s</div>
-</div>
-</body>
+<body> <div class="box"> <h1>%s</h1> <h2>%s</h2> <div class="brand">%s</div> </div> </body>
 </html>]]
 
 local function html_escape(s)
@@ -45,9 +43,18 @@ local function html_escape(s)
     return s
 end
 
+function _M.message_for(status)
+    status = tonumber(status)
+    if status and MESSAGES[status] then
+        return MESSAGES[status]
+    end
+    return DEFAULT_MESSAGE
+end
+
 function _M.serve(status)
-    status = tonumber(status) or tonumber(ngx.status) or 502
-    local message = MESSAGES[status] or MESSAGES[502]
+    -- error_page =CODE preserves ngx.status; do not override it in Lua.
+    status = tonumber(ngx.status) or tonumber(status) or 502
+    local message = _M.message_for(status)
     local code = tostring(status)
 
     if sync.needs_load() then
@@ -62,7 +69,6 @@ function _M.serve(status)
     }
     local footer = page_render.render_captcha_footer(cfg, site, ctx, {})
 
-    ngx.status = status
     ngx.header["Content-Type"] = "text/html; charset=utf-8"
     ngx.header["Cache-Control"] = "no-store"
     ngx.say(string.format(

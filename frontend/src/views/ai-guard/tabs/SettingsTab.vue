@@ -100,7 +100,7 @@
                 :precision="1"
                 show-slider
               />
-              <div class="hint">较低值输出更稳定，较高值更有创造性。自动防护建议 0.2–0.5。</div>
+              <div class="hint">较低更稳定，较高更有创造性，建议 0.2–0.5</div>
             </a-form-item>
           </a-col>
           <a-col :xs="24" :md="12">
@@ -111,7 +111,6 @@
                 :min="256"
                 :max="128000"
                 :step="256"
-                unit="tokens"
                 show-slider
               />
             </a-form-item>

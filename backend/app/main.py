@@ -79,10 +79,14 @@ async def _bootstrap() -> None:
             log.exception("initial config publish failed")
             await get_redis().set(rule_sync.DIRTY_KEY, "1")
         # Refresh site nginx so ACME HTTP-01 locations exist after upgrades.
+        # Skip reload when OpenResty is not up yet (cold start); engine loads
+        # conf.d on first start. Backend-only restart still reloads.
         try:
             from app.services import nginx_conf
 
-            result = await nginx_conf.regenerate(db)
+            result = await nginx_conf.regenerate(
+                db, skip_reload_if_engine_down=True
+            )
             if not result.ok:
                 log.warning(
                     "initial nginx regenerate soft-failed reason=%s detail=%s",

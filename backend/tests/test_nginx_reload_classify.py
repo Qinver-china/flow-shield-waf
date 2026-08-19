@@ -44,3 +44,30 @@ def test_format_reload_warn_fallback_without_detail():
     result = EngineReloadResult(ok=False, reason="engine")
     msg = format_reload_warn_message(result)
     assert "请检查引擎状态" in msg
+
+
+def test_engine_is_running_missing_pid(tmp_path, monkeypatch):
+    from app.services import nginx_conf
+
+    monkeypatch.setattr(nginx_conf, "ENGINE_PID_PATH", str(tmp_path / "nginx.pid"))
+    assert nginx_conf._engine_is_running() is False
+
+
+def test_engine_is_running_stale_pid(tmp_path, monkeypatch):
+    from app.services import nginx_conf
+
+    pid_path = tmp_path / "nginx.pid"
+    pid_path.write_text("999999999\n", encoding="utf-8")
+    monkeypatch.setattr(nginx_conf, "ENGINE_PID_PATH", str(pid_path))
+    assert nginx_conf._engine_is_running() is False
+
+
+def test_engine_is_running_alive(tmp_path, monkeypatch):
+    import os
+
+    from app.services import nginx_conf
+
+    pid_path = tmp_path / "nginx.pid"
+    pid_path.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    monkeypatch.setattr(nginx_conf, "ENGINE_PID_PATH", str(pid_path))
+    assert nginx_conf._engine_is_running() is True

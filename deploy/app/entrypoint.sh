@@ -28,7 +28,7 @@ SNIP_HTTP="/etc/nginx/snippets/geoip2-http.conf"
 
 if [ -f "$GEOIP_MODULE" ] && compgen -G "$GEOIP_DIR/*.mmdb" >/dev/null; then
   startup_sub "GeoIP2 已启用 (${GEOIP_DIR})"
-  echo "GeoIP2 enabled: using MaxMind databases from ${GEOIP_DIR}" >&2
+  echo "[startup] GeoIP2 enabled: using MaxMind databases from ${GEOIP_DIR}" >&2
   echo "load_module modules/ngx_http_geoip2_module.so;" >"$SNIP_LOAD"
   {
     if [ -f "$GEOIP_DIR/GeoLite2-Country.mmdb" ]; then

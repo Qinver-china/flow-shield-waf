@@ -1487,7 +1487,7 @@ onUnmounted(() => {
 
 .dim-group {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 10px;
   width: 100%;
 }
@@ -1531,7 +1531,7 @@ onUnmounted(() => {
 
 .threshold-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
   margin-bottom: 8px;
 }
@@ -1712,10 +1712,6 @@ onUnmounted(() => {
 @media (max-width: 767px) {
   .settings-panel :deep(.ant-card-body) {
     padding: 16px;
-  }
-
-  .threshold-grid {
-    grid-template-columns: 1fr;
   }
 
   .status-segmented :deep(.ant-segmented) {

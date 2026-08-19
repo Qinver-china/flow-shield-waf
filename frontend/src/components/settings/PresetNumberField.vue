@@ -16,8 +16,8 @@
 
       <a-input-number v-if="isCustom" :value="modelValue" :min="min" :max="max" :step="step" :precision="precision"
         class="preset-number-field__input" inputmode="numeric" @update:value="onNumberChange">
-        <template #addonAfter>
-          {{ unit || '' }}
+        <template v-if="unit" #addonAfter>
+          {{ unit }}
         </template>
       </a-input-number>
 
