@@ -31,7 +31,7 @@ git clone https://github.com/Qinver-china/flow-shield-waf.git
 cd flow-shield-waf
 
 cp .env.example .env #仅首次安装拷贝
-vi .env   # 推荐修改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET
+vi .env   # 推荐修改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET；可选 PANEL_ENTRANCE 面板安全入口
 ```
 
 ### 2. 检查端口

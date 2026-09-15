@@ -1,6 +1,6 @@
 {
   "name": "flowshield-waf-frontend",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
@@ -18,7 +18,9 @@
     "dayjs": "^1.11.11",
     "dompurify": "^3.4.12",
     "echarts": "^5.5.1",
+    "lucide": "^1.33.0",
     "marked": "^18.0.6",
+    "morphicons": "^1.7.0",
     "pinia": "^2.1.7",
     "vue": "^3.4.31",
     "vue-router": "^4.4.0"

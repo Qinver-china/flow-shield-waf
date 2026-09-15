@@ -23,7 +23,7 @@ p{color:#94a3b8;line-height:1.7}
 <body><div class="box">
 <h1>403</h1>
 <h2>请求被<a href="https://fswaf.top" target="_blank" rel="noopener noreferrer">流盾WAF</a> 拦截</h2>
-<p>您的请求命中了防护规则，已被阻止。若您认为这是误判，请联系站点管理员。</p>
+<p>您的请求命中了防护规则，已被阻止。如需帮助，请联系站点管理员。</p>
 <div class="rid">Request ID: {request_id}</div>
 <div class="brand">由 <a href="https://fswaf.top" target="_blank" rel="noopener noreferrer"><b>流盾WAF</b></a> · Flow Shield WAF 提供防护</div>
 </div></body></html>]]

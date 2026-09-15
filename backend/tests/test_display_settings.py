@@ -89,10 +89,11 @@ def test_display_settings_out_exposes_runtime_ports():
         panel_public_url="https://waf.example.com:9010",
         acme_account_email="ops@example.com",
     )
-    out = DisplaySettingsOut.from_row(row, backend_port=8001)
+    out = DisplaySettingsOut.from_row(row, backend_port=8001, panel_entrance="/safe-entry/")
     assert out.backend_port == 8001
     assert out.panel_port == 9010
     assert out.acme_account_email == "ops@example.com"
+    assert out.panel_entrance == "safe-entry"
 
 
 def test_display_settings_normalizes_acme_email():

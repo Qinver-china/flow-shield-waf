@@ -14,6 +14,7 @@ interface DisplaySettingsPayload {
   acme_account_email?: string | null;
   backend_port?: number;
   panel_port?: number | null;
+  panel_entrance?: string;
 }
 
 export const useAppSettingsStore = defineStore("appSettings", {
@@ -24,6 +25,7 @@ export const useAppSettingsStore = defineStore("appSettings", {
     acmeAccountEmail: "",
     backendPort: 0,
     panelPort: null as number | null,
+    panelEntrance: "",
     loaded: false,
   }),
   actions: {
@@ -34,6 +36,7 @@ export const useAppSettingsStore = defineStore("appSettings", {
       this.acmeAccountEmail = data.acme_account_email || "";
       this.backendPort = Number(data.backend_port) || 0;
       this.panelPort = data.panel_port ?? null;
+      this.panelEntrance = (data.panel_entrance || "").replace(/^\/+|\/+$/g, "");
       setAppTimezone(this.timezone);
     },
     async fetch() {

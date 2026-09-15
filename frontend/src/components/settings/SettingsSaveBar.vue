@@ -1,5 +1,6 @@
 <template>
-  <div v-if="visible" class="settings-save-bar">
+  <a-affix :offset-bottom="20" v-if="visible">
+  <div class="settings-save-bar">
     <span class="settings-save-bar__hint" :class="{ 'is-dirty': dirty }">
       {{ dirty ? "有未保存的更改" : "暂无更改" }}
     </span>
@@ -7,6 +8,7 @@
       {{ label }}
     </a-button>
   </div>
+</a-affix>
 </template>
 
 <script setup lang="ts">
@@ -45,6 +47,8 @@ const emit = defineEmits<{
   border-radius: var(--fs-radius-md);
   background: var(--fs-bg-surface);
   box-shadow: var(--fs-shadow-sm);
+  -webkit-backdrop-filter: saturate(1.2) blur(10px);
+  backdrop-filter: saturate(1.2) blur(10px);
 }
 
 .settings-save-bar__hint {

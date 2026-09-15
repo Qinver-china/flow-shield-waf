@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.core.panel_gate import attach_session_cookie, clear_session_cookie
 from app.core.rate_limit import check_login_rate_limit
 from app.core.security import (
     create_access_token,
@@ -47,6 +48,7 @@ async def setup_status(db: AsyncSession = Depends(get_db)):
 async def initial_setup(
     body: InitialSetupRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     await check_login_rate_limit(request)
@@ -58,6 +60,7 @@ async def initial_setup(
         is_active=True,
     ))
     await db.commit()
+    attach_session_cookie(response)
     return ok(_token_payload(body.new_username))
 
 
@@ -65,6 +68,7 @@ async def initial_setup(
 async def login(
     body: LoginRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     await check_login_rate_limit(request)
@@ -75,11 +79,12 @@ async def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已禁用")
+    attach_session_cookie(response)
     return ok(_token_payload(user.username))
 
 
 @router.post("/refresh")
-async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(body: RefreshRequest, response: Response, db: AsyncSession = Depends(get_db)):
     try:
         payload = decode_token(body.refresh_token)
     except Exception as exc:  # noqa: BLE001
@@ -92,17 +97,26 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     ).scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="refresh token 无效")
+    attach_session_cookie(response)
     return ok(_token_payload(user.username))
 
 
+@router.post("/logout")
+async def logout(response: Response):
+    clear_session_cookie(response)
+    return ok()
+
+
 @router.get("/me")
-async def me(user: User = Depends(get_current_user)):
+async def me(response: Response, user: User = Depends(get_current_user)):
+    attach_session_cookie(response)
     return ok({"id": user.id, "username": user.username, "is_active": user.is_active})
 
 
 @router.put("/username")
 async def change_username(
     body: ChangeUsernameRequest,
+    response: Response,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -118,6 +132,7 @@ async def change_username(
     user.username = body.new_username
     await db.commit()
     await db.refresh(user)
+    attach_session_cookie(response)
     return ok({
         "username": user.username,
         **_token_payload(user.username),

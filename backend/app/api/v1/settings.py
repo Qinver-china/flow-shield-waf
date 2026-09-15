@@ -189,7 +189,13 @@ async def get_display_settings(
         row.panel_public_url = waf_settings.infer_panel_public_url(request)
         await db.commit()
         await db.refresh(row)
-    return ok(DisplaySettingsOut.from_row(row, backend_port=settings.backend_port).model_dump())
+    return ok(
+        DisplaySettingsOut.from_row(
+            row,
+            backend_port=settings.backend_port,
+            panel_entrance=settings.panel_entrance,
+        ).model_dump()
+    )
 
 
 @router.put("/display")
@@ -204,7 +210,13 @@ async def update_display_settings(
     row.acme_account_email = body.acme_account_email
     await db.commit()
     await db.refresh(row)
-    return ok(DisplaySettingsOut.from_row(row, backend_port=settings.backend_port).model_dump())
+    return ok(
+        DisplaySettingsOut.from_row(
+            row,
+            backend_port=settings.backend_port,
+            panel_entrance=settings.panel_entrance,
+        ).model_dump()
+    )
 
 
 @router.get("/engine")

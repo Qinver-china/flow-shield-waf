@@ -125,7 +125,8 @@ function onExecute() {
   max-width: 960px;
   width: 100%;
   box-shadow: var(--fs-shadow-lg);
-  background: var(--fs-bg-modal);
+  -webkit-backdrop-filter: saturate(1.2) blur(10px);
+  backdrop-filter: saturate(1.2) blur(10px);
 }
 
 .table-batch-bar-count {

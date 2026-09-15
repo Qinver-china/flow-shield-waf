@@ -244,8 +244,8 @@ function onOpenChange(keys: string[]) {
   openKeys.value = keys;
 }
 
-function logout() {
-  auth.logout();
+async function logout() {
+  await auth.logout();
   router.push("/login");
 }
 

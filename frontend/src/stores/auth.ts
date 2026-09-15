@@ -61,7 +61,12 @@ export const useAuthStore = defineStore("auth", {
       this.setSession(username, resp.data.access_token, resp.data.refresh_token);
       return resp.data;
     },
-    logout() {
+    async logout() {
+      try {
+        await api.post("/api/v1/auth/logout");
+      } catch {
+        /* 未走过入口时 nginx 可能直接 404，本地会话仍要清掉 */
+      }
       this.accessToken = "";
       this.username = "";
       clearSession();

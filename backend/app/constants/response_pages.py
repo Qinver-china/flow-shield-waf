@@ -28,7 +28,7 @@ p{{color:#94a3b8;line-height:1.7}}
 <body><div class="box">
 <h1>403</h1>
 <h2>请求被{_BRAND_NAME_LINK} 拦截</h2>
-<p>您的请求命中了防护规则，已被阻止。若您认为这是误判，请联系站点管理员。</p>
+<p>您的请求命中了防护规则，已被阻止。如需帮助，请联系站点管理员。</p>
 <div class="rid">Request ID: {{request_id}}</div>
 <div class="brand">由 {_BRAND_BOLD_LINK} · Flow Shield WAF 提供防护</div>
 </div></body></html>"""
@@ -52,7 +52,7 @@ p{color:#94a3b8;line-height:1.7}
 <body><div class="box">
 <h1>403</h1>
 <h2>请求被流盾WAF 拦截</h2>
-<p>您的请求命中了防护规则，已被阻止。若您认为这是误判，请联系站点管理员。</p>
+<p>您的请求命中了防护规则，已被阻止。如需帮助，请联系站点管理员。</p>
 <div class="rid">Request ID: {request_id}</div>
 <div class="brand">由 <b>流盾WAF</b> · Flow Shield WAF 提供防护</div>
 </div></body></html>"""

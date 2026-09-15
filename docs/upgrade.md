@@ -83,6 +83,7 @@ diff .env.example .env || true
 |------|------|
 | `CORS_ORIGINS` | 面板跨域来源 |
 | `EXTRA_LISTEN_PORTS` | 站点自定义访问端口（逗号分隔，如 `9088`）；改后执行 `bash scripts/sync-compose-ports.sh && docker compose up -d`。不要手改 `docker-compose.override.yml` |
+| `PANEL_ENTRANCE` | 面板安全入口。升级时若 `.env` 没有此项会补空值，保持「未登录直接进入登录页」；需要启用时自行填写后重启 `app` |
 | `CLICKHOUSE_*` | 日志库连接（Compose 内通常用默认值即可） |
 
 > **不要**在更新时随意修改 `JWT_SECRET`、`WAF_CHALLENGE_SECRET`，否则已签发 Token 与挑战 Cookie 会失效。

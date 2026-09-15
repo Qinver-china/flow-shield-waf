@@ -21,7 +21,7 @@ async def test_refresh_rejects_inactive_user():
         patch("app.api.v1.auth.decode_token", return_value={"type": "refresh", "sub": "admin"}),
         pytest.raises(HTTPException) as exc,
     ):
-        await auth_api.refresh(MagicMock(refresh_token="token"), db=db)
+        await auth_api.refresh(MagicMock(refresh_token="token"), response=MagicMock(), db=db)
     assert exc.value.status_code == 401
 
 
@@ -61,6 +61,7 @@ async def test_initial_setup_rejected_when_admin_exists():
         await auth_api.initial_setup(
             MagicMock(new_username="owner", new_password="secret12"),
             request=MagicMock(),
+            response=MagicMock(),
             db=db,
         )
     assert exc.value.status_code == 400
@@ -82,6 +83,7 @@ async def test_initial_setup_creates_admin_when_empty():
         result = await auth_api.initial_setup(
             MagicMock(new_username="owner", new_password="secret12"),
             request=MagicMock(),
+            response=MagicMock(),
             db=db,
         )
     db.add.assert_called_once()

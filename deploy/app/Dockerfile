@@ -158,6 +158,11 @@ RUN rm -rf /etc/nginx/conf.d/*
 COPY --from=frontend-build /build/dist /usr/share/nginx/html
 COPY deploy/app/frontend.nginx.conf /etc/nginx/http.d/flowshield-panel.conf
 COPY deploy/app/panel.nginx.conf /etc/nginx/nginx.conf
+# 默认关闭安全入口，启动脚本会按 PANEL_ENTRANCE 覆盖
+RUN printf '%s\n' 'map $host $panel_gate_ok { default 1; }' 'map $host $panel_session_ok { default 1; }' >/etc/nginx/http.d/panel-gate-map.conf \
+    && : >/etc/nginx/snippets/panel-gate-check.conf \
+    && : >/etc/nginx/snippets/panel-auth-check.conf \
+    && : >/etc/nginx/http.d/panel-gate-locations.conf
 RUN rm -f /etc/nginx/http.d/default.conf
 
 # ---- 9. 进程管理与启动脚本 ----
@@ -167,11 +172,13 @@ COPY deploy/app/wait-for.sh /opt/flowshield/wait-for.sh
 COPY deploy/app/wait-for-backend.sh /opt/flowshield/wait-for-backend.sh
 COPY deploy/app/startup-log.sh /opt/flowshield/startup-log.sh
 COPY deploy/app/startup-ready.sh /opt/flowshield/startup-ready.sh
+COPY deploy/app/render-panel-gate.sh /opt/flowshield/render-panel-gate.sh
 RUN chmod +x /entrypoint.sh
 RUN chmod +x /opt/flowshield/wait-for.sh
 RUN chmod +x /opt/flowshield/wait-for-backend.sh
 RUN chmod +x /opt/flowshield/startup-log.sh
 RUN chmod +x /opt/flowshield/startup-ready.sh
+RUN chmod +x /opt/flowshield/render-panel-gate.sh
 
 EXPOSE 80 443 9000
 

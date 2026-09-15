@@ -19,7 +19,7 @@
 | backend | FastAPI，unix socket（面板 Nginx 反代） |
 | worker | 日志消费 / 留存清理 |
 | engine | OpenResty WAF，:80 / :443 |
-| panel | Nginx 静态面板 + API 反代，:9000 |
+| panel | Nginx 静态面板 + API 反代，:9000。可选安全入口（`PANEL_ENTRANCE`）：未登录仅 `/{入口}` 可进入登录页，其它请求 404 |
 
 ## 请求处理流程（engine）
 

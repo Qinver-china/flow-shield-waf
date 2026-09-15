@@ -159,7 +159,7 @@ curl -fsSL https://fswaf.top/install.sh | bash
 curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/install.sh | bash
 ```
 
-脚本会检测 Linux / 宝塔 / macOS（需 Docker Desktop）、安装缺失的 Docker·Compose·Git（macOS 的 Docker 需手动安装）、处理 80/443（可自动调整 Nginx listen）、克隆代码并**本地构建**。`.env` 服务密钥自动随机生成；全新安装首次打开面板时设置管理员账号密码。
+脚本会检测 Linux / 宝塔 / macOS（需 Docker Desktop）、安装缺失的 Docker·Compose·Git（macOS 的 Docker 需手动安装）、处理 80/443（可自动调整 Nginx listen）、克隆代码并**本地构建**。`.env` 服务密钥与面板安全入口自动随机生成；全新安装需访问带安全入口的地址打开面板，再设置管理员账号密码。
 
 ### 环境要求
 
@@ -190,6 +190,7 @@ cp .env.example .env  #仅首次安装拷贝
 | `JWT_SECRET` | JWT 签名密钥（建议长随机串） |
 | `WAF_CHALLENGE_SECRET` | 挑战 Cookie HMAC 密钥（建议长随机串） |
 | `PANEL_PORT` | 管理面板宿主机端口（默认 `9000`） |
+| `PANEL_ENTRANCE` | 面板安全入口路径。留空则未登录直接进入登录页；设置后必须访问 `http://IP:端口/{此值}` 才会打开登录页，其它未登录访问返回 404 |
 | `EXTRA_LISTEN_PORTS` | 站点自定义访问端口，逗号分隔，如 `9088`（见下方） |
 
 生产环境建议同时设置：

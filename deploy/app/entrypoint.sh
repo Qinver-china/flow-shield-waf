@@ -89,8 +89,13 @@ export LOG_LEVEL='${LOG_LEVEL:-WARNING}'
 export ENGINE_CONF_DIR=/data/engine/conf.d
 export ENGINE_CERT_DIR=/data/engine/certs
 export SLIDE_CAPTCHA_ASSETS_DIR='${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}'
+export PANEL_ENTRANCE='${PANEL_ENTRANCE:-}'
 export WAF_BACKEND_URL='unix:/run/flowshield/backend.sock'
 EOF
+
+# 管理面板安全入口：未设置则保持直接进入登录页；设置后未登录访问返回 404
+/opt/flowshield/render-panel-gate.sh
+nginx -t
 
 # 首次启动时，若挂载目录为空则写入内置默认素材
 if [ ! -d "${SLIDE_CAPTCHA_ASSETS_DIR:-/data/slide_captcha}/tiles" ] || \

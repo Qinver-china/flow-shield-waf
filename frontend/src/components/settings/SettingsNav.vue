@@ -1,4 +1,5 @@
 <template>
+  <a-affix :offset-top="12">
   <nav class="settings-nav" aria-label="系统设置分组">
     <div class="settings-nav__mobile">
       <a-segmented
@@ -23,6 +24,7 @@
       </li>
     </ul>
   </nav>
+</a-affix>
 </template>
 
 <script setup lang="ts">
@@ -107,8 +109,6 @@ function onSelect(key: string | number) {
 
   .settings-nav__desktop {
     display: block;
-    position: sticky;
-    top: 12px;
   }
 }
 </style>

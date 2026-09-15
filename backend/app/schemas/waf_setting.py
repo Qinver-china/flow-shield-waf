@@ -156,6 +156,7 @@ class DisplaySettingsOut(DisplaySettings):
     )
     backend_port: int = 8000
     panel_port: int | None = None
+    panel_entrance: str = ""
 
     @classmethod
     def from_row(
@@ -164,6 +165,7 @@ class DisplaySettingsOut(DisplaySettings):
         *,
         backend_port: int | None = None,
         panel_port: int | None = None,
+        panel_entrance: str | None = None,
     ) -> "DisplaySettingsOut":
         from app.services.listen_ports import port_from_url
 
@@ -172,10 +174,12 @@ class DisplaySettingsOut(DisplaySettings):
             tz = DEFAULT_TIMEZONE
         panel_url = getattr(row, "panel_public_url", None) or ""
         resolved_panel = panel_port if panel_port is not None else port_from_url(panel_url, implicit=False)
+        entrance = (panel_entrance if panel_entrance is not None else "").strip().strip("/")
         return cls(
             timezone=tz,
             panel_public_url=panel_url,
             acme_account_email=getattr(row, "acme_account_email", None) or None,
             backend_port=backend_port if backend_port is not None else 8000,
             panel_port=resolved_panel,
+            panel_entrance=entrance,
         )

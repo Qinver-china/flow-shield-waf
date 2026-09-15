@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_ttl_min: int = 120
     jwt_refresh_ttl_days: int = 3
+    # Admin panel security entrance (URL path). Empty = legacy login redirect.
+    panel_entrance: str = ""
 
     # waf
     waf_challenge_secret: str = "FlowShield_Challenge_ChangeMe_Secret32"

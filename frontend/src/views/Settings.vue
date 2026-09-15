@@ -62,7 +62,7 @@
             <a-card class="settings-panel" :bordered="false">
               <div class="section-head">
                 <div class="section-title">显示与联系</div>
-                <div class="section-desc">时区、外网面板地址与证书申请联系邮箱。</div>
+                <div class="section-desc">时区、外网面板地址、安全入口与证书申请联系邮箱。</div>
               </div>
               <a-form layout="vertical" class="section-form wide">
                 <a-form-item label="显示时区">
@@ -82,6 +82,17 @@
                     placeholder="https://waf.example.com:9000" @blur="trimPanelUrl" />
                   <div class="hint">
                     用于 AI 分析邮件中的「应用规则 / 忽略」链接，请勿带尾部斜杠。首次打开本页时会根据当前访问地址自动填入，可手动修改。
+                  </div>
+                </a-form-item>
+                <a-form-item label="面板安全入口">
+                  <div v-if="panelEntrance" class="readonly-value">
+                    <a-typography-text :copyable="{ text: panelEntranceUrl }">{{ panelEntranceUrl }}</a-typography-text>
+                  </div>
+                  <div v-else class="readonly-value">未启用</div>
+                  <div class="hint">
+                    启用后，未登录必须访问以该路径结尾的地址才会打开登录页，其它地址返回 404。由环境变量
+                    <code>PANEL_ENTRANCE</code> 控制，留空则保持直接进入登录页。修改后需重启
+                    <code>app</code> 容器。
                   </div>
                 </a-form-item>
                 <a-form-item label="ACME 账户邮箱">
@@ -650,6 +661,14 @@ const displayForm = reactive<{
   timezone_options: [],
   panel_public_url: "",
   acme_account_email: "",
+});
+
+const panelEntrance = computed(() => appSettings.panelEntrance);
+const panelEntranceUrl = computed(() => {
+  const path = panelEntrance.value;
+  if (!path) return "";
+  const base = (displayForm.panel_public_url || appSettings.panelPublicUrl || "").replace(/\/+$/, "");
+  return base ? `${base}/${path}` : `/${path}`;
 });
 
 interface ResponsePageForm {
@@ -1399,7 +1418,7 @@ onUnmounted(() => {
   }
 
   .settings-layout :deep(.settings-nav) {
-    flex: 0 0 200px;
+    min-width: 200px;
   }
 
   .settings-main {
