@@ -137,8 +137,8 @@ import { version as appVersion } from "../../package.json";
 
 const drawerOpen = ref(false);
 const openKeys = ref<string[]>(["overview", "assets", "policy", "observe", "system"]);
-const changelogUrl = "https://fswaf.top/changelog";
-const docsUrl = "https://fswaf.top/guide/dashboard";
+const changelogUrl = "https://fswaf.cn/changelog";
+const docsUrl = "https://fswaf.cn/guide/dashboard";
 
 const route = useRoute();
 const router = useRouter();

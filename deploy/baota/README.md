@@ -7,12 +7,12 @@
 ```bash
 # 在 /www/wwwroot 等目标目录执行
 # 推荐
-curl -fsSL https://fswaf.top/install.sh | bash
+curl -fsSL https://fswaf.cn/install.sh | bash
 # 备用
 curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/install.sh | bash
 ```
 
-官网文档：[快速开始](https://fswaf.top/guide/quick-start) · [宝塔手动步骤](https://fswaf.top/guide/baota)
+官网文档：[快速开始](https://fswaf.cn/guide/quick-start) · [宝塔手动步骤](https://fswaf.cn/guide/baota)
 
 安装与更新统一使用仓库根目录的 `install.sh`（或上方一键命令）。
 
@@ -55,7 +55,7 @@ docker compose up -d --build
 
 将启动 **3 个容器**：`redis`、`clickhouse`、`app`。
 
-一键脚本在健康检查通过后会检测本机宝塔 / 1Panel，并写入「同服务器」面板账号（失败不影响安装）。随后可在管理面板用「从其他面板导入」批量接入站点与证书。详见官网 [系统设置 · 面板集成](https://fswaf.top/guide/settings) 与 [接入第一个站点](https://fswaf.top/guide/first-site)。
+一键脚本在健康检查通过后会检测本机宝塔 / 1Panel，并写入「同服务器」面板账号（失败不影响安装）。随后可在管理面板用「从其他面板导入」批量接入站点与证书。详见官网 [系统设置 · 面板集成](https://fswaf.cn/guide/settings) 与 [接入第一个站点](https://fswaf.cn/guide/first-site)。
 
 ## 三、访问
 

@@ -8,7 +8,7 @@
 
 ```bash
 # 推荐
-curl -fsSL https://fswaf.top/install.sh | bash
+curl -fsSL https://fswaf.cn/install.sh | bash
 # 备用
 curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/install.sh | bash
 ```
@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/i
 bash install.sh
 ```
 
-脚本会备份 `.env`、拉取代码、补齐新增环境变量并本地重建。官网说明：[升级与备份](https://fswaf.top/guide/upgrade-backup)。
+脚本会备份 `.env`、拉取代码、补齐新增环境变量并本地重建。官网说明：[升级与备份](https://fswaf.cn/guide/upgrade-backup)。
 
 ---
 

@@ -52,7 +52,7 @@ DIRECTORY_URLS = {
 ZEROSSL_EAB_URL = "https://api.zerossl.com/acme/eab-credentials-email"
 USER_AGENT = "FlowShield-WAF"
 RENEW_DAYS_BEFORE = 10
-ACME_DEFAULT_EMAIL_DOMAIN = "noreply.fswaf.top"
+ACME_DEFAULT_EMAIL_DOMAIN = "noreply.fswaf.cn"
 _ISSUE_LOCK = asyncio.Lock()
 
 ProgressCallback = Callable[[str], Awaitable[None] | None]

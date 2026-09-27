@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # 流盾 WAF (Flow Shield WAF) 一键安装 / 更新脚本
 #
-# 推荐：curl -fsSL https://fswaf.top/install.sh | bash
+# 推荐：curl -fsSL https://fswaf.cn/install.sh | bash
 # 备用：curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/install.sh | bash
 #
-# 官网：https://fswaf.top
+# 官网：https://fswaf.cn
 set -euo pipefail
 
 FSWAF_VERSION="1.0.8"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
-FSWAF_SITE="https://fswaf.top"
+FSWAF_SITE="https://fswaf.cn"
 FSWAF_REPO_URL="${FSWAF_REPO_URL:-https://github.com/Qinver-china/flow-shield-waf.git}"
 # 国内访问 GitHub 失败/超时时按顺序尝试的临时镜像（拉完会恢复官方 origin）。
 # 可用 FSWAF_REPO_MIRROR_URLS 覆盖整表（空格分隔）；FSWAF_REPO_MIRROR_URL 会插到最前（兼容旧用法）。

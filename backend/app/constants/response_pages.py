@@ -1,6 +1,6 @@
 """Defaults and template variables for custom block pages and captcha footers."""
 
-OFFICIAL_SITE_URL = "https://fswaf.top"
+OFFICIAL_SITE_URL = "https://fswaf.cn"
 _BRAND_NAME_LINK = (
     f'<a href="{OFFICIAL_SITE_URL}" target="_blank" rel="noopener noreferrer">流盾WAF</a>'
 )

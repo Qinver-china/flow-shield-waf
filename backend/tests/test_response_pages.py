@@ -9,7 +9,7 @@ from app.constants.response_pages import (
 
 
 def test_default_pages_link_official_site():
-    assert OFFICIAL_SITE_URL == "https://fswaf.top"
+    assert OFFICIAL_SITE_URL == "https://fswaf.cn"
     assert f'href="{OFFICIAL_SITE_URL}"' in DEFAULT_BLOCK_PAGE_HTML
     assert "请求被<a href=" in DEFAULT_BLOCK_PAGE_HTML
     assert f'href="{OFFICIAL_SITE_URL}"' in DEFAULT_CAPTCHA_FOOTER_HTML

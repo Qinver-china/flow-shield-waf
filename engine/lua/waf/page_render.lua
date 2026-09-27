@@ -22,13 +22,13 @@ p{color:#94a3b8;line-height:1.7}
 </style></head>
 <body><div class="box">
 <h1>403</h1>
-<h2>请求被<a href="https://fswaf.top" target="_blank" rel="noopener noreferrer">流盾WAF</a> 拦截</h2>
+<h2>请求被<a href="https://fswaf.cn" target="_blank" rel="noopener noreferrer">流盾WAF</a> 拦截</h2>
 <p>您的请求命中了防护规则，已被阻止。如需帮助，请联系站点管理员。</p>
 <div class="rid">Request ID: {request_id}</div>
-<div class="brand">由 <a href="https://fswaf.top" target="_blank" rel="noopener noreferrer"><b>流盾WAF</b></a> · Flow Shield WAF 提供防护</div>
+<div class="brand">由 <a href="https://fswaf.cn" target="_blank" rel="noopener noreferrer"><b>流盾WAF</b></a> · Flow Shield WAF 提供防护</div>
 </div></body></html>]]
 
-local DEFAULT_CAPTCHA_FOOTER = '由 <a href="https://fswaf.top" target="_blank" rel="noopener noreferrer"><b>流盾WAF</b></a> · Flow Shield WAF 提供防护'
+local DEFAULT_CAPTCHA_FOOTER = '由 <a href="https://fswaf.cn" target="_blank" rel="noopener noreferrer"><b>流盾WAF</b></a> · Flow Shield WAF 提供防护'
 
 local function pick_site_override(site, key)
     if not site or type(site) ~= "table" then
