@@ -42,7 +42,7 @@ vi .env   # 推荐修改：REDIS 密码、JWT_SECRET、WAF_CHALLENGE_SECRET；�
 nginx -t && nginx -s reload
 ```
 
-面板里配置站点回源时填写新端口。一键脚本可自动改写 Nginx 的 `listen` 行（会先备份）。
+面板里配置站点回源时填写新端口。一键脚本可自动改写 Nginx 的 `listen` 行（会先备份），并在检测到宝塔时尝试把新端口写入「安全 → 系统防火墙」。
 
 ### 3. 构建并启动
 

@@ -159,7 +159,7 @@ curl -fsSL https://fswaf.cn/install.sh | bash
 curl -fsSL https://raw.githubusercontent.com/Qinver-china/flow-shield-waf/main/install.sh | bash
 ```
 
-脚本会检测 Linux / 宝塔 / macOS（需 Docker Desktop）、安装缺失的 Docker·Compose·Git（macOS 的 Docker 需手动安装）、处理 80/443（可自动调整 Nginx listen）、克隆代码并**本地构建**。`.env` 服务密钥与面板安全入口自动随机生成；全新安装需访问带安全入口的地址打开面板，再设置管理员账号密码。
+脚本会检测 Linux / 宝塔 / macOS（需 Docker Desktop）、安装缺失的 Docker·Compose·Git（macOS 的 Docker 需手动安装）、处理 80/443（可自动调整 Nginx listen；宝塔环境下会尝试在系统防火墙放行改后的回源端口）、克隆代码并**本地构建**。`.env` 服务密钥与面板安全入口自动随机生成；全新安装需访问带安全入口的地址打开面板，再设置管理员账号密码。
 
 ### 环境要求
 

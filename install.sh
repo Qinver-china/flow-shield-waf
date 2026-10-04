@@ -7,7 +7,7 @@
 # 官网：https://fswaf.cn
 set -euo pipefail
 
-FSWAF_VERSION="1.0.8"
+FSWAF_VERSION="1.0.9"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.cn"
@@ -1316,6 +1316,7 @@ try_auto_free_ports() {
     backup_and_rewrite_nginx_listen "$new_http" "$new_https"
     NGINX_MOVED_HTTP="$new_http"
     NGINX_MOVED_HTTPS="$new_https"
+    baota_allow_origin_ports || true
     sleep 1
     if port_in_use "$http_port" || port_in_use "$https_port"; then
       echo
@@ -2213,6 +2214,246 @@ wait_healthy() {
 }
 
 # ---------------------------------------------------------------------------
+# 本机宝塔：系统防火墙放行 Nginx 改写后的回源端口（失败不阻断安装）
+# ---------------------------------------------------------------------------
+
+BAOTA_FIREWALL_DONE=0
+
+_is_baota_panel() {
+  [[ -d /www/server/panel && -f /www/server/panel/data/port.pl ]]
+}
+
+_baota_python() {
+  local p
+  for p in \
+    /www/server/panel/pyenv/bin/python3 \
+    /www/server/panel/pyenv/bin/python \
+    /usr/bin/btpython; do
+    if [[ -x "$p" ]]; then
+      printf '%s\n' "$p"
+      return 0
+    fi
+  done
+  if command -v btpython >/dev/null 2>&1; then
+    command -v btpython
+    return 0
+  fi
+  return 1
+}
+
+# 从宝塔网站 Nginx 配置收集 listen 端口（排除 80/443 与常见面板/系统端口）
+_baota_vhost_listen_ports() {
+  local root="/www/server/panel/vhost/nginx"
+  need_sudo test -d "$root" || return 0
+  need_sudo sh -c "grep -hE '^[[:space:]]*listen[[:space:]]+' \"${root}\"/*.conf \"${root}\"/*.nginx 2>/dev/null || true" |
+    sed -E 's/.*listen[[:space:]]+//; s/\[::\]://; s/[^0-9].*$//' |
+    awk '
+      /^[0-9]+$/ {
+        p = $0 + 0
+        if (p < 1 || p > 65535) next
+        if (p == 80 || p == 443 || p == 22 || p == 21 || p == 20 || p == 25 || p == 53) next
+        if (p == 888 || p == 8888 || p == 3306 || p == 5432 || p == 6379) next
+        if (!seen[p]++) print p
+      }
+    '
+}
+
+_baota_origin_ports_to_allow() {
+  local p
+  local -a ports=()
+  [[ -n "${NGINX_MOVED_HTTP:-}" ]] && ports+=("$NGINX_MOVED_HTTP")
+  [[ -n "${NGINX_MOVED_HTTPS:-}" ]] && ports+=("$NGINX_MOVED_HTTPS")
+  while IFS= read -r p; do
+    [[ -n "$p" ]] && ports+=("$p")
+  done < <(_baota_vhost_listen_ports)
+  if [[ ${#ports[@]} -eq 0 ]]; then
+    port_in_use "$FSWAF_DEFAULT_HTTP_ALT" && ports+=("$FSWAF_DEFAULT_HTTP_ALT")
+    port_in_use "$FSWAF_DEFAULT_HTTPS_ALT" && ports+=("$FSWAF_DEFAULT_HTTPS_ALT")
+  fi
+  printf '%s\n' "${ports[@]+"${ports[@]}"}" | awk '/^[0-9]+$/ && $0+0 >= 1 && $0+0 <= 65535 && $0 != 80 && $0 != 443 && !seen[$0]++'
+}
+
+baota_allow_origin_ports() {
+  local py remark out line status port rest rc=0
+  local -a ports=() added=() existed=() failed=()
+
+  _is_baota_panel || return 0
+  if [[ "$BAOTA_FIREWALL_DONE" -eq 1 ]]; then
+    return 0
+  fi
+
+  while IFS= read -r port; do
+    [[ -n "$port" ]] && ports+=("$port")
+  done < <(_baota_origin_ports_to_allow)
+
+  if [[ ${#ports[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  info "检测到宝塔面板，将在系统防火墙放行回源端口：${ports[*]}"
+  py="$(_baota_python 2>/dev/null || true)"
+  if [[ -z "$py" ]]; then
+    warn "未找到 btpython，请在宝塔「安全 → 系统防火墙」手动放行：${ports[*]}"
+    return 0
+  fi
+
+  remark="流盾WAF回源"
+  local -a py_cmd=()
+  if command -v timeout >/dev/null 2>&1; then
+    py_cmd+=(timeout 45)
+  fi
+  py_cmd+=("$py" - "$remark" "${ports[@]}")
+  if out="$(
+    need_sudo "${py_cmd[@]}" <<'PY'
+import os, sys
+
+panel = "/www/server/panel"
+os.chdir(panel)
+sys.path.insert(0, os.path.join(panel, "class"))
+sys.path.insert(0, panel)
+os.environ.setdefault("BT_PANEL", panel)
+
+remark = sys.argv[1]
+ports = [p for p in sys.argv[2:] if p.isdigit()]
+
+def already(msg):
+    text = str(msg or "")
+    lowered = text.lower()
+    keys = ("存在", "重复", "无需", "already", "exist")
+    return any((k in lowered) if k.isascii() else (k in text) for k in keys)
+
+def as_ok(result):
+    if result is True:
+        return "ok", ""
+    if isinstance(result, dict):
+        msg = result.get("msg") or result.get("message") or result.get("error_msg") or ""
+        status = result.get("status", result.get("code"))
+        if status in (True, 1, "1", "true", "True"):
+            return "ok", str(msg)
+        if already(msg):
+            return "exists", str(msg)
+        if status in (False, 0, "0", "false", "False"):
+            return "fail", str(msg) or "status=false"
+        return "fail", str(msg or result)
+    if isinstance(result, str):
+        if already(result) or ("成功" in result) or ("success" in result.lower()):
+            return ("exists" if already(result) else "ok"), result
+        return "fail", result
+    return "fail", repr(result)
+
+def make_get(public, port):
+    try:
+        get = public.dict_obj()
+    except Exception:
+        get = type("obj", (), {})()
+    attrs = {
+        "protocol": "tcp",
+        "ports": str(port),
+        "port": str(port),
+        "choose": "all",
+        "address": "",
+        "types": "accept",
+        "type": "tcp",
+        "brief": remark,
+        "ps": remark,
+        "domain": "",
+        "source": "",
+        "chain": "INPUT",
+        "operation": "add",
+        "strategy": "accept",
+    }
+    for key, value in attrs.items():
+        try:
+            setattr(get, key, value)
+        except Exception:
+            pass
+    return get
+
+def add_via_plugin(public, port):
+    import PluginLoader
+    return PluginLoader.module_run("firewall", "create_rules", make_get(public, port))
+
+def add_via_firewalls(public, port):
+    import firewalls as fwmod
+    cls = getattr(fwmod, "firewalls", None) or getattr(fwmod, "Firewalls", None)
+    if cls is None:
+        raise RuntimeError("no firewalls class")
+    return cls().AddAcceptPort(make_get(public, port))
+
+def add_via_firewall_new(public, port):
+    from firewall_new import firewalls as FirewallNew
+    return FirewallNew().AddAcceptPort(make_get(public, port))
+
+def add_via_com_model(public, port):
+    from firewallModel.comModel import main as FirewallCom
+    return FirewallCom().create_rules(make_get(public, port))
+
+try:
+    import public
+except Exception as exc:
+    print("FSWAF_FW fail - import public: %s" % exc)
+    sys.exit(0)
+
+strategies = (add_via_plugin, add_via_com_model, add_via_firewalls, add_via_firewall_new)
+
+for port in ports:
+    last_err = "no strategy"
+    done = False
+    for fn in strategies:
+        try:
+            status, msg = as_ok(fn(public, port))
+            if status in ("ok", "exists"):
+                print("FSWAF_FW %s %s %s" % (status, port, msg.replace("\n", " ").strip()))
+                done = True
+                break
+            last_err = "%s: %s" % (fn.__name__, msg)
+        except Exception as exc:
+            last_err = "%s: %s" % (fn.__name__, exc)
+            continue
+    if not done:
+        print("FSWAF_FW fail %s %s" % (port, last_err.replace("\n", " ").strip()))
+PY
+  )"; then
+    :
+  else
+    rc=$?
+    out="${out:-}"
+  fi
+
+  while IFS= read -r line; do
+    [[ "$line" == FSWAF_FW* ]] || continue
+    # FSWAF_FW <status> <port> <msg...>
+    status="$(printf '%s\n' "$line" | awk '{print $2}')"
+    port="$(printf '%s\n' "$line" | awk '{print $3}')"
+    rest="$(printf '%s\n' "$line" | awk '{print substr($0, index($0,$4))}')"
+    case "$status" in
+    ok) added+=("$port") ;;
+    exists) existed+=("$port") ;;
+    *) failed+=("${port}${rest:+ ($rest)}") ;;
+    esac
+  done <<<"$out"
+
+  if [[ ${#added[@]} -gt 0 ]]; then
+    ok "已在宝塔系统防火墙放行：${added[*]}"
+  fi
+  if [[ ${#existed[@]} -gt 0 ]]; then
+    ok "宝塔系统防火墙已包含：${existed[*]}"
+  fi
+  if [[ ${#failed[@]} -gt 0 || ( ${#added[@]} -eq 0 && ${#existed[@]} -eq 0 ) ]]; then
+    if [[ ${#failed[@]} -gt 0 ]]; then
+      warn "宝塔防火墙自动放行失败：${failed[*]}"
+    elif [[ "$rc" -ne 0 ]]; then
+      warn "宝塔防火墙自动放行失败（exit ${rc}）"
+    else
+      warn "未能确认宝塔防火墙是否已放行：${ports[*]}"
+    fi
+    warn "请在宝塔「安全 → 系统防火墙」手动放行上述端口，否则容器回源会超时"
+  fi
+  BAOTA_FIREWALL_DONE=1
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # 本机宝塔 / 1Panel：健康检查后写入 same_server 账号（失败不阻断安装）
 # ---------------------------------------------------------------------------
 
@@ -2504,6 +2745,7 @@ bootstrap_host_panels() {
   if [[ -d /www/server/panel && -f /www/server/panel/data/port.pl ]]; then
     found=1
     _bootstrap_baota_account || warn "写入本机宝塔账号失败（不影响安装）"
+    baota_allow_origin_ports || true
   fi
   if _onepanel_bin >/dev/null 2>&1; then
     found=1
@@ -2553,6 +2795,7 @@ print_success() {
   if [[ "$kind" == "install" && -n "$NGINX_MOVED_HTTP" ]]; then
     echo
     info "本地网站已改为 HTTP ${NGINX_MOVED_HTTP} / HTTPS ${NGINX_MOVED_HTTPS}，回源请填新端口"
+    info "若本机是宝塔，脚本已尝试在「安全 → 系统防火墙」放行上述端口"
     info "文档：${FSWAF_SITE}/guide/first-site"
   fi
 
