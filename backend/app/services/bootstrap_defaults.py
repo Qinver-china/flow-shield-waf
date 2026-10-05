@@ -22,6 +22,8 @@ from app.services.ip_entry import normalize_entries
 log = logging.getLogger("waf.bootstrap.defaults")
 
 SEED_KEY = "waf:bootstrap:default_policies_v2"
+# One-shot insert of catalog rules added after first install (does not resurrect user deletes).
+MISSING_RULES_KEY = "waf:bootstrap:default_rules_wp_vuln_v1"
 
 
 def _normalize_conditions(raw: dict | None) -> dict:
@@ -115,20 +117,7 @@ async def seed_default_policies(db: AsyncSession) -> int:
         created += 1
 
     for spec in catalog["rules"]:
-        db.add(
-            Rule(
-                name=spec["name"],
-                site_ids=spec.get("site_ids"),
-                priority=int(spec.get("priority", 100)),
-                mode=spec.get("mode", "block"),
-                enabled=bool(spec.get("enabled", True)),
-                conditions=_normalize_conditions(spec.get("conditions")),
-                remark=spec.get("remark"),
-                custom_block_page_enabled=bool(spec.get("custom_block_page_enabled", False)),
-                block_page_status_code=spec.get("block_page_status_code"),
-                block_page_html=spec.get("block_page_html"),
-            )
-        )
+        db.add(_rule_from_spec(spec))
         created += 1
 
     for spec in [*catalog["blacklist"], *catalog["whitelist"]]:
@@ -196,10 +185,51 @@ async def seed_default_policies(db: AsyncSession) -> int:
     return created
 
 
+def _rule_from_spec(spec: dict[str, Any]) -> Rule:
+    return Rule(
+        name=spec["name"],
+        site_ids=spec.get("site_ids"),
+        priority=int(spec.get("priority", 100)),
+        mode=spec.get("mode", "block"),
+        enabled=bool(spec.get("enabled", True)),
+        conditions=_normalize_conditions(spec.get("conditions")),
+        remark=spec.get("remark"),
+        custom_block_page_enabled=bool(spec.get("custom_block_page_enabled", False)),
+        block_page_status_code=spec.get("block_page_status_code"),
+        block_page_html=spec.get("block_page_html"),
+    )
+
+
+async def seed_missing_catalog_rules(db: AsyncSession) -> int:
+    """Insert built-in rules whose names are not yet in the DB.
+
+    Runs once per MISSING_RULES_KEY so operators can still delete a seeded rule.
+    """
+    redis = get_redis()
+    if await redis.get(MISSING_RULES_KEY):
+        return 0
+
+    existing = set((await db.execute(select(Rule.name))).scalars().all())
+    created = 0
+    for spec in DEFAULT_RULES:
+        name = spec.get("name")
+        if not name or name in existing:
+            continue
+        db.add(_rule_from_spec(spec))
+        created += 1
+    await db.commit()
+    await redis.set(MISSING_RULES_KEY, "1")
+    if created:
+        log.info("seeded %d additional builtin rules", created)
+    return created
+
+
 async def ensure_default_policies(db: AsyncSession) -> int:
     """Called from application bootstrap."""
     try:
-        return await seed_default_policies(db)
+        created = await seed_default_policies(db)
+        created += await seed_missing_catalog_rules(db)
+        return created
     except Exception:  # noqa: BLE001
         log.exception("seed default policies failed")
         return 0

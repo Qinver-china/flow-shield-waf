@@ -7,7 +7,7 @@
 # 官网：https://fswaf.cn
 set -euo pipefail
 
-FSWAF_VERSION="1.0.9"
+FSWAF_VERSION="1.0.10"
 FSWAF_PRODUCT="流盾 WAF"
 FSWAF_SLOGAN="守住每一次真实访问"
 FSWAF_SITE="https://fswaf.cn"

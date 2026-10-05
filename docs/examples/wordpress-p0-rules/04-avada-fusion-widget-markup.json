@@ -1,0 +1,71 @@
+{
+  "name": "WP漏洞封堵-Fusion-widget-markup",
+  "remark": "CVE-2026-6279：未授权 POST admin-ajax.php 且 action=fusion_get_widget_markup、Body 含 wp_conditional_tags。仅 Avada/Fusion 站点建议启用。补丁 Fusion Builder 3.15.3+。",
+  "mode": "observe",
+  "priority": 31,
+  "site_ids": [],
+  "enabled": true,
+  "custom_block_page_enabled": false,
+  "block_page_status_code": 403,
+  "block_page_html": "",
+  "conditions": {
+    "logic": "and",
+    "conditions": [
+      {
+        "field": "http.method",
+        "op": "eq",
+        "value": "POST"
+      },
+      {
+        "logic": "or",
+        "conditions": [
+          {
+            "field": "http.uri.path",
+            "op": "contains",
+            "value": [
+              "/wp-admin/admin-ajax.php"
+            ]
+          },
+          {
+            "field": "http.url",
+            "op": "contains",
+            "value": [
+              "/wp-admin/admin-ajax.php"
+            ]
+          }
+        ]
+      },
+      {
+        "logic": "or",
+        "conditions": [
+          {
+            "field": "http.body.form",
+            "arg": "action",
+            "op": "equals",
+            "value": "fusion_get_widget_markup"
+          },
+          {
+            "field": "http.query",
+            "arg": "action",
+            "op": "equals",
+            "value": "fusion_get_widget_markup"
+          },
+          {
+            "field": "http.body.raw",
+            "op": "contains",
+            "value": [
+              "fusion_get_widget_markup"
+            ]
+          }
+        ]
+      },
+      {
+        "field": "http.body.raw",
+        "op": "contains",
+        "value": [
+          "wp_conditional_tags"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "WP漏洞封堵-author_exclude-SQLi",
+  "remark": "CVE-2026-60137：author_exclude / author__not_in 与明显 SQL 函数同现。覆盖 6.8 独立 SQLi。建议确认无误伤后再改为拦截。",
+  "mode": "observe",
+  "priority": 30,
+  "site_ids": [],
+  "enabled": true,
+  "custom_block_page_enabled": false,
+  "block_page_status_code": 403,
+  "block_page_html": "",
+  "conditions": {
+    "logic": "or",
+    "conditions": [
+      {
+        "field": "http.url",
+        "op": "regex",
+        "value": "(?:author_exclude|author__not_in|author%5F%5Fnot_in)[\\s\\S]{0,800}(?:sleep\\s*\\(|benchmark\\s*\\(|union\\s+select|information_schema|load_file\\s*\\(|into\\s+(?:out|dump)file)"
+      },
+      {
+        "field": "http.request_uri",
+        "op": "regex",
+        "value": "(?:author_exclude|author__not_in|author%5F%5Fnot_in)[\\s\\S]{0,800}(?:sleep\\s*\\(|benchmark\\s*\\(|union\\s+select|information_schema|load_file\\s*\\(|into\\s+(?:out|dump)file)"
+      },
+      {
+        "field": "http.uri.query",
+        "op": "regex",
+        "value": "(?:author_exclude|author__not_in|author%5F%5Fnot_in)[\\s\\S]{0,800}(?:sleep\\s*\\(|benchmark\\s*\\(|union\\s+select|information_schema|load_file\\s*\\(|into\\s+(?:out|dump)file)"
+      },
+      {
+        "field": "http.body.raw",
+        "op": "regex",
+        "value": "(?:author_exclude|author__not_in)[\\s\\S]{0,800}(?:sleep\\s*\\(|benchmark\\s*\\(|union\\s+select|information_schema|load_file\\s*\\(|into\\s+(?:out|dump)file)"
+      }
+    ]
+  }
+}

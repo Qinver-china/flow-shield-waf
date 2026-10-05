@@ -51,7 +51,7 @@ def test_default_ip_groups_validate(spec):
 
 
 def test_catalog_sizes():
-    assert len(DEFAULT_RULES) == 6
+    assert len(DEFAULT_RULES) == 11
     assert len(DEFAULT_RATE_LIMITS) == 5
     assert len(DEFAULT_BLACKLIST) == 6
     assert len(DEFAULT_WHITELIST) == 1
@@ -66,6 +66,19 @@ def test_bot_categories_cover_bot_refs():
     for bot in DEFAULT_BOTS:
         for cat in bot.get("categories") or []:
             assert cat in known, f"{bot['name']} references missing category {cat}"
+
+
+def test_wp_vuln_builtin_rule_names():
+    names = [spec["name"] for spec in DEFAULT_RULES]
+    expected = [
+        "WP漏洞封堵-匿名batch",
+        "WP漏洞封堵-author_exclude-SQLi",
+        "WP漏洞封堵-pagename路径穿越",
+        "WP漏洞封堵-Fusion-widget-markup",
+        "WP漏洞封堵-注册用户名超长",
+    ]
+    for name in expected:
+        assert name in names
 
 
 def test_regular_cc_thresholds():

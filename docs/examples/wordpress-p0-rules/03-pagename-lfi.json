@@ -1,0 +1,51 @@
+{
+  "name": "WP漏洞封堵-pagename路径穿越",
+  "remark": "CVE-2026-87902：pagename 二次解码路径穿越。正常别名不应含 .. 或 %2e。pearcmd.php 为常见 gadget。补丁 7.1.2 / 7.0.6 / 6.9.9。",
+  "mode": "block",
+  "priority": 21,
+  "site_ids": [],
+  "enabled": true,
+  "custom_block_page_enabled": false,
+  "block_page_status_code": 403,
+  "block_page_html": "",
+  "conditions": {
+    "logic": "or",
+    "conditions": [
+      {
+        "field": "http.query",
+        "arg": "pagename",
+        "op": "regex",
+        "value": "(?:\\.\\.|%2e|%252e|%c0%ae)"
+      },
+      {
+        "field": "http.uri.query",
+        "op": "regex",
+        "value": "pagename=[^&]*(?:\\.\\.|%2e|%252e|%c0%ae)"
+      },
+      {
+        "field": "http.url",
+        "op": "regex",
+        "value": "pagename=[^&]*(?:\\.\\.|%2e|%252e|%c0%ae)"
+      },
+      {
+        "field": "http.request_uri",
+        "op": "regex",
+        "value": "pagename=[^&]*(?:\\.\\.|%2e|%252e|%c0%ae)"
+      },
+      {
+        "field": "http.url",
+        "op": "contains",
+        "value": [
+          "pearcmd.php"
+        ]
+      },
+      {
+        "field": "http.uri.path",
+        "op": "contains",
+        "value": [
+          "pearcmd.php"
+        ]
+      }
+    ]
+  }
+}

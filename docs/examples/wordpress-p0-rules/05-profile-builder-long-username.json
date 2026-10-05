@@ -1,0 +1,60 @@
+{
+  "name": "WP漏洞封堵-注册用户名超长",
+  "remark": "CVE-2026-15826：注册用户名 61–70 字符可能被收成用户 ID 1。WordPress 核心用户名最长 60。Profile Builder ≤3.16.4 风险最高。补丁 3.16.5。",
+  "mode": "observe",
+  "priority": 32,
+  "site_ids": [],
+  "enabled": true,
+  "custom_block_page_enabled": false,
+  "block_page_status_code": 403,
+  "block_page_html": "",
+  "conditions": {
+    "logic": "and",
+    "conditions": [
+      {
+        "field": "http.method",
+        "op": "eq",
+        "value": "POST"
+      },
+      {
+        "logic": "or",
+        "conditions": [
+          {
+            "logic": "and",
+            "conditions": [
+              {
+                "field": "http.body.form",
+                "arg": "username",
+                "op": "len_gt",
+                "value": 60
+              },
+              {
+                "field": "http.body.form",
+                "arg": "username",
+                "op": "len_lt",
+                "value": 71
+              }
+            ]
+          },
+          {
+            "logic": "and",
+            "conditions": [
+              {
+                "field": "http.body.json",
+                "arg": "username",
+                "op": "len_gt",
+                "value": 60
+              },
+              {
+                "field": "http.body.json",
+                "arg": "username",
+                "op": "len_lt",
+                "value": 71
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

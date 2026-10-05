@@ -1,0 +1,64 @@
+{
+  "name": "WP漏洞封堵-匿名batch",
+  "remark": "CVE-2026-63030：拦截未登录 POST REST batch（/wp-json/batch/v1 与 rest_route=/batch/v1）。已登录编辑器带 wordpress_logged_in_ 一般不误伤。补丁 6.9.5 / 7.0.2。可按站点收窄到 WordPress。",
+  "mode": "block",
+  "priority": 20,
+  "site_ids": [],
+  "enabled": true,
+  "custom_block_page_enabled": false,
+  "block_page_status_code": 403,
+  "block_page_html": "",
+  "conditions": {
+    "logic": "and",
+    "conditions": [
+      {
+        "field": "http.method",
+        "op": "eq",
+        "value": "POST"
+      },
+      {
+        "logic": "or",
+        "conditions": [
+          {
+            "field": "http.uri.path",
+            "op": "contains",
+            "value": [
+              "/wp-json/batch/v1"
+            ]
+          },
+          {
+            "field": "http.query",
+            "arg": "rest_route",
+            "op": "contains",
+            "value": [
+              "/batch/v1"
+            ]
+          },
+          {
+            "field": "http.url",
+            "op": "contains",
+            "value": [
+              "rest_route=%2Fbatch%2Fv1",
+              "rest_route=/batch/v1"
+            ]
+          },
+          {
+            "field": "http.request_uri",
+            "op": "contains",
+            "value": [
+              "rest_route=%2Fbatch%2Fv1",
+              "rest_route=/batch/v1"
+            ]
+          }
+        ]
+      },
+      {
+        "field": "http.cookie_raw",
+        "op": "not_contains",
+        "value": [
+          "wordpress_logged_in_"
+        ]
+      }
+    ]
+  }
+}
